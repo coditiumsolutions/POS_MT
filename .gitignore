@@ -1,0 +1,25 @@
+## Build
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Secrets and local config
+.env
+.env.*
+!.env.example
+*.local.json
+appsettings.*.local.json
+appsettings.Development.json
+**/secrets.json
+**/credentials.json
+
+## Tools / OS
+.dotnet-tools/
+.config/
+*.log
+Thumbs.db
+Desktop.ini

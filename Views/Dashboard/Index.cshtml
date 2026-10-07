@@ -1,0 +1,66 @@
+@model DashboardViewModel
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="page-heading mb-1">Dashboard</h1>
+        <p class="text-muted mb-0">Today's position across sales, purchases, expenses, and stock.</p>
+    </div>
+</div>
+
+<div class="alert @(Model.DatabaseConnected ? "alert-success" : "alert-warning")" role="alert">
+    @Model.StatusMessage
+</div>
+
+<div class="row g-3">
+    <div class="col-sm-6 col-xl-3">
+        <div class="metric-card">
+            <div class="metric-label">Today's Sales</div>
+            <div class="metric-value">@FormatMoney(Model.TodaysSales)</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="metric-card">
+            <div class="metric-label">Today's Purchases</div>
+            <div class="metric-value">@FormatMoney(Model.TodaysPurchases)</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="metric-card">
+            <div class="metric-label">Today's Expenses</div>
+            <div class="metric-value">@FormatMoney(Model.TodaysExpenses)</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="metric-card">
+            <div class="metric-label">Customer Receivables</div>
+            <div class="metric-value">@FormatMoney(Model.CustomerReceivables)</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="metric-card">
+            <div class="metric-label">Vendor Payables</div>
+            <div class="metric-value">@FormatMoney(Model.VendorPayables)</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="metric-card">
+            <div class="metric-label">Current Stock</div>
+            <div class="metric-value">@FormatQuantity(Model.CurrentStock)</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="metric-card metric-card-alert">
+            <div class="metric-label">Low Stock Products</div>
+            <div class="metric-value">@(Model.LowStockProducts?.ToString() ?? "—")</div>
+        </div>
+    </div>
+</div>
+
+@functions {
+    private static string FormatMoney(decimal? value) => value?.ToString("N2") ?? "—";
+
+    private static string FormatQuantity(decimal? value) => value?.ToString("N2") ?? "—";
+}

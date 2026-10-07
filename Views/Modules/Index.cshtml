@@ -1,0 +1,23 @@
+@model ModuleCardsViewModel
+@{
+    ViewData["Title"] = Model.PageTitle;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="page-heading mb-1">@Model.PageTitle</h1>
+        <p class="text-muted mb-0">@Model.PageSubtitle</p>
+    </div>
+</div>
+
+<div class="module-grid">
+    @foreach (var module in Model.Modules)
+    {
+        <a class="module-card" href="#" title="@module.Name">
+            <span class="module-card-icon">
+                <i class="bi @module.IconClass" aria-hidden="true"></i>
+            </span>
+            <span class="module-card-name">@module.Name</span>
+        </a>
+    }
+</div>

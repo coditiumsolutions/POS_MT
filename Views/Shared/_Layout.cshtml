@@ -1,0 +1,117 @@
+﻿@using POS_MT.Interfaces
+@using POS_MT.Services
+@inject INavContextService NavContext
+@{
+    var currentArea = NavContext.CurrentArea;
+    var currentController = ViewContext.RouteData.Values["controller"]?.ToString();
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Point Of Sale System</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="~/lib/datatables/dataTables.bootstrap5.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <div class="pos-shell">
+        <div class="pos-header-bars">
+            <header class="pos-topbar-primary">
+                <div class="pos-brand">
+                    <span>Point Of Sale System</span>
+                </div>
+                <div class="pos-user">
+                    @if (User.Identity?.IsAuthenticated == true)
+                    {
+                        <span class="pos-user-name">@User.Identity.Name</span>
+                        <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-outline-light btn-sm">Logout</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <a class="btn btn-light btn-sm" asp-controller="Account" asp-action="Login">Login</a>
+                    }
+                </div>
+            </header>
+
+            <header class="pos-topbar-secondary">
+                <nav class="pos-top-nav">
+                    <a class="pos-top-link @(IsController("Dashboard") && currentArea is null ? "active" : "")"
+                       asp-controller="Nav" asp-action="Clear">Home</a>
+                    @foreach (var area in NavigationCatalog.TopAreas)
+                    {
+                        <a class="pos-top-link @(string.Equals(currentArea?.Key, area.Key, StringComparison.OrdinalIgnoreCase) ? "active" : "")"
+                           asp-controller="Nav"
+                           asp-action="Select"
+                           asp-route-key="@area.Key">@area.Title</a>
+                    }
+                </nav>
+            </header>
+
+            <div class="pos-gold-bar" aria-hidden="true"></div>
+        </div>
+
+        <div class="pos-body">
+            <aside class="pos-sidebar" id="posSidebar">
+                <nav class="pos-nav">
+                    @if (currentArea is not null)
+                    {
+                        <div class="pos-nav-label">@currentArea.Title</div>
+                        @foreach (var link in currentArea.SubLinks)
+                        {
+                            if (!string.IsNullOrWhiteSpace(link.Controller))
+                            {
+                                <a class="pos-nav-link" asp-controller="@link.Controller" asp-action="@link.Action">@link.Title</a>
+                            }
+                            else
+                            {
+                                <a class="pos-nav-link" href="#">@link.Title</a>
+                            }
+                        }
+                    }
+
+                    <div class="pos-nav-permanent">
+                        <a class="pos-nav-link @(IsController("Modules") ? "active" : "")"
+                           asp-controller="Modules" asp-action="Index">
+                            <i class="bi bi-grid-3x3-gap" aria-hidden="true"></i>
+                            <span>Modules</span>
+                        </a>
+                        <a class="pos-nav-link @(IsController("Setup") ? "active" : "")"
+                           asp-controller="Setup" asp-action="Index">
+                            <i class="bi bi-gear" aria-hidden="true"></i>
+                            <span>Setup</span>
+                        </a>
+                    </div>
+                </nav>
+            </aside>
+            <div class="pos-backdrop" id="posBackdrop"></div>
+
+            <div class="pos-main">
+                <main class="pos-content">
+                    @RenderBody()
+                </main>
+            </div>
+        </div>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/lib/datatables/jquery.dataTables.min.js"></script>
+    <script src="~/lib/datatables/dataTables.bootstrap5.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
+
+@functions {
+    private bool IsController(string controller)
+    {
+        var current = ViewContext.RouteData.Values["controller"]?.ToString();
+        return string.Equals(current, controller, StringComparison.OrdinalIgnoreCase);
+    }
+}

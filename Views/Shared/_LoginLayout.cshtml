@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Point Of Sale System</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body class="login-body">
+    <div class="pos-header-bars login-header-bars">
+        <header class="pos-topbar-primary">
+            <div class="pos-brand">
+                <span>Point Of Sale System</span>
+            </div>
+        </header>
+        <header class="pos-topbar-secondary login-topbar-secondary">
+            <span class="pos-topbar-title">Secure Sign In</span>
+        </header>
+        <div class="pos-gold-bar" aria-hidden="true"></div>
+    </div>
+
+    <main class="login-split">
+        <section class="login-split-form">
+            <div class="login-form-panel">
+                @RenderBody()
+            </div>
+        </section>
+
+        <section class="login-split-visual" aria-hidden="true">
+            <div class="login-visual-bg">
+                <div class="login-visual-ring login-visual-ring-1"></div>
+                <div class="login-visual-ring login-visual-ring-2"></div>
+                <div class="login-visual-ring login-visual-ring-3"></div>
+            </div>
+            <div class="login-visual-content">
+                <p class="login-visual-tag">Cloud POS Platform</p>
+                <h2 class="login-visual-title">Sell smarter.<br />Track everything.</h2>
+                <p class="login-visual-text">Sales, inventory, payments, and reports in one secure workspace.</p>
+                <div class="login-visual-graphic">
+                    <svg viewBox="0 0 420 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="POS illustration">
+                        <defs>
+                            <linearGradient id="posScreenGrad" x1="0" y1="0" x2="1" y2="1">
+                                <stop offset="0%" stop-color="#14b8a6" />
+                                <stop offset="100%" stop-color="#0f766e" />
+                            </linearGradient>
+                            <linearGradient id="posGoldGrad" x1="0" y1="0" x2="1" y2="0">
+                                <stop offset="0%" stop-color="#b8860b" />
+                                <stop offset="50%" stop-color="#f0d78c" />
+                                <stop offset="100%" stop-color="#c9a227" />
+                            </linearGradient>
+                        </defs>
+                        <rect x="40" y="48" width="340" height="210" rx="18" fill="#1e293b" stroke="#334155" stroke-width="2" />
+                        <rect x="58" y="66" width="304" height="150" rx="10" fill="url(#posScreenGrad)" opacity="0.95" />
+                        <rect x="78" y="88" width="120" height="12" rx="6" fill="#ecfdf5" opacity="0.9" />
+                        <rect x="78" y="112" width="90" height="10" rx="5" fill="#ecfdf5" opacity="0.55" />
+                        <rect x="78" y="132" width="110" height="10" rx="5" fill="#ecfdf5" opacity="0.55" />
+                        <rect x="220" y="88" width="120" height="70" rx="10" fill="#0f172a" opacity="0.35" />
+                        <path d="M230 148 L250 118 L270 132 L295 98 L315 148 Z" fill="#f0d78c" opacity="0.85" />
+                        <rect x="58" y="228" width="304" height="14" rx="7" fill="#334155" />
+                        <rect x="130" y="250" width="160" height="10" rx="5" fill="#475569" />
+                        <rect x="300" y="170" width="88" height="120" rx="14" fill="#1e293b" stroke="#475569" stroke-width="2" />
+                        <rect x="312" y="182" width="64" height="96" rx="8" fill="#0f766e" />
+                        <circle cx="344" cy="286" r="6" fill="#94a3b8" />
+                        <rect x="20" y="200" width="72" height="48" rx="10" fill="#1e293b" stroke="url(#posGoldGrad)" stroke-width="2" />
+                        <text x="36" y="230" fill="#f8fafc" font-size="14" font-family="Segoe UI, sans-serif" font-weight="700">SALE</text>
+                        <rect x="328" y="24" width="72" height="48" rx="10" fill="#1e293b" stroke="#14b8a6" stroke-width="2" />
+                        <text x="342" y="54" fill="#ecfdf5" font-size="13" font-family="Segoe UI, sans-serif" font-weight="700">STOCK</text>
+                    </svg>
+                </div>
+                <ul class="login-visual-features">
+                    <li>Real-time dashboard</li>
+                    <li>Inventory control</li>
+                    <li>Secure user access</li>
+                </ul>
+            </div>
+        </section>
+    </main>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/lib/jquery-validation/dist/jquery.validate.min.js"></script>
+    <script src="~/lib/jquery-validation-unobtrusive/jquery.validate.unobtrusive.min.js"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
