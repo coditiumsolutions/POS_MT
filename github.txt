@@ -1,0 +1,16 @@
+POS_MT - GitHub Repository
+==========================
+
+Repository Name : POS_MT
+Owner           : coditiumsolutions
+Remote URL      : https://github.com/coditiumsolutions/POS_MT.git
+Web URL         : https://github.com/coditiumsolutions/POS_MT
+Default Branch  : main
+
+Clone Command
+-------------
+git clone https://github.com/coditiumsolutions/POS_MT.git
+
+Push Command (after local commits)
+----------------------------------
+git push -u origin main

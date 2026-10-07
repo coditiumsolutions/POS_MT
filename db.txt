@@ -1,0 +1,432 @@
+﻿POS_MT - Database Documentation
+===============================
+Version   : 1.0.0
+UpdatedAt : 2026-10-07
+
+Database Information
+--------------------
+Server   : (see local appsettings.Development.json)
+Port     : 1433
+Database : POS_MT
+User Id  : (see local appsettings.Development.json)
+Provider : SQL Server
+
+Note: Password, host, and full connection string are kept in local appsettings.Development.json / deploy build config only (not stored in this file).
+
+Tables (24)
+-----------
+AuditLogs
+Branches
+CustomerPayments
+Customers
+ExpenseCategories
+Expenses
+Inventory
+InventoryTransactions
+PaymentMethods
+ProductCategories
+Products
+ProductUnits
+PurchaseInvoiceDetails
+PurchaseInvoices
+SalesInvoiceDetails
+SalesInvoices
+StockAdjustmentDetails
+StockAdjustments
+Terminals
+Users
+UserSessions
+VendorPayments
+Vendors
+Warehouses
+
+Table Structures
+----------------
+=== AuditLogs ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         bigint                  NO      YES       
+LogDate                     datetime2               NO      NO        (sysdatetime())
+UserUID                     int                     YES     NO        
+TerminalUID                 int                     YES     NO        
+BranchUID                   int                     YES     NO        
+ModuleName                  nvarchar(100)           NO      NO        
+ActionName                  nvarchar(100)           NO      NO        
+RecordUID                   int                     YES     NO        
+Description                 nvarchar(1000)          YES     NO        
+OldValue                    nvarchar(max)           YES     NO        
+NewValue                    nvarchar(max)           YES     NO        
+IPAddress                   nvarchar(50)            YES     NO        
+
+=== Branches ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+BranchCode                  nvarchar(50)            NO      NO        
+BranchName                  nvarchar(150)           NO      NO        
+Address                     nvarchar(500)           YES     NO        
+City                        nvarchar(100)           YES     NO        
+ContactPerson               nvarchar(150)           YES     NO        
+MobileNo                    nvarchar(30)            YES     NO        
+PhoneNo                     nvarchar(30)            YES     NO        
+Email                       nvarchar(150)           YES     NO        
+IsActive                    bit                     NO      NO        ((1))
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+UpdatedDate                 datetime2               YES     NO        
+
+=== CustomerPayments ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+PaymentNo                   nvarchar(50)            NO      NO        
+PaymentDate                 datetime2               NO      NO        (sysdatetime())
+CustomerUID                 int                     NO      NO        
+SalesInvoiceUID             int                     YES     NO        
+PaymentMethodUID            int                     YES     NO        
+Amount                      decimal(18,2)           NO      NO        ((0))
+ReferenceNo                 nvarchar(100)           YES     NO        
+UserUID                     int                     YES     NO        
+TerminalUID                 int                     YES     NO        
+Remarks                     nvarchar(500)           YES     NO        
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+
+=== Customers ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+CustomerCode                nvarchar(50)            NO      NO        
+CustomerName                nvarchar(200)           NO      NO        
+MobileNo                    nvarchar(30)            YES     NO        
+PhoneNo                     nvarchar(30)            YES     NO        
+Email                       nvarchar(150)           YES     NO        
+Address                     nvarchar(500)           YES     NO        
+City                        nvarchar(100)           YES     NO        
+NTN                         nvarchar(50)            YES     NO        
+OpeningBalance              decimal(18,2)           NO      NO        ((0))
+CreditLimit                 decimal(18,2)           NO      NO        ((0))
+DiscountPercent             decimal(5,2)            NO      NO        ((0))
+IsActive                    bit                     NO      NO        ((1))
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+UpdatedDate                 datetime2               YES     NO        
+
+=== ExpenseCategories ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+CategoryCode                nvarchar(50)            NO      NO        
+CategoryName                nvarchar(150)           NO      NO        
+Description                 nvarchar(300)           YES     NO        
+IsActive                    bit                     NO      NO        ((1))
+
+=== Expenses ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+ExpenseNo                   nvarchar(50)            NO      NO        
+ExpenseDate                 datetime2               NO      NO        (sysdatetime())
+BranchUID                   int                     YES     NO        
+ExpenseCategoryUID          int                     NO      NO        
+Description                 nvarchar(500)           YES     NO        
+Amount                      decimal(18,2)           NO      NO        ((0))
+PaymentMethodUID            int                     YES     NO        
+ReferenceNo                 nvarchar(100)           YES     NO        
+UserUID                     int                     YES     NO        
+TerminalUID                 int                     YES     NO        
+Remarks                     nvarchar(500)           YES     NO        
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+
+=== Inventory ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+ProductUID                  int                     NO      NO        
+WarehouseUID                int                     NO      NO        
+QuantityIn                  decimal(18,3)           NO      NO        ((0))
+QuantityOut                 decimal(18,3)           NO      NO        ((0))
+CurrentQuantity             decimal(18,3)           NO      NO        ((0))
+AverageCost                 decimal(18,2)           NO      NO        ((0))
+LastPurchasePrice           decimal(18,2)           NO      NO        ((0))
+LastSalePrice               decimal(18,2)           NO      NO        ((0))
+MinimumStock                decimal(18,3)           NO      NO        ((0))
+MaximumStock                decimal(18,3)           NO      NO        ((0))
+LastStockDate               datetime2               YES     NO        
+UpdatedDate                 datetime2               NO      NO        (sysdatetime())
+
+=== InventoryTransactions ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         bigint                  NO      YES       
+TransactionDate             datetime2               NO      NO        (sysdatetime())
+ProductUID                  int                     NO      NO        
+WarehouseUID                int                     NO      NO        
+TransactionType             nvarchar(50)            NO      NO        
+ReferenceUID                int                     YES     NO        
+ReferenceNo                 nvarchar(50)            YES     NO        
+QuantityIn                  decimal(18,3)           NO      NO        ((0))
+QuantityOut                 decimal(18,3)           NO      NO        ((0))
+BalanceQuantity             decimal(18,3)           NO      NO        ((0))
+UnitCost                    decimal(18,2)           NO      NO        ((0))
+Remarks                     nvarchar(500)           YES     NO        
+UserUID                     int                     YES     NO        
+TerminalUID                 int                     YES     NO        
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+
+=== PaymentMethods ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+PaymentCode                 nvarchar(30)            NO      NO        
+PaymentName                 nvarchar(100)           NO      NO        
+IsCash                      bit                     NO      NO        ((0))
+IsCredit                    bit                     NO      NO        ((0))
+IsActive                    bit                     NO      NO        ((1))
+
+=== ProductCategories ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+CategoryCode                nvarchar(50)            NO      NO        
+CategoryName                nvarchar(150)           NO      NO        
+ParentCategoryUID           int                     YES     NO        
+Description                 nvarchar(300)           YES     NO        
+IsActive                    bit                     NO      NO        ((1))
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+UpdatedDate                 datetime2               YES     NO        
+
+=== Products ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+ProductCode                 nvarchar(50)            NO      NO        
+Barcode                     nvarchar(100)           YES     NO        
+ProductName                 nvarchar(200)           NO      NO        
+CategoryUID                 int                     YES     NO        
+UnitUID                     int                     YES     NO        
+BrandName                   nvarchar(100)           YES     NO        
+PurchasePrice               decimal(18,2)           NO      NO        ((0))
+SalePrice                   decimal(18,2)           NO      NO        ((0))
+WholesalePrice              decimal(18,2)           NO      NO        ((0))
+MinimumStock                decimal(18,3)           NO      NO        ((0))
+MaximumStock                decimal(18,3)           NO      NO        ((0))
+TaxPercent                  decimal(5,2)            NO      NO        ((0))
+DiscountPercent             decimal(5,2)            NO      NO        ((0))
+IsTaxable                   bit                     NO      NO        ((0))
+IsActive                    bit                     NO      NO        ((1))
+Description                 nvarchar(500)           YES     NO        
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+UpdatedDate                 datetime2               YES     NO        
+
+=== ProductUnits ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+UnitCode                    nvarchar(20)            NO      NO        
+UnitName                    nvarchar(50)            NO      NO        
+DecimalAllowed              bit                     NO      NO        ((0))
+IsActive                    bit                     NO      NO        ((1))
+
+=== PurchaseInvoiceDetails ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+PurchaseInvoiceUID          int                     NO      NO        
+ProductUID                  int                     NO      NO        
+ProductCode                 nvarchar(50)            YES     NO        
+ProductName                 nvarchar(200)           YES     NO        
+Quantity                    decimal(18,3)           NO      NO        ((0))
+UnitCost                    decimal(18,2)           NO      NO        ((0))
+DiscountPercent             decimal(5,2)            NO      NO        ((0))
+DiscountAmount              decimal(18,2)           NO      NO        ((0))
+TaxPercent                  decimal(5,2)            NO      NO        ((0))
+TaxAmount                   decimal(18,2)           NO      NO        ((0))
+LineTotal                   decimal(18,2)           NO      NO        ((0))
+BatchNo                     nvarchar(100)           YES     NO        
+ExpiryDate                  date                    YES     NO        
+Remarks                     nvarchar(300)           YES     NO        
+
+=== PurchaseInvoices ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+PurchaseInvoiceNo           nvarchar(50)            NO      NO        
+VendorInvoiceNo             nvarchar(100)           YES     NO        
+PurchaseDate                datetime2               NO      NO        (sysdatetime())
+BranchUID                   int                     YES     NO        
+WarehouseUID                int                     YES     NO        
+VendorUID                   int                     NO      NO        
+UserUID                     int                     YES     NO        
+TerminalUID                 int                     YES     NO        
+SubTotal                    decimal(18,2)           NO      NO        ((0))
+DiscountAmount              decimal(18,2)           NO      NO        ((0))
+TaxAmount                   decimal(18,2)           NO      NO        ((0))
+OtherCharges                decimal(18,2)           NO      NO        ((0))
+NetAmount                   decimal(18,2)           NO      NO        ((0))
+PaidAmount                  decimal(18,2)           NO      NO        ((0))
+BalanceAmount               decimal(18,2)           NO      NO        ((0))
+PaymentStatus               nvarchar(30)            NO      NO        ('Unpaid')
+InvoiceStatus               nvarchar(30)            NO      NO        ('Completed')
+Remarks                     nvarchar(500)           YES     NO        
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+UpdatedDate                 datetime2               YES     NO        
+
+=== SalesInvoiceDetails ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+SalesInvoiceUID             int                     NO      NO        
+ProductUID                  int                     NO      NO        
+ProductCode                 nvarchar(50)            YES     NO        
+ProductName                 nvarchar(200)           YES     NO        
+Quantity                    decimal(18,3)           NO      NO        ((0))
+UnitPrice                   decimal(18,2)           NO      NO        ((0))
+DiscountPercent             decimal(5,2)            NO      NO        ((0))
+DiscountAmount              decimal(18,2)           NO      NO        ((0))
+TaxPercent                  decimal(5,2)            NO      NO        ((0))
+TaxAmount                   decimal(18,2)           NO      NO        ((0))
+LineTotal                   decimal(18,2)           NO      NO        ((0))
+CostPrice                   decimal(18,2)           NO      NO        ((0))
+Remarks                     nvarchar(300)           YES     NO        
+
+=== SalesInvoices ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+InvoiceNo                   nvarchar(50)            NO      NO        
+InvoiceDate                 datetime2               NO      NO        (sysdatetime())
+BranchUID                   int                     YES     NO        
+CustomerUID                 int                     YES     NO        
+UserUID                     int                     YES     NO        
+TerminalUID                 int                     YES     NO        
+PaymentMethodUID            int                     YES     NO        
+SubTotal                    decimal(18,2)           NO      NO        ((0))
+DiscountAmount              decimal(18,2)           NO      NO        ((0))
+TaxAmount                   decimal(18,2)           NO      NO        ((0))
+OtherCharges                decimal(18,2)           NO      NO        ((0))
+NetAmount                   decimal(18,2)           NO      NO        ((0))
+PaidAmount                  decimal(18,2)           NO      NO        ((0))
+BalanceAmount               decimal(18,2)           NO      NO        ((0))
+PaymentStatus               nvarchar(30)            NO      NO        ('Unpaid')
+InvoiceStatus               nvarchar(30)            NO      NO        ('Completed')
+Remarks                     nvarchar(500)           YES     NO        
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+UpdatedDate                 datetime2               YES     NO        
+
+=== StockAdjustmentDetails ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+StockAdjustmentUID          int                     NO      NO        
+ProductUID                  int                     NO      NO        
+SystemQuantity              decimal(18,3)           NO      NO        ((0))
+PhysicalQuantity            decimal(18,3)           NO      NO        ((0))
+AdjustmentQuantity          decimal(18,3)           NO      NO        ((0))
+UnitCost                    decimal(18,2)           NO      NO        ((0))
+Remarks                     nvarchar(300)           YES     NO        
+
+=== StockAdjustments ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+AdjustmentNo                nvarchar(50)            NO      NO        
+AdjustmentDate              datetime2               NO      NO        (sysdatetime())
+BranchUID                   int                     YES     NO        
+WarehouseUID                int                     NO      NO        
+UserUID                     int                     YES     NO        
+TerminalUID                 int                     YES     NO        
+AdjustmentType              nvarchar(50)            NO      NO        
+Remarks                     nvarchar(500)           YES     NO        
+Status                      nvarchar(30)            NO      NO        ('Completed')
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+
+=== Terminals ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+TerminalCode                nvarchar(50)            NO      NO        
+TerminalName                nvarchar(100)           NO      NO        
+BranchUID                   int                     YES     NO        
+ComputerName                nvarchar(150)           YES     NO        
+IPAddress                   nvarchar(50)            YES     NO        
+IsActive                    bit                     NO      NO        ((1))
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+UpdatedDate                 datetime2               YES     NO        
+
+=== Users ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+UserName                    nvarchar(100)           NO      NO        
+FullName                    nvarchar(200)           NO      NO        
+PasswordHash                nvarchar(500)           NO      NO        
+MobileNo                    nvarchar(30)            YES     NO        
+Email                       nvarchar(150)           YES     NO        
+RoleName                    nvarchar(50)            NO      NO        
+UserType                    nvarchar(50)            YES     NO        
+IsActive                    bit                     NO      NO        ((1))
+LastLoginDate               datetime2               YES     NO        
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+UpdatedDate                 datetime2               YES     NO        
+
+=== UserSessions ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         bigint                  NO      YES       
+UserUID                     int                     NO      NO        
+TerminalUID                 int                     YES     NO        
+LoginDate                   datetime2               NO      NO        (sysdatetime())
+LogoutDate                  datetime2               YES     NO        
+IPAddress                   nvarchar(50)            YES     NO        
+SessionStatus               nvarchar(30)            NO      NO        ('Active')
+
+=== VendorPayments ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+PaymentNo                   nvarchar(50)            NO      NO        
+PaymentDate                 datetime2               NO      NO        (sysdatetime())
+VendorUID                   int                     NO      NO        
+PurchaseInvoiceUID          int                     YES     NO        
+PaymentMethodUID            int                     YES     NO        
+Amount                      decimal(18,2)           NO      NO        ((0))
+ReferenceNo                 nvarchar(100)           YES     NO        
+UserUID                     int                     YES     NO        
+TerminalUID                 int                     YES     NO        
+Remarks                     nvarchar(500)           YES     NO        
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+
+=== Vendors ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+VendorCode                  nvarchar(50)            NO      NO        
+VendorName                  nvarchar(200)           NO      NO        
+ContactPerson               nvarchar(150)           YES     NO        
+MobileNo                    nvarchar(30)            YES     NO        
+PhoneNo                     nvarchar(30)            YES     NO        
+Email                       nvarchar(150)           YES     NO        
+Address                     nvarchar(500)           YES     NO        
+City                        nvarchar(100)           YES     NO        
+NTN                         nvarchar(50)            YES     NO        
+STRN                        nvarchar(50)            YES     NO        
+OpeningBalance              decimal(18,2)           NO      NO        ((0))
+CreditLimit                 decimal(18,2)           NO      NO        ((0))
+PaymentTerms                nvarchar(100)           YES     NO        
+IsActive                    bit                     NO      NO        ((1))
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+UpdatedDate                 datetime2               YES     NO        
+
+=== Warehouses ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+WarehouseCode               nvarchar(50)            NO      NO        
+WarehouseName               nvarchar(150)           NO      NO        
+BranchUID                   int                     YES     NO        
+Address                     nvarchar(500)           YES     NO        
+City                        nvarchar(100)           YES     NO        
+ContactPerson               nvarchar(150)           YES     NO        
+MobileNo                    nvarchar(30)            YES     NO        
+IsActive                    bit                     NO      NO        ((1))
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+UpdatedDate                 datetime2               YES     NO        
+

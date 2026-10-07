@@ -1,0 +1,14 @@
+﻿@model InventoryFormViewModel
+<div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
+<div class="row g-3">
+<div class="col-md-6"><label asp-for="ProductUid" class="form-label"></label><select asp-for="ProductUid" class="form-select" asp-items="ViewBag.Products"></select><span asp-validation-for="ProductUid" class="text-danger"></span></div>
+<div class="col-md-6"><label asp-for="WarehouseUid" class="form-label"></label><select asp-for="WarehouseUid" class="form-select" asp-items="ViewBag.Warehouses"></select><span asp-validation-for="WarehouseUid" class="text-danger"></span></div>
+<div class="col-md-3"><label asp-for="QuantityIn" class="form-label"></label><input asp-for="QuantityIn" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="QuantityOut" class="form-label"></label><input asp-for="QuantityOut" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="CurrentQuantity" class="form-label"></label><input asp-for="CurrentQuantity" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="AverageCost" class="form-label"></label><input asp-for="AverageCost" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="LastPurchasePrice" class="form-label"></label><input asp-for="LastPurchasePrice" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="LastSalePrice" class="form-label"></label><input asp-for="LastSalePrice" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="MinimumStock" class="form-label"></label><input asp-for="MinimumStock" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="MaximumStock" class="form-label"></label><input asp-for="MaximumStock" class="form-control" /></div>
+</div>

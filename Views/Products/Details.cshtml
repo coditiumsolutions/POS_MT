@@ -1,0 +1,17 @@
+﻿@model Product
+@{ ViewData["Title"] = "Product Details"; }
+<h1 class="page-heading mb-3">Product Details</h1>
+<div class="bg-white border rounded p-3">
+    <dl class="row mb-0">
+        <dt class="col-sm-3">Code</dt><dd class="col-sm-9">@Model.ProductCode</dd>
+        <dt class="col-sm-3">Name</dt><dd class="col-sm-9">@Model.ProductName</dd>
+        <dt class="col-sm-3">Barcode</dt><dd class="col-sm-9">@Model.Barcode</dd>
+        <dt class="col-sm-3">Sale Price</dt><dd class="col-sm-9">@Model.SalePrice.ToString("N2")</dd>
+        <dt class="col-sm-3">Purchase Price</dt><dd class="col-sm-9">@Model.PurchasePrice.ToString("N2")</dd>
+        <dt class="col-sm-3">Active</dt><dd class="col-sm-9">@(Model.IsActive ? "Yes" : "No")</dd>
+    </dl>
+    <div class="mt-3">
+        <a class="btn btn-primary" asp-action="Edit" asp-route-id="@Model.Uid">Edit</a>
+        <a class="btn btn-outline-secondary" asp-action="Index">Back</a>
+    </div>
+</div>

@@ -1,0 +1,20 @@
+﻿@model ProductFormViewModel
+<div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
+<div class="row g-3">
+<div class="col-md-4"><label asp-for="ProductCode" class="form-label"></label><input asp-for="ProductCode" class="form-control" /><span asp-validation-for="ProductCode" class="text-danger"></span></div>
+<div class="col-md-4"><label asp-for="Barcode" class="form-label"></label><input asp-for="Barcode" class="form-control" /></div>
+<div class="col-md-4"><label asp-for="BrandName" class="form-label"></label><input asp-for="BrandName" class="form-control" /></div>
+<div class="col-md-12"><label asp-for="ProductName" class="form-label"></label><input asp-for="ProductName" class="form-control" /><span asp-validation-for="ProductName" class="text-danger"></span></div>
+<div class="col-md-6"><label asp-for="CategoryUid" class="form-label"></label><select asp-for="CategoryUid" class="form-select" asp-items="ViewBag.Categories"><option value="">-- Select --</option></select></div>
+<div class="col-md-6"><label asp-for="UnitUid" class="form-label"></label><select asp-for="UnitUid" class="form-select" asp-items="ViewBag.Units"><option value="">-- Select --</option></select></div>
+<div class="col-md-3"><label asp-for="PurchasePrice" class="form-label"></label><input asp-for="PurchasePrice" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="SalePrice" class="form-label"></label><input asp-for="SalePrice" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="WholesalePrice" class="form-label"></label><input asp-for="WholesalePrice" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="TaxPercent" class="form-label"></label><input asp-for="TaxPercent" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="DiscountPercent" class="form-label"></label><input asp-for="DiscountPercent" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="MinimumStock" class="form-label"></label><input asp-for="MinimumStock" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="MaximumStock" class="form-label"></label><input asp-for="MaximumStock" class="form-control" /></div>
+<div class="col-md-12"><label asp-for="Description" class="form-label"></label><textarea asp-for="Description" class="form-control" rows="2"></textarea></div>
+<div class="col-md-3 d-flex align-items-end"><div class="form-check mb-2"><input asp-for="IsTaxable" class="form-check-input" /><label asp-for="IsTaxable" class="form-check-label"></label></div></div>
+<div class="col-md-3 d-flex align-items-end"><div class="form-check mb-2"><input asp-for="IsActive" class="form-check-input" /><label asp-for="IsActive" class="form-check-label"></label></div></div>
+</div>

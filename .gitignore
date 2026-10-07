@@ -1,6 +1,7 @@
 ## Build
 bin/
 obj/
+build/
 .vs/
 *.user
 *.suo
@@ -16,6 +17,7 @@ appsettings.*.local.json
 appsettings.Development.json
 **/secrets.json
 **/credentials.json
+_schema_temp.txt
 
 ## Tools / OS
 .dotnet-tools/

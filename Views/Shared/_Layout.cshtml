@@ -10,7 +10,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - Point Of Sale System</title>
+    <title>@ViewData["Title"] - Coditium POS</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
     <link rel="stylesheet" href="~/lib/datatables/dataTables.bootstrap5.min.css" />
@@ -21,7 +21,7 @@
         <div class="pos-header-bars">
             <header class="pos-topbar-primary">
                 <div class="pos-brand">
-                    <span>Point Of Sale System</span>
+                    <span>Coditium POS</span>
                 </div>
                 <div class="pos-user">
                     @if (User.Identity?.IsAuthenticated == true)
@@ -58,7 +58,17 @@
 
         <div class="pos-body">
             <aside class="pos-sidebar" id="posSidebar">
-                <nav class="pos-nav">
+                <div class="pos-sidebar-toggle-row">
+                    <button type="button"
+                            class="pos-sidebar-toggle"
+                            id="posSidebarToggle"
+                            aria-label="Collapse sidebar"
+                            title="Collapse sidebar"
+                            aria-expanded="true">
+                        <i class="bi bi-list" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <nav class="pos-nav" id="posSidebarNav">
                     @if (currentArea is not null)
                     {
                         <div class="pos-nav-label">@currentArea.Title</div>
@@ -66,13 +76,26 @@
                         {
                             if (!string.IsNullOrWhiteSpace(link.Controller))
                             {
-                                <a class="pos-nav-link" asp-controller="@link.Controller" asp-action="@link.Action">@link.Title</a>
+                                <a class="pos-nav-link"
+                                   asp-controller="@link.Controller"
+                                   asp-action="@link.Action"
+                                   asp-route-filter="@link.Filter">
+                                    <i class="bi @link.IconClass" aria-hidden="true"></i>
+                                    <span>@link.Title</span>
+                                </a>
                             }
                             else
                             {
-                                <a class="pos-nav-link" href="#">@link.Title</a>
+                                <a class="pos-nav-link" href="#">
+                                    <i class="bi @link.IconClass" aria-hidden="true"></i>
+                                    <span>@link.Title</span>
+                                </a>
                             }
                         }
+                    }
+                    else
+                    {
+                        <div class="pos-nav-label">Dashboard</div>
                     }
 
                     <div class="pos-nav-permanent">

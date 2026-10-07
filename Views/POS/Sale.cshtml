@@ -1,0 +1,372 @@
+@model PosSaleViewModel
+@{
+    ViewData["Title"] = $"{Model.Mode} POS";
+}
+@Html.AntiForgeryToken()
+<div id="posAlert" class="alert d-none mb-2" role="alert"></div>
+
+<div class="pos-sale-layout">
+    <section class="pos-sale-panel">
+        <div class="pos-sale-panel-header">
+            <h2 class="pos-sale-panel-title">Items</h2>
+            <div class="pos-sale-toolbar">
+                <input type="search" id="productSearch" class="form-control form-control-sm" placeholder="Search items..." />
+                <button type="button" id="btnAddToBasket" class="btn btn-primary btn-sm" disabled>
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i> Add
+                </button>
+            </div>
+        </div>
+        <div class="table-responsive pos-sale-table-wrap">
+            <table class="table table-hover table-sm align-middle mb-0" id="productsTable">
+                <thead>
+                    <tr>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th class="text-end">Price</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var item in Model.Products)
+                {
+                    <tr class="pos-product-row"
+                        data-uid="@item.Uid"
+                        data-code="@item.ProductCode"
+                        data-name="@item.ProductName"
+                        data-price="@item.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                        tabindex="0">
+                        <td>@item.ProductCode</td>
+                        <td>@item.ProductName</td>
+                        <td class="text-end">@item.SalePrice.ToString("N2")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        @if (Model.Products.Count == 0)
+        {
+            <div class="p-3 text-muted">No active products found.</div>
+        }
+    </section>
+
+    <section class="pos-sale-panel">
+        <div class="pos-sale-panel-header">
+            <h2 class="pos-sale-panel-title">Basket</h2>
+            <div class="pos-sale-toolbar">
+                <button type="button" id="btnPrintReceipt" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-printer" aria-hidden="true"></i> Print
+                </button>
+                <button type="button" id="btnPay" class="btn btn-success btn-sm">
+                    <i class="bi bi-cash-coin" aria-hidden="true"></i> Pay
+                </button>
+                <button type="button" id="btnClearBasket" class="btn btn-outline-danger btn-sm" title="Clear basket">
+                    <i class="bi bi-trash" aria-hidden="true"></i> Clear
+                </button>
+            </div>
+        </div>
+        <div class="table-responsive pos-sale-table-wrap">
+            <table class="table table-sm align-middle mb-0" id="basketTable">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th class="text-end">Price</th>
+                        <th class="text-center">Qty</th>
+                        <th class="text-end">Line</th>
+                        <th class="text-center" style="width:3rem;"></th>
+                    </tr>
+                </thead>
+                <tbody id="basketBody">
+                    <tr id="basketEmptyRow">
+                        <td colspan="5" class="text-muted text-center py-4">Basket is empty.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="pos-sale-total-bar">
+            <span>Total</span>
+            <strong id="basketTotal">0.00</strong>
+        </div>
+    </section>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    const posMode = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Mode));
+    const payUrl = '@Url.Action("Pay", "POS")';
+    const antiforgery = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+    const basket = new Map();
+    let selectedUid = null;
+    let lastReceipt = null;
+
+    const productsTable = document.getElementById('productsTable');
+    const basketBody = document.getElementById('basketBody');
+    const basketEmptyRow = document.getElementById('basketEmptyRow');
+    const basketTotalEl = document.getElementById('basketTotal');
+    const btnAdd = document.getElementById('btnAddToBasket');
+    const btnClear = document.getElementById('btnClearBasket');
+    const btnPrint = document.getElementById('btnPrintReceipt');
+    const btnPay = document.getElementById('btnPay');
+    const searchInput = document.getElementById('productSearch');
+    const alertBox = document.getElementById('posAlert');
+
+    function money(n) {
+        return Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function showAlert(type, message) {
+        alertBox.className = 'alert alert-' + type;
+        alertBox.textContent = message;
+        alertBox.classList.remove('d-none');
+    }
+
+    function hideAlert() {
+        alertBox.classList.add('d-none');
+    }
+
+    function getSelectedRow() {
+        if (selectedUid == null) return null;
+        return productsTable.querySelector('.pos-product-row[data-uid="' + selectedUid + '"]');
+    }
+
+    function selectRow(row) {
+        productsTable.querySelectorAll('.pos-product-row.selected').forEach(r => r.classList.remove('selected'));
+        if (!row) {
+            selectedUid = null;
+            btnAdd.disabled = true;
+            return;
+        }
+        row.classList.add('selected');
+        selectedUid = row.getAttribute('data-uid');
+        btnAdd.disabled = false;
+    }
+
+    productsTable.addEventListener('click', function (e) {
+        const row = e.target.closest('.pos-product-row');
+        if (!row) return;
+        selectRow(row);
+    });
+
+    productsTable.addEventListener('dblclick', function (e) {
+        const row = e.target.closest('.pos-product-row');
+        if (!row) return;
+        selectRow(row);
+        addSelected();
+    });
+
+    function addSelected() {
+        const row = getSelectedRow();
+        if (!row) return;
+        const uid = row.getAttribute('data-uid');
+        const code = row.getAttribute('data-code');
+        const name = row.getAttribute('data-name');
+        const price = parseFloat(row.getAttribute('data-price'));
+        if (basket.has(uid)) {
+            basket.get(uid).qty += 1;
+        } else {
+            basket.set(uid, { uid, code, name, price, qty: 1 });
+        }
+        hideAlert();
+        renderBasket();
+    }
+
+    btnAdd.addEventListener('click', addSelected);
+
+    btnClear.addEventListener('click', function () {
+        if (basket.size === 0) return;
+        if (!confirm('Clear all items from the basket?')) return;
+        basket.clear();
+        renderBasket();
+    });
+
+    searchInput.addEventListener('input', function () {
+        const q = searchInput.value.trim().toLowerCase();
+        productsTable.querySelectorAll('.pos-product-row').forEach(function (row) {
+            const text = (row.getAttribute('data-code') + ' ' + row.getAttribute('data-name')).toLowerCase();
+            row.style.display = !q || text.indexOf(q) !== -1 ? '' : 'none';
+        });
+    });
+
+    basketBody.addEventListener('click', function (e) {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const uid = btn.getAttribute('data-uid');
+        const action = btn.getAttribute('data-action');
+        const item = basket.get(uid);
+        if (!item) return;
+
+        if (action === 'inc') {
+            item.qty += 1;
+        } else if (action === 'dec') {
+            item.qty -= 1;
+            if (item.qty <= 0) basket.delete(uid);
+        } else if (action === 'remove') {
+            basket.delete(uid);
+        }
+        renderBasket();
+    });
+
+    function basketItems() {
+        return Array.from(basket.values());
+    }
+
+    function basketTotal() {
+        return basketItems().reduce((sum, item) => sum + (item.price * item.qty), 0);
+    }
+
+    function renderBasket() {
+        basketBody.querySelectorAll('tr:not(#basketEmptyRow)').forEach(r => r.remove());
+
+        if (basket.size === 0) {
+            basketEmptyRow.style.display = '';
+            basketTotalEl.textContent = money(0);
+            return;
+        }
+
+        basketEmptyRow.style.display = 'none';
+        let total = 0;
+
+        basket.forEach(function (item) {
+            const line = item.price * item.qty;
+            total += line;
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td><div class="fw-semibold">' + escapeHtml(item.name) + '</div>' +
+                '<div class="small text-muted">' + escapeHtml(item.code) + '</div></td>' +
+                '<td class="text-end">' + money(item.price) + '</td>' +
+                '<td class="text-center">' +
+                '<div class="pos-qty-controls">' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary" data-action="dec" data-uid="' + item.uid + '" title="Decrease"><i class="bi bi-dash-lg"></i></button>' +
+                '<span class="pos-qty-value">' + item.qty + '</span>' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary" data-action="inc" data-uid="' + item.uid + '" title="Increase"><i class="bi bi-plus-lg"></i></button>' +
+                '</div></td>' +
+                '<td class="text-end fw-semibold">' + money(line) + '</td>' +
+                '<td class="text-center">' +
+                '<button type="button" class="btn btn-sm btn-outline-danger" data-action="remove" data-uid="' + item.uid + '" title="Remove"><i class="bi bi-x-lg"></i></button>' +
+                '</td>';
+            basketBody.appendChild(tr);
+        });
+
+        basketTotalEl.textContent = money(total);
+    }
+
+    function buildReceiptHtml(data) {
+        const rows = data.items.map(function (item) {
+            return '<tr><td>' + escapeHtml(item.name) + '</td><td style="text-align:center">' + item.qty +
+                '</td><td style="text-align:right">' + money(item.price) +
+                '</td><td style="text-align:right">' + money(item.price * item.qty) + '</td></tr>';
+        }).join('');
+
+        return '<!DOCTYPE html><html><head><title>Receipt ' + escapeHtml(data.invoiceNo || '') + '</title>' +
+            '<style>body{font-family:Segoe UI,Arial,sans-serif;padding:16px;color:#111}' +
+            'h1{font-size:18px;margin:0 0 8px}table{width:100%;border-collapse:collapse;margin-top:12px}' +
+            'th,td{border-bottom:1px solid #ddd;padding:6px 4px;font-size:13px}' +
+            'th{text-align:left}.total{margin-top:12px;font-size:16px;font-weight:700;text-align:right}' +
+            '.meta{font-size:12px;color:#444}</style></head><body>' +
+            '<h1>Coditium POS</h1>' +
+            '<div class="meta">' + escapeHtml(posMode) + ' Receipt</div>' +
+            (data.invoiceNo ? '<div class="meta">Invoice: ' + escapeHtml(data.invoiceNo) + '</div>' : '') +
+            (data.invoiceDate ? '<div class="meta">Date: ' + escapeHtml(data.invoiceDate) + '</div>' : '') +
+            '<table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Line</th></tr></thead><tbody>' +
+            rows + '</tbody></table>' +
+            '<div class="total">Total: ' + money(data.total) + '</div>' +
+            '<script>window.onload=function(){window.print();}<\\/script></body></html>';
+    }
+
+    function printReceipt(data) {
+        if (!data || !data.items || data.items.length === 0) {
+            showAlert('warning', 'Nothing to print.');
+            return;
+        }
+        const w = window.open('', '_blank', 'width=420,height=640');
+        if (!w) {
+            showAlert('warning', 'Pop-up blocked. Allow pop-ups to print the receipt.');
+            return;
+        }
+        w.document.open();
+        w.document.write(buildReceiptHtml(data));
+        w.document.close();
+    }
+
+    btnPrint.addEventListener('click', function () {
+        const items = basketItems();
+        if (items.length > 0) {
+            printReceipt({
+                items: items,
+                total: basketTotal(),
+                invoiceNo: lastReceipt?.invoiceNo || '',
+                invoiceDate: lastReceipt?.invoiceDate || new Date().toLocaleString()
+            });
+            return;
+        }
+        if (lastReceipt) {
+            printReceipt(lastReceipt);
+            return;
+        }
+        showAlert('warning', 'Basket is empty.');
+    });
+
+    btnPay.addEventListener('click', async function () {
+        const items = basketItems();
+        if (items.length === 0) {
+            showAlert('warning', 'Add items to the basket before paying.');
+            return;
+        }
+
+        if (!confirm('Confirm payment and save this sale?')) return;
+
+        btnPay.disabled = true;
+        hideAlert();
+
+        try {
+            const response = await fetch(payUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': antiforgery
+                },
+                body: JSON.stringify({
+                    mode: posMode,
+                    items: items.map(function (item) {
+                        return {
+                            productUid: parseInt(item.uid, 10),
+                            quantity: item.qty,
+                            unitPrice: item.price
+                        };
+                    })
+                })
+            });
+
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+                showAlert('danger', result.message || 'Unable to save the sale.');
+                return;
+            }
+
+            lastReceipt = {
+                items: items.map(function (x) { return { ...x }; }),
+                total: result.netAmount,
+                invoiceNo: result.invoiceNo,
+                invoiceDate: result.invoiceDate ? new Date(result.invoiceDate).toLocaleString() : new Date().toLocaleString()
+            };
+
+            basket.clear();
+            renderBasket();
+            showAlert('success', result.message + ' You can print the receipt now.');
+        } catch (err) {
+            showAlert('danger', 'Payment failed. Please try again.');
+        } finally {
+            btnPay.disabled = false;
+        }
+    });
+
+    function escapeHtml(s) {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+})();
+</script>
+}

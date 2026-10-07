@@ -1,0 +1,21 @@
+@{
+    ViewData["Title"] = "POS";
+}
+<div class="mb-3">
+    <h1 class="page-heading mb-1">POS</h1>
+    <p class="text-muted mb-0">Choose a point-of-sale mode from the sidebar.</p>
+</div>
+<div class="row g-3">
+    <div class="col-md-6">
+        <a class="module-card w-100" asp-controller="POS" asp-action="Cash" title="Cash POS">
+            <span class="module-card-icon"><i class="bi bi-cash-stack" aria-hidden="true"></i></span>
+            <span class="module-card-name">Cash POS</span>
+        </a>
+    </div>
+    <div class="col-md-6">
+        <a class="module-card w-100" asp-controller="POS" asp-action="Credit" title="Credit POS">
+            <span class="module-card-icon"><i class="bi bi-credit-card-2-front" aria-hidden="true"></i></span>
+            <span class="module-card-name">Credit POS</span>
+        </a>
+    </div>
+</div>

@@ -1,0 +1,19 @@
+﻿@model SalesInvoiceFormViewModel
+<div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
+<div class="row g-3">
+<div class="col-md-4"><label asp-for="InvoiceNo" class="form-label"></label><input asp-for="InvoiceNo" class="form-control" /><span asp-validation-for="InvoiceNo" class="text-danger"></span></div>
+<div class="col-md-4"><label asp-for="InvoiceDate" class="form-label"></label><input asp-for="InvoiceDate" class="form-control" type="datetime-local" /></div>
+<div class="col-md-4"><label asp-for="BranchUid" class="form-label"></label><select asp-for="BranchUid" class="form-select" asp-items="ViewBag.Branches"><option value="">-- Select --</option></select></div>
+<div class="col-md-6"><label asp-for="CustomerUid" class="form-label"></label><select asp-for="CustomerUid" class="form-select" asp-items="ViewBag.Customers"><option value="">-- Select --</option></select></div>
+<div class="col-md-6"><label asp-for="PaymentMethodUid" class="form-label"></label><select asp-for="PaymentMethodUid" class="form-select" asp-items="ViewBag.PaymentMethods"><option value="">-- Select --</option></select></div>
+<div class="col-md-3"><label asp-for="SubTotal" class="form-label"></label><input asp-for="SubTotal" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="DiscountAmount" class="form-label"></label><input asp-for="DiscountAmount" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="TaxAmount" class="form-label"></label><input asp-for="TaxAmount" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="OtherCharges" class="form-label"></label><input asp-for="OtherCharges" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="NetAmount" class="form-label"></label><input asp-for="NetAmount" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="PaidAmount" class="form-label"></label><input asp-for="PaidAmount" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="BalanceAmount" class="form-label"></label><input asp-for="BalanceAmount" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="PaymentStatus" class="form-label"></label><input asp-for="PaymentStatus" class="form-control" /></div>
+<div class="col-md-4"><label asp-for="InvoiceStatus" class="form-label"></label><input asp-for="InvoiceStatus" class="form-control" /></div>
+<div class="col-md-12"><label asp-for="Remarks" class="form-label"></label><textarea asp-for="Remarks" class="form-control" rows="2"></textarea></div>
+</div>

@@ -1,0 +1,18 @@
+﻿@model VendorFormViewModel
+<div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
+<div class="row g-3">
+<div class="col-md-4"><label asp-for="VendorCode" class="form-label"></label><input asp-for="VendorCode" class="form-control" /><span asp-validation-for="VendorCode" class="text-danger"></span></div>
+<div class="col-md-8"><label asp-for="VendorName" class="form-label"></label><input asp-for="VendorName" class="form-control" /><span asp-validation-for="VendorName" class="text-danger"></span></div>
+<div class="col-md-4"><label asp-for="ContactPerson" class="form-label"></label><input asp-for="ContactPerson" class="form-control" /></div>
+<div class="col-md-4"><label asp-for="MobileNo" class="form-label"></label><input asp-for="MobileNo" class="form-control" /></div>
+<div class="col-md-4"><label asp-for="PhoneNo" class="form-label"></label><input asp-for="PhoneNo" class="form-control" /></div>
+<div class="col-md-4"><label asp-for="Email" class="form-label"></label><input asp-for="Email" class="form-control" /><span asp-validation-for="Email" class="text-danger"></span></div>
+<div class="col-md-8"><label asp-for="Address" class="form-label"></label><input asp-for="Address" class="form-control" /></div>
+<div class="col-md-4"><label asp-for="City" class="form-label"></label><input asp-for="City" class="form-control" /></div>
+<div class="col-md-4"><label asp-for="Ntn" class="form-label"></label><input asp-for="Ntn" class="form-control" /></div>
+<div class="col-md-4"><label asp-for="Strn" class="form-label"></label><input asp-for="Strn" class="form-control" /></div>
+<div class="col-md-4"><label asp-for="OpeningBalance" class="form-label"></label><input asp-for="OpeningBalance" class="form-control" /></div>
+<div class="col-md-4"><label asp-for="CreditLimit" class="form-label"></label><input asp-for="CreditLimit" class="form-control" /></div>
+<div class="col-md-4"><label asp-for="PaymentTerms" class="form-label"></label><input asp-for="PaymentTerms" class="form-control" /></div>
+<div class="col-md-4 d-flex align-items-end"><div class="form-check mb-2"><input asp-for="IsActive" class="form-check-input" /><label asp-for="IsActive" class="form-check-label"></label></div></div>
+</div>

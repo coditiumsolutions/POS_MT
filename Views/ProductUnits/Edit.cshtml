@@ -1,0 +1,9 @@
+﻿@model ProductUnitFormViewModel
+@{ ViewData["Title"] = "Edit Product Unit"; }
+<h1 class="page-heading mb-3">Edit Product Unit</h1>
+<form asp-action="Edit" method="post" class="bg-white border rounded p-3">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="Uid" />
+    <partial name="_Form" />
+    <partial name="_CrudFormActions" />
+</form>

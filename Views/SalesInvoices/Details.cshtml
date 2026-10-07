@@ -1,0 +1,18 @@
+﻿@model SalesInvoice
+@{ ViewData["Title"] = "Sales Invoice Details"; }
+<h1 class="page-heading mb-3">Sales Invoice Details</h1>
+<div class="bg-white border rounded p-3">
+    <dl class="row mb-0">
+        <dt class="col-sm-3">Invoice No</dt><dd class="col-sm-9">@Model.InvoiceNo</dd>
+        <dt class="col-sm-3">Date</dt><dd class="col-sm-9">@Model.InvoiceDate</dd>
+        <dt class="col-sm-3">Net</dt><dd class="col-sm-9">@Model.NetAmount.ToString("N2")</dd>
+        <dt class="col-sm-3">Paid</dt><dd class="col-sm-9">@Model.PaidAmount.ToString("N2")</dd>
+        <dt class="col-sm-3">Balance</dt><dd class="col-sm-9">@Model.BalanceAmount.ToString("N2")</dd>
+        <dt class="col-sm-3">Status</dt><dd class="col-sm-9">@Model.InvoiceStatus</dd>
+        <dt class="col-sm-3">Payment</dt><dd class="col-sm-9">@Model.PaymentStatus</dd>
+    </dl>
+    <div class="mt-3">
+        <a class="btn btn-primary" asp-action="Edit" asp-route-id="@Model.Uid">Edit</a>
+        <a class="btn btn-outline-secondary" asp-action="Index">Back</a>
+    </div>
+</div>

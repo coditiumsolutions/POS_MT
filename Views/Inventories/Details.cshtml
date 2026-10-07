@@ -1,0 +1,17 @@
+﻿@model Inventory
+@{ ViewData["Title"] = "Inventory Details"; }
+<h1 class="page-heading mb-3">Inventory Details</h1>
+<div class="bg-white border rounded p-3">
+    <dl class="row mb-0">
+        <dt class="col-sm-3">Product UID</dt><dd class="col-sm-9">@Model.ProductUid</dd>
+        <dt class="col-sm-3">Warehouse UID</dt><dd class="col-sm-9">@Model.WarehouseUid</dd>
+        <dt class="col-sm-3">Current Qty</dt><dd class="col-sm-9">@Model.CurrentQuantity.ToString("N3")</dd>
+        <dt class="col-sm-3">Avg Cost</dt><dd class="col-sm-9">@Model.AverageCost.ToString("N2")</dd>
+        <dt class="col-sm-3">Last Purchase</dt><dd class="col-sm-9">@Model.LastPurchasePrice.ToString("N2")</dd>
+        <dt class="col-sm-3">Last Sale</dt><dd class="col-sm-9">@Model.LastSalePrice.ToString("N2")</dd>
+    </dl>
+    <div class="mt-3">
+        <a class="btn btn-primary" asp-action="Edit" asp-route-id="@Model.Uid">Edit</a>
+        <a class="btn btn-outline-secondary" asp-action="Index">Back</a>
+    </div>
+</div>

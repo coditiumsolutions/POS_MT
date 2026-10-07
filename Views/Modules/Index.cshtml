@@ -13,11 +13,23 @@
 <div class="module-grid">
     @foreach (var module in Model.Modules)
     {
-        <a class="module-card" href="#" title="@module.Name">
-            <span class="module-card-icon">
-                <i class="bi @module.IconClass" aria-hidden="true"></i>
-            </span>
-            <span class="module-card-name">@module.Name</span>
-        </a>
+        if (!string.IsNullOrWhiteSpace(module.Controller))
+        {
+            <a class="module-card" asp-controller="@module.Controller" asp-action="@module.Action" title="@module.Name">
+                <span class="module-card-icon">
+                    <i class="bi @module.IconClass" aria-hidden="true"></i>
+                </span>
+                <span class="module-card-name">@module.Name</span>
+            </a>
+        }
+        else
+        {
+            <a class="module-card module-card-disabled" href="#" title="@module.Name — no matching table">
+                <span class="module-card-icon">
+                    <i class="bi @module.IconClass" aria-hidden="true"></i>
+                </span>
+                <span class="module-card-name">@module.Name</span>
+            </a>
+        }
     }
 </div>

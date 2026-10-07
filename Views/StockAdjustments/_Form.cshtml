@@ -1,0 +1,11 @@
+﻿@model StockAdjustmentFormViewModel
+<div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
+<div class="row g-3">
+<div class="col-md-4"><label asp-for="AdjustmentNo" class="form-label"></label><input asp-for="AdjustmentNo" class="form-control" /><span asp-validation-for="AdjustmentNo" class="text-danger"></span></div>
+<div class="col-md-4"><label asp-for="AdjustmentDate" class="form-label"></label><input asp-for="AdjustmentDate" class="form-control" type="datetime-local" /></div>
+<div class="col-md-4"><label asp-for="AdjustmentType" class="form-label"></label><input asp-for="AdjustmentType" class="form-control" /></div>
+<div class="col-md-6"><label asp-for="BranchUid" class="form-label"></label><select asp-for="BranchUid" class="form-select" asp-items="ViewBag.Branches"><option value="">-- Select --</option></select></div>
+<div class="col-md-6"><label asp-for="WarehouseUid" class="form-label"></label><select asp-for="WarehouseUid" class="form-select" asp-items="ViewBag.Warehouses"></select><span asp-validation-for="WarehouseUid" class="text-danger"></span></div>
+<div class="col-md-4"><label asp-for="Status" class="form-label"></label><input asp-for="Status" class="form-control" /></div>
+<div class="col-md-12"><label asp-for="Remarks" class="form-label"></label><textarea asp-for="Remarks" class="form-control" rows="2"></textarea></div>
+</div>

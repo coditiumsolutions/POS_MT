@@ -1,0 +1,16 @@
+﻿@model VendorPayment
+@{ ViewData["Title"] = "Vendor Payment Details"; }
+<h1 class="page-heading mb-3">Vendor Payment Details</h1>
+<div class="bg-white border rounded p-3">
+    <dl class="row mb-0">
+        <dt class="col-sm-3">Payment No</dt><dd class="col-sm-9">@Model.PaymentNo</dd>
+        <dt class="col-sm-3">Date</dt><dd class="col-sm-9">@Model.PaymentDate</dd>
+        <dt class="col-sm-3">Vendor UID</dt><dd class="col-sm-9">@Model.VendorUid</dd>
+        <dt class="col-sm-3">Amount</dt><dd class="col-sm-9">@Model.Amount.ToString("N2")</dd>
+        <dt class="col-sm-3">Reference</dt><dd class="col-sm-9">@Model.ReferenceNo</dd>
+    </dl>
+    <div class="mt-3">
+        <a class="btn btn-primary" asp-action="Edit" asp-route-id="@Model.Uid">Edit</a>
+        <a class="btn btn-outline-secondary" asp-action="Index">Back</a>
+    </div>
+</div>

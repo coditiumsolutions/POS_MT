@@ -1,0 +1,10 @@
+﻿@model TerminalFormViewModel
+<div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
+<div class="row g-3">
+<div class="col-md-4"><label asp-for="TerminalCode" class="form-label"></label><input asp-for="TerminalCode" class="form-control" /><span asp-validation-for="TerminalCode" class="text-danger"></span></div>
+<div class="col-md-8"><label asp-for="TerminalName" class="form-label"></label><input asp-for="TerminalName" class="form-control" /><span asp-validation-for="TerminalName" class="text-danger"></span></div>
+<div class="col-md-6"><label asp-for="BranchUid" class="form-label"></label><select asp-for="BranchUid" class="form-select" asp-items="ViewBag.Branches"><option value="">-- Select --</option></select></div>
+<div class="col-md-4"><label asp-for="ComputerName" class="form-label"></label><input asp-for="ComputerName" class="form-control" /></div>
+<div class="col-md-4"><label asp-for="Ipaddress" class="form-label"></label><input asp-for="Ipaddress" class="form-control" /></div>
+<div class="col-md-4 d-flex align-items-end"><div class="form-check mb-2"><input asp-for="IsActive" class="form-check-input" /><label asp-for="IsActive" class="form-check-label"></label></div></div>
+</div>

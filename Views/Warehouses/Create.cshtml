@@ -1,0 +1,8 @@
+﻿@model WarehouseFormViewModel
+@{ ViewData["Title"] = "Add Warehouse"; }
+<h1 class="page-heading mb-3">Add Warehouse</h1>
+<form asp-action="Create" method="post" class="bg-white border rounded p-3">
+    @Html.AntiForgeryToken()
+    <partial name="_Form" />
+    <partial name="_CrudFormActions" />
+</form>

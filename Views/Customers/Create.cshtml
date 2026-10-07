@@ -1,0 +1,10 @@
+@model CustomerFormViewModel
+@{
+    ViewData["Title"] = "Add Customer";
+}
+<h1 class="page-heading mb-3">Add Customer</h1>
+<form asp-action="Create" method="post" class="bg-white border rounded p-3">
+    @Html.AntiForgeryToken()
+    <partial name="_CustomerForm" />
+    <partial name="_CrudFormActions" />
+</form>

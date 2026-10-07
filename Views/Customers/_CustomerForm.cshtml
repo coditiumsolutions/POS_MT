@@ -1,0 +1,57 @@
+@model CustomerFormViewModel
+<div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
+<div class="row g-3">
+    <div class="col-md-4">
+        <label asp-for="CustomerCode" class="form-label"></label>
+        <input asp-for="CustomerCode" class="form-control" />
+        <span asp-validation-for="CustomerCode" class="text-danger"></span>
+    </div>
+    <div class="col-md-8">
+        <label asp-for="CustomerName" class="form-label"></label>
+        <input asp-for="CustomerName" class="form-control" />
+        <span asp-validation-for="CustomerName" class="text-danger"></span>
+    </div>
+    <div class="col-md-4">
+        <label asp-for="MobileNo" class="form-label"></label>
+        <input asp-for="MobileNo" class="form-control" />
+    </div>
+    <div class="col-md-4">
+        <label asp-for="PhoneNo" class="form-label"></label>
+        <input asp-for="PhoneNo" class="form-control" />
+    </div>
+    <div class="col-md-4">
+        <label asp-for="Email" class="form-label"></label>
+        <input asp-for="Email" class="form-control" />
+        <span asp-validation-for="Email" class="text-danger"></span>
+    </div>
+    <div class="col-md-8">
+        <label asp-for="Address" class="form-label"></label>
+        <input asp-for="Address" class="form-control" />
+    </div>
+    <div class="col-md-4">
+        <label asp-for="City" class="form-label"></label>
+        <input asp-for="City" class="form-control" />
+    </div>
+    <div class="col-md-4">
+        <label asp-for="Ntn" class="form-label"></label>
+        <input asp-for="Ntn" class="form-control" />
+    </div>
+    <div class="col-md-4">
+        <label asp-for="OpeningBalance" class="form-label"></label>
+        <input asp-for="OpeningBalance" class="form-control" />
+    </div>
+    <div class="col-md-4">
+        <label asp-for="CreditLimit" class="form-label"></label>
+        <input asp-for="CreditLimit" class="form-control" />
+    </div>
+    <div class="col-md-4">
+        <label asp-for="DiscountPercent" class="form-label"></label>
+        <input asp-for="DiscountPercent" class="form-control" />
+    </div>
+    <div class="col-md-4 d-flex align-items-end">
+        <div class="form-check mb-2">
+            <input asp-for="IsActive" class="form-check-input" />
+            <label asp-for="IsActive" class="form-check-label"></label>
+        </div>
+    </div>
+</div>

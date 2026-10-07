@@ -1,0 +1,16 @@
+﻿@model Terminal
+@{ ViewData["Title"] = "Terminal Details"; }
+<h1 class="page-heading mb-3">Terminal Details</h1>
+<div class="bg-white border rounded p-3">
+    <dl class="row mb-0">
+        <dt class="col-sm-3">Code</dt><dd class="col-sm-9">@Model.TerminalCode</dd>
+        <dt class="col-sm-3">Name</dt><dd class="col-sm-9">@Model.TerminalName</dd>
+        <dt class="col-sm-3">Computer</dt><dd class="col-sm-9">@Model.ComputerName</dd>
+        <dt class="col-sm-3">IP</dt><dd class="col-sm-9">@Model.Ipaddress</dd>
+        <dt class="col-sm-3">Active</dt><dd class="col-sm-9">@(Model.IsActive ? "Yes" : "No")</dd>
+    </dl>
+    <div class="mt-3">
+        <a class="btn btn-primary" asp-action="Edit" asp-route-id="@Model.Uid">Edit</a>
+        <a class="btn btn-outline-secondary" asp-action="Index">Back</a>
+    </div>
+</div>

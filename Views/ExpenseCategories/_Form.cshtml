@@ -1,0 +1,8 @@
+﻿@model ExpenseCategoryFormViewModel
+<div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
+<div class="row g-3">
+<div class="col-md-4"><label asp-for="CategoryCode" class="form-label"></label><input asp-for="CategoryCode" class="form-control" /><span asp-validation-for="CategoryCode" class="text-danger"></span></div>
+<div class="col-md-8"><label asp-for="CategoryName" class="form-label"></label><input asp-for="CategoryName" class="form-control" /><span asp-validation-for="CategoryName" class="text-danger"></span></div>
+<div class="col-md-12"><label asp-for="Description" class="form-label"></label><textarea asp-for="Description" class="form-control" rows="2"></textarea></div>
+<div class="col-md-4 d-flex align-items-end"><div class="form-check mb-2"><input asp-for="IsActive" class="form-check-input" /><label asp-for="IsActive" class="form-check-label"></label></div></div>
+</div>

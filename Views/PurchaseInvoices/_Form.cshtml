@@ -1,0 +1,20 @@
+﻿@model PurchaseInvoiceFormViewModel
+<div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
+<div class="row g-3">
+<div class="col-md-4"><label asp-for="PurchaseInvoiceNo" class="form-label"></label><input asp-for="PurchaseInvoiceNo" class="form-control" /><span asp-validation-for="PurchaseInvoiceNo" class="text-danger"></span></div>
+<div class="col-md-4"><label asp-for="VendorInvoiceNo" class="form-label"></label><input asp-for="VendorInvoiceNo" class="form-control" /></div>
+<div class="col-md-4"><label asp-for="PurchaseDate" class="form-label"></label><input asp-for="PurchaseDate" class="form-control" type="datetime-local" /></div>
+<div class="col-md-4"><label asp-for="BranchUid" class="form-label"></label><select asp-for="BranchUid" class="form-select" asp-items="ViewBag.Branches"><option value="">-- Select --</option></select></div>
+<div class="col-md-4"><label asp-for="WarehouseUid" class="form-label"></label><select asp-for="WarehouseUid" class="form-select" asp-items="ViewBag.Warehouses"><option value="">-- Select --</option></select></div>
+<div class="col-md-4"><label asp-for="VendorUid" class="form-label"></label><select asp-for="VendorUid" class="form-select" asp-items="ViewBag.Vendors"></select><span asp-validation-for="VendorUid" class="text-danger"></span></div>
+<div class="col-md-3"><label asp-for="SubTotal" class="form-label"></label><input asp-for="SubTotal" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="DiscountAmount" class="form-label"></label><input asp-for="DiscountAmount" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="TaxAmount" class="form-label"></label><input asp-for="TaxAmount" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="OtherCharges" class="form-label"></label><input asp-for="OtherCharges" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="NetAmount" class="form-label"></label><input asp-for="NetAmount" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="PaidAmount" class="form-label"></label><input asp-for="PaidAmount" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="BalanceAmount" class="form-label"></label><input asp-for="BalanceAmount" class="form-control" /></div>
+<div class="col-md-3"><label asp-for="PaymentStatus" class="form-label"></label><input asp-for="PaymentStatus" class="form-control" /></div>
+<div class="col-md-4"><label asp-for="InvoiceStatus" class="form-label"></label><input asp-for="InvoiceStatus" class="form-control" /></div>
+<div class="col-md-12"><label asp-for="Remarks" class="form-label"></label><textarea asp-for="Remarks" class="form-control" rows="2"></textarea></div>
+</div>
