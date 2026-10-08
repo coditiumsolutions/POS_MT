@@ -1,10 +1,38 @@
 ﻿@model TerminalFormViewModel
 <div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
-<div class="row g-3">
-<div class="col-md-4"><label asp-for="TerminalCode" class="form-label"></label><input asp-for="TerminalCode" class="form-control" /><span asp-validation-for="TerminalCode" class="text-danger"></span></div>
-<div class="col-md-8"><label asp-for="TerminalName" class="form-label"></label><input asp-for="TerminalName" class="form-control" /><span asp-validation-for="TerminalName" class="text-danger"></span></div>
-<div class="col-md-6"><label asp-for="BranchUid" class="form-label"></label><select asp-for="BranchUid" class="form-select" asp-items="ViewBag.Branches"><option value="">-- Select --</option></select></div>
-<div class="col-md-4"><label asp-for="ComputerName" class="form-label"></label><input asp-for="ComputerName" class="form-control" /></div>
-<div class="col-md-4"><label asp-for="Ipaddress" class="form-label"></label><input asp-for="Ipaddress" class="form-control" /></div>
-<div class="col-md-4 d-flex align-items-end"><div class="form-check mb-2"><input asp-for="IsActive" class="form-check-input" /><label asp-for="IsActive" class="form-check-label"></label></div></div>
+<div class="invoice-meta-grid invoice-meta-form">
+    <div class="invoice-meta-row">
+        <label asp-for="TerminalCode" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="TerminalCode" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="TerminalCode" class="text-danger"></span>
+        </div>
+        <label asp-for="TerminalName" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="TerminalName" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="TerminalName" class="text-danger"></span>
+        </div>
+    </div>
+    <div class="invoice-meta-row">
+        <label asp-for="BranchUid" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <select asp-for="BranchUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Branches">
+                <option value="">-- Select --</option>
+            </select>
+        </div>
+        <label asp-for="ComputerName" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="ComputerName" class="form-control form-control-sm invoice-meta-input" />
+        </div>
+    </div>
+    <div class="invoice-meta-row">
+        <label asp-for="Ipaddress" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="Ipaddress" class="form-control form-control-sm invoice-meta-input" />
+        </div>
+        <label asp-for="IsActive" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field d-flex align-items-center">
+            <input asp-for="IsActive" class="form-check-input m-0" />
+        </div>
+    </div>
 </div>

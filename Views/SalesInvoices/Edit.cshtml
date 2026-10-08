@@ -1,9 +1,11 @@
 ﻿@model SalesInvoiceFormViewModel
 @{ ViewData["Title"] = "Edit Sales Invoice"; }
-<h1 class="page-heading mb-3">Edit Sales Invoice</h1>
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h1 class="page-heading invoice-details-heading mb-0">Edit Sales Invoice</h1>
+</div>
 <form asp-action="Edit" method="post" class="bg-white border rounded p-3">
     @Html.AntiForgeryToken()
     <input type="hidden" asp-for="Uid" />
-    <partial name="_Form" />
+    <partial name="_EditForm" />
     <partial name="_CrudFormActions" />
 </form>

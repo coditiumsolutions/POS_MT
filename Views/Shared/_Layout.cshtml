@@ -45,10 +45,42 @@
                        asp-controller="Nav" asp-action="Clear">Home</a>
                     @foreach (var area in NavigationCatalog.TopAreas)
                     {
-                        <a class="pos-top-link @(string.Equals(currentArea?.Key, area.Key, StringComparison.OrdinalIgnoreCase) ? "active" : "")"
-                           asp-controller="Nav"
-                           asp-action="Select"
-                           asp-route-key="@area.Key">@area.Title</a>
+                        var areaActive = string.Equals(area.Key, "AllModules", StringComparison.OrdinalIgnoreCase)
+                            ? NavigationCatalog.IsUnderAllModules(currentArea?.Key)
+                            : string.Equals(currentArea?.Key, area.Key, StringComparison.OrdinalIgnoreCase);
+                        if (string.Equals(area.Key, "AllModules", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <div class="pos-top-dropdown @(areaActive ? "active" : "")" data-top-dropdown>
+                                <div class="pos-top-dropdown-trigger">
+                                    <a class="pos-top-link @(areaActive ? "active" : "")"
+                                       asp-controller="Nav"
+                                       asp-action="Select"
+                                       asp-route-key="@area.Key">@area.Title</a>
+                                    <button type="button"
+                                            class="pos-top-twistee"
+                                            aria-expanded="false"
+                                            aria-label="Expand @area.Title"
+                                            data-top-twistee>
+                                        <i class="bi bi-caret-right-fill" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                                <div class="pos-top-dropdown-menu" hidden>
+                                    @foreach (var link in area.SubLinks)
+                                    {
+                                        <a class="pos-top-dropdown-item"
+                                           asp-controller="@link.Controller"
+                                           asp-action="@link.Action">@link.Title</a>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <a class="pos-top-link @(areaActive ? "active" : "")"
+                               asp-controller="Nav"
+                               asp-action="Select"
+                               asp-route-key="@area.Key">@area.Title</a>
+                        }
                     }
                 </nav>
             </header>

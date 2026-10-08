@@ -9,23 +9,26 @@ namespace POS_MT.Controllers;
 [Authorize]
 public class VendorsController : Controller
 {
-    private readonly POSDbContext _db; private readonly IAuditService _audit;
-    public VendorsController(POSDbContext db, IAuditService audit) { _db = db; _audit = audit; }
-    public async Task<IActionResult> Index(CancellationToken ct) => View(await _db.Vendors.AsNoTracking().OrderBy(x => x.VendorName).ToListAsync(ct));
-    public IActionResult Create() => View(new VendorFormViewModel { IsActive = true });
+    private readonly POSDbContext _db; private readonly IAuditService _audit; private readonly INavContextService _navContext;
+    public VendorsController(POSDbContext db, IAuditService audit, INavContextService navContext) { _db = db; _audit = audit; _navContext = navContext; }
+    private void EnsureVendorsNav() => _navContext.SetArea("Vendors");
+    public async Task<IActionResult> Index(CancellationToken ct) { EnsureVendorsNav(); return View(await _db.Vendors.AsNoTracking().OrderBy(x => x.VendorName).ToListAsync(ct)); }
+    public IActionResult Create() { EnsureVendorsNav(); return View(new VendorFormViewModel { IsActive = true }); }
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(VendorFormViewModel model, CancellationToken ct)
     {
+        EnsureVendorsNav();
         if (!ModelState.IsValid) return View(model);
         if (await _db.Vendors.AnyAsync(x => x.VendorCode == model.VendorCode, ct)) { ModelState.AddModelError(nameof(model.VendorCode), "Vendor code already exists."); return View(model); }
         var e = ToEntity(model); e.CreatedDate = DateTime.Now; _db.Vendors.Add(e); await _db.SaveChangesAsync(ct);
         await _audit.WriteAsync("Create", "Vendors", e.Uid.ToString(), $"Created vendor {e.VendorCode}", ct);
         TempData["Success"] = "Vendor created successfully."; return RedirectToAction(nameof(Index));
     }
-    public async Task<IActionResult> Edit(int id, CancellationToken ct) { var e = await _db.Vendors.FindAsync([id], ct); return e is null ? NotFound() : View(ToForm(e)); }
+    public async Task<IActionResult> Edit(int id, CancellationToken ct) { EnsureVendorsNav(); var e = await _db.Vendors.FindAsync([id], ct); return e is null ? NotFound() : View(ToForm(e)); }
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(int id, VendorFormViewModel model, CancellationToken ct)
     {
+        EnsureVendorsNav();
         if (id != model.Uid) return BadRequest();
         if (!ModelState.IsValid) return View(model);
         var e = await _db.Vendors.FindAsync([id], ct); if (e is null) return NotFound();
@@ -34,10 +37,11 @@ public class VendorsController : Controller
         await _audit.WriteAsync("Update", "Vendors", e.Uid.ToString(), $"Updated vendor {e.VendorCode}", ct);
         TempData["Success"] = "Vendor updated successfully."; return RedirectToAction(nameof(Index));
     }
-    public async Task<IActionResult> Details(int id, CancellationToken ct) { var e = await _db.Vendors.AsNoTracking().FirstOrDefaultAsync(x => x.Uid == id, ct); return e is null ? NotFound() : View(e); }
+    public async Task<IActionResult> Details(int id, CancellationToken ct) { EnsureVendorsNav(); var e = await _db.Vendors.AsNoTracking().FirstOrDefaultAsync(x => x.Uid == id, ct); return e is null ? NotFound() : View(e); }
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Deactivate(int id, CancellationToken ct)
     {
+        EnsureVendorsNav();
         var e = await _db.Vendors.FindAsync([id], ct); if (e is null) return NotFound();
         e.IsActive = false; e.UpdatedDate = DateTime.Now; await _db.SaveChangesAsync(ct);
         await _audit.WriteAsync("Cancel", "Vendors", e.Uid.ToString(), $"Deactivated vendor {e.VendorCode}", ct);

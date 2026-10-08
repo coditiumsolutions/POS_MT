@@ -37,24 +37,14 @@ public class NavController : Controller
             return RedirectToAction("Index", "Customers");
         }
 
-        if (string.Equals(area.Key, "Vendors", StringComparison.OrdinalIgnoreCase))
-        {
-            return RedirectToAction("Index", "Vendors");
-        }
-
         if (string.Equals(area.Key, "Inventories", StringComparison.OrdinalIgnoreCase))
         {
             return RedirectToAction("Index", "Inventories");
         }
 
-        if (string.Equals(area.Key, "Products", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(area.Key, "AllModules", StringComparison.OrdinalIgnoreCase))
         {
-            return RedirectToAction("Index", "Products");
-        }
-
-        if (string.Equals(area.Key, "SalesInvoice", StringComparison.OrdinalIgnoreCase))
-        {
-            return RedirectToAction("Index", "SalesInvoices");
+            return RedirectToAction("Index", "Modules");
         }
 
         return RedirectToAction("Index", "Dashboard");

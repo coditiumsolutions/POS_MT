@@ -1,0 +1,98 @@
+@model SalesInvoiceFormViewModel
+@using Microsoft.AspNetCore.Mvc.Rendering
+@{
+    var customerName = "—";
+    if (ViewBag.Customers is IEnumerable<SelectListItem> customerItems)
+    {
+        var match = customerItems.FirstOrDefault(x => x.Value == Model.CustomerUid?.ToString());
+        if (match != null && !string.IsNullOrWhiteSpace(match.Text))
+        {
+            customerName = match.Text;
+        }
+    }
+}
+<div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
+
+<section class="invoice-meta-section">
+    <h2 class="invoice-meta-section-title">Editable</h2>
+    <div class="invoice-meta-grid invoice-meta-form">
+        <div class="invoice-meta-row">
+            <label asp-for="BranchUid" class="invoice-meta-title"></label>
+            <div class="invoice-meta-field">
+                <select asp-for="BranchUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Branches">
+                    <option value="">-- Select --</option>
+                </select>
+            </div>
+            <label asp-for="PaymentMethodUid" class="invoice-meta-title"></label>
+            <div class="invoice-meta-field">
+                <select asp-for="PaymentMethodUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.PaymentMethods">
+                    <option value="">-- Select --</option>
+                </select>
+            </div>
+        </div>
+        <div class="invoice-meta-row">
+            <label asp-for="PaidAmount" class="invoice-meta-title"></label>
+            <div class="invoice-meta-field">
+                <input asp-for="PaidAmount" class="form-control form-control-sm invoice-meta-input" />
+            </div>
+            <label asp-for="Remarks" class="invoice-meta-title"></label>
+            <div class="invoice-meta-field">
+                <input asp-for="Remarks" class="form-control form-control-sm invoice-meta-input" />
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="invoice-meta-section">
+    <h2 class="invoice-meta-section-title">Invoice Details</h2>
+    <div class="invoice-meta-grid invoice-meta-form invoice-meta-readonly">
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Invoice No</div>
+            <div class="invoice-meta-field">@Model.InvoiceNo</div>
+            <div class="invoice-meta-title">Invoice Date</div>
+            <div class="invoice-meta-field">@Model.InvoiceDate.ToString("yyyy-MM-dd HH:mm")</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Customer</div>
+            <div class="invoice-meta-field">@customerName</div>
+            <div class="invoice-meta-title">Invoice Status</div>
+            <div class="invoice-meta-field">@Model.InvoiceStatus</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Sub Total</div>
+            <div class="invoice-meta-field">@Model.SubTotal.ToString("N2")</div>
+            <div class="invoice-meta-title">Discount</div>
+            <div class="invoice-meta-field">@Model.DiscountAmount.ToString("N2")</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Tax</div>
+            <div class="invoice-meta-field">@Model.TaxAmount.ToString("N2")</div>
+            <div class="invoice-meta-title">Other Charges</div>
+            <div class="invoice-meta-field">@Model.OtherCharges.ToString("N2")</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Net Amount</div>
+            <div class="invoice-meta-field">@Model.NetAmount.ToString("N2")</div>
+            <div class="invoice-meta-title">Balance</div>
+            <div class="invoice-meta-field">@Model.BalanceAmount.ToString("N2")</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Payment Status</div>
+            <div class="invoice-meta-field">@Model.PaymentStatus</div>
+            <div class="invoice-meta-title"></div>
+            <div class="invoice-meta-field"></div>
+        </div>
+    </div>
+</section>
+
+<input type="hidden" asp-for="InvoiceNo" />
+<input type="hidden" asp-for="InvoiceDate" />
+<input type="hidden" asp-for="CustomerUid" />
+<input type="hidden" asp-for="InvoiceStatus" />
+<input type="hidden" asp-for="SubTotal" />
+<input type="hidden" asp-for="DiscountAmount" />
+<input type="hidden" asp-for="TaxAmount" />
+<input type="hidden" asp-for="OtherCharges" />
+<input type="hidden" asp-for="NetAmount" />
+<input type="hidden" asp-for="BalanceAmount" />
+<input type="hidden" asp-for="PaymentStatus" />

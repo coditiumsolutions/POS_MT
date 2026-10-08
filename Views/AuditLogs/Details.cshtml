@@ -1,10 +1,29 @@
 ﻿@model AuditLog
-@{ ViewData["Title"] = "Audit Log Details"; }
-<h1 class="page-heading mb-3">Audit Log Details</h1>
-<div class="bg-white border rounded p-3"><dl class="row mb-0">
-<dt class="col-sm-3">Date</dt><dd class="col-sm-9">@Model.LogDate</dd>
-<dt class="col-sm-3">Module</dt><dd class="col-sm-9">@Model.ModuleName</dd>
-<dt class="col-sm-3">Action</dt><dd class="col-sm-9">@Model.ActionName</dd>
-<dt class="col-sm-3">Description</dt><dd class="col-sm-9">@Model.Description</dd>
-<dt class="col-sm-3">IP</dt><dd class="col-sm-9">@Model.Ipaddress</dd>
-</dl><div class="mt-3"><a class="btn btn-outline-secondary" asp-action="Index">Back</a></div></div>
+@{
+    ViewData["Title"] = "Audit Log Details";
+    string Text(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+}
+<h1 class="page-heading invoice-details-heading mb-3">Audit Log Details</h1>
+<div class="bg-white border rounded p-3">
+    <div class="invoice-meta-grid invoice-meta-form invoice-meta-readonly">
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Date</div>
+            <div class="invoice-meta-field">@Model.LogDate.ToString("yyyy-MM-dd HH:mm")</div>
+            <div class="invoice-meta-title">Module</div>
+            <div class="invoice-meta-field">@Text(Model.ModuleName)</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Action</div>
+            <div class="invoice-meta-field">@Text(Model.ActionName)</div>
+            <div class="invoice-meta-title">IP</div>
+            <div class="invoice-meta-field">@Text(Model.Ipaddress)</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Description</div>
+            <div class="invoice-meta-field invoice-meta-field-span">@Text(Model.Description)</div>
+        </div>
+    </div>
+    <div class="mt-3 d-flex gap-2">
+        <a class="btn btn-outline-secondary" asp-action="Index">Back</a>
+    </div>
+</div>

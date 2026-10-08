@@ -1,12 +1,54 @@
 ﻿@model CustomerPaymentFormViewModel
 <div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
-<div class="row g-3">
-<div class="col-md-4"><label asp-for="PaymentNo" class="form-label"></label><input asp-for="PaymentNo" class="form-control" /><span asp-validation-for="PaymentNo" class="text-danger"></span></div>
-<div class="col-md-4"><label asp-for="PaymentDate" class="form-label"></label><input asp-for="PaymentDate" class="form-control" type="datetime-local" /></div>
-<div class="col-md-4"><label asp-for="Amount" class="form-label"></label><input asp-for="Amount" class="form-control" /></div>
-<div class="col-md-6"><label asp-for="CustomerUid" class="form-label"></label><select asp-for="CustomerUid" class="form-select" asp-items="ViewBag.Customers"></select><span asp-validation-for="CustomerUid" class="text-danger"></span></div>
-<div class="col-md-6"><label asp-for="SalesInvoiceUid" class="form-label"></label><select asp-for="SalesInvoiceUid" class="form-select" asp-items="ViewBag.Invoices"><option value="">-- Optional --</option></select></div>
-<div class="col-md-6"><label asp-for="PaymentMethodUid" class="form-label"></label><select asp-for="PaymentMethodUid" class="form-select" asp-items="ViewBag.PaymentMethods"><option value="">-- Select --</option></select></div>
-<div class="col-md-6"><label asp-for="ReferenceNo" class="form-label"></label><input asp-for="ReferenceNo" class="form-control" /></div>
-<div class="col-md-12"><label asp-for="Remarks" class="form-label"></label><textarea asp-for="Remarks" class="form-control" rows="2"></textarea></div>
+<div class="invoice-meta-grid invoice-meta-form">
+    <div class="invoice-meta-row">
+        <label asp-for="PaymentNo" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="PaymentNo" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="PaymentNo" class="text-danger"></span>
+        </div>
+        <label asp-for="PaymentDate" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="PaymentDate" class="form-control form-control-sm invoice-meta-input" type="datetime-local" />
+        </div>
+    </div>
+    <div class="invoice-meta-row">
+        <label asp-for="Amount" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="Amount" class="form-control form-control-sm invoice-meta-input" />
+        </div>
+        <label asp-for="CustomerUid" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <select asp-for="CustomerUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Customers"></select>
+            <span asp-validation-for="CustomerUid" class="text-danger"></span>
+        </div>
+    </div>
+    <div class="invoice-meta-row">
+        <label asp-for="SalesInvoiceUid" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <select asp-for="SalesInvoiceUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Invoices">
+                <option value="">-- Optional --</option>
+            </select>
+        </div>
+        <label asp-for="PaymentMethodUid" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <select asp-for="PaymentMethodUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.PaymentMethods">
+                <option value="">-- Select --</option>
+            </select>
+        </div>
+    </div>
+    <div class="invoice-meta-row">
+        <label asp-for="ReferenceNo" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="ReferenceNo" class="form-control form-control-sm invoice-meta-input" />
+        </div>
+        <div class="invoice-meta-title"></div>
+        <div class="invoice-meta-field"></div>
+    </div>
+    <div class="invoice-meta-row">
+        <label asp-for="Remarks" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field invoice-meta-field-span">
+            <textarea asp-for="Remarks" class="form-control form-control-sm invoice-meta-input" rows="2"></textarea>
+        </div>
+    </div>
 </div>

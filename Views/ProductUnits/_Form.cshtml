@@ -1,8 +1,26 @@
 ﻿@model ProductUnitFormViewModel
 <div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
-<div class="row g-3">
-<div class="col-md-4"><label asp-for="UnitCode" class="form-label"></label><input asp-for="UnitCode" class="form-control" /><span asp-validation-for="UnitCode" class="text-danger"></span></div>
-<div class="col-md-8"><label asp-for="UnitName" class="form-label"></label><input asp-for="UnitName" class="form-control" /><span asp-validation-for="UnitName" class="text-danger"></span></div>
-<div class="col-md-4 d-flex align-items-end"><div class="form-check mb-2"><input asp-for="DecimalAllowed" class="form-check-input" /><label asp-for="DecimalAllowed" class="form-check-label"></label></div></div>
-<div class="col-md-4 d-flex align-items-end"><div class="form-check mb-2"><input asp-for="IsActive" class="form-check-input" /><label asp-for="IsActive" class="form-check-label"></label></div></div>
+<div class="invoice-meta-grid invoice-meta-form">
+    <div class="invoice-meta-row">
+        <label asp-for="UnitCode" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="UnitCode" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="UnitCode" class="text-danger"></span>
+        </div>
+        <label asp-for="UnitName" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="UnitName" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="UnitName" class="text-danger"></span>
+        </div>
+    </div>
+    <div class="invoice-meta-row">
+        <label asp-for="DecimalAllowed" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field d-flex align-items-center">
+            <input asp-for="DecimalAllowed" class="form-check-input m-0" />
+        </div>
+        <label asp-for="IsActive" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field d-flex align-items-center">
+            <input asp-for="IsActive" class="form-check-input m-0" />
+        </div>
+    </div>
 </div>

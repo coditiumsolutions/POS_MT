@@ -1,14 +1,54 @@
 ﻿@model UserFormViewModel
 <div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
-<div class="row g-3">
-<div class="col-md-4"><label asp-for="UserName" class="form-label"></label><input asp-for="UserName" class="form-control" /><span asp-validation-for="UserName" class="text-danger"></span></div>
-<div class="col-md-8"><label asp-for="FullName" class="form-label"></label><input asp-for="FullName" class="form-control" /><span asp-validation-for="FullName" class="text-danger"></span></div>
-<div class="col-md-4"><label asp-for="Password" class="form-label"></label><input asp-for="Password" class="form-control" /><span class="form-text">Leave blank on edit to keep current password.</span></div>
-<div class="col-md-4"><label asp-for="MobileNo" class="form-label"></label><input asp-for="MobileNo" class="form-control" /></div>
-<div class="col-md-4"><label asp-for="Email" class="form-label"></label><input asp-for="Email" class="form-control" /><span asp-validation-for="Email" class="text-danger"></span></div>
-<div class="col-md-4"><label asp-for="RoleName" class="form-label"></label>
-<select asp-for="RoleName" class="form-select"><option>Admin</option><option>Manager</option><option>Cashier</option><option>Viewer</option></select>
-<span asp-validation-for="RoleName" class="text-danger"></span></div>
-<div class="col-md-4"><label asp-for="UserType" class="form-label"></label><input asp-for="UserType" class="form-control" /></div>
-<div class="col-md-4 d-flex align-items-end"><div class="form-check mb-2"><input asp-for="IsActive" class="form-check-input" /><label asp-for="IsActive" class="form-check-label"></label></div></div>
+<div class="invoice-meta-grid invoice-meta-form">
+    <div class="invoice-meta-row">
+        <label asp-for="UserName" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="UserName" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="UserName" class="text-danger"></span>
+        </div>
+        <label asp-for="FullName" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="FullName" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="FullName" class="text-danger"></span>
+        </div>
+    </div>
+    <div class="invoice-meta-row">
+        <label asp-for="Password" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="Password" class="form-control form-control-sm invoice-meta-input" />
+            <span class="form-text">Leave blank on edit to keep current password.</span>
+        </div>
+        <label asp-for="MobileNo" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="MobileNo" class="form-control form-control-sm invoice-meta-input" />
+        </div>
+    </div>
+    <div class="invoice-meta-row">
+        <label asp-for="Email" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="Email" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="Email" class="text-danger"></span>
+        </div>
+        <label asp-for="RoleName" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <select asp-for="RoleName" class="form-select form-select-sm invoice-meta-input">
+                <option>Admin</option>
+                <option>Manager</option>
+                <option>Cashier</option>
+                <option>Viewer</option>
+            </select>
+            <span asp-validation-for="RoleName" class="text-danger"></span>
+        </div>
+    </div>
+    <div class="invoice-meta-row">
+        <label asp-for="UserType" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="UserType" class="form-control form-control-sm invoice-meta-input" />
+        </div>
+        <label asp-for="IsActive" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field d-flex align-items-center">
+            <input asp-for="IsActive" class="form-check-input m-0" />
+        </div>
+    </div>
 </div>

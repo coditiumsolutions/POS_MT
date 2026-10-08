@@ -1,0 +1,474 @@
+@model MonthlyEntryPageViewModel
+@{
+    ViewData["Title"] = "Monthly Customer Entry";
+}
+@Html.AntiForgeryToken()
+
+<div id="posAlert" class="alert d-none mb-2" role="alert"></div>
+
+<div class="pos-sale-layout monthly-entry-layout">
+    <section class="pos-sale-panel">
+        <div class="pos-sale-panel-header">
+            <h2 class="pos-sale-panel-title">Monthly Customers</h2>
+            <input type="search" id="customerSearch" class="form-control form-control-sm" placeholder="Search customer..." style="max-width:180px" />
+        </div>
+        <div class="table-responsive pos-sale-table-wrap">
+            <table class="table table-hover table-sm align-middle mb-0" id="customersTable">
+                <thead>
+                    <tr>
+                        <th>Code</th>
+                        <th>Name</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var c in Model.Customers)
+                {
+                    <tr class="monthly-customer-row"
+                        data-uid="@c.Uid"
+                        data-code="@c.CustomerCode"
+                        data-name="@c.CustomerName"
+                        tabindex="0">
+                        <td>@c.CustomerCode</td>
+                        <td>@c.CustomerName</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        @if (Model.Customers.Count == 0)
+        {
+            <div class="p-3 text-muted">No monthly customers found. Create an active customer (Walk-in is used only for Cash POS).</div>
+        }
+        <div class="pos-sale-total-bar monthly-selected-bar">
+            <span>Selected</span>
+            <strong id="selectedCustomerLabel">None</strong>
+        </div>
+    </section>
+
+    <section class="pos-sale-panel">
+        <div class="pos-sale-panel-header">
+            <h2 class="pos-sale-panel-title">Item Entry</h2>
+            <button type="button" id="btnCancelEdit" class="btn btn-outline-secondary btn-sm d-none">Cancel Edit</button>
+        </div>
+
+        <div class="p-3 border-bottom">
+            <div class="row g-2 align-items-end">
+                <div class="col-6 col-lg-3">
+                    <label class="form-label mb-1" for="entryDate">Date</label>
+                    <input type="date" id="entryDate" class="form-control form-control-sm" />
+                </div>
+                <div class="col-12 col-lg-4">
+                    <label class="form-label mb-1" for="entryProduct">Item</label>
+                    <select id="entryProduct" class="form-select form-select-sm">
+                        <option value="">-- Select item --</option>
+                        @foreach (var p in Model.Products)
+                        {
+                            <option value="@p.Uid"
+                                    data-price="@p.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                    data-code="@p.ProductCode">
+                                @p.ProductName (@p.ProductCode)
+                            </option>
+                        }
+                    </select>
+                </div>
+                <div class="col-4 col-lg-1">
+                    <label class="form-label mb-1" for="entryQty">Qty</label>
+                    <input type="number" id="entryQty" class="form-control form-control-sm" min="0.1" step="0.1" value="1.0" />
+                </div>
+                <div class="col-4 col-lg-2">
+                    <label class="form-label mb-1" for="entryPrice">Price</label>
+                    <input type="number" id="entryPrice" class="form-control form-control-sm" min="0" step="0.01" value="0" />
+                </div>
+                <div class="col-4 col-lg-2">
+                    <label class="form-label mb-1" for="entryTotal">Total</label>
+                    <input type="text" id="entryTotal" class="form-control form-control-sm" readonly value="0.00" />
+                </div>
+            </div>
+            <div class="mt-2">
+                <button type="button" id="btnAddEntry" class="btn btn-primary btn-sm">
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i> <span id="btnAddLabel">Add</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="pos-sale-panel-header">
+            <h2 class="pos-sale-panel-title">Records</h2>
+            <span class="text-muted small" id="recordsHint">Select a customer to view records.</span>
+        </div>
+        <div class="table-responsive pos-sale-table-wrap">
+            <table class="table table-sm align-middle mb-0" id="entriesTable">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Item</th>
+                        <th class="text-end">Qty</th>
+                        <th class="text-end">Price</th>
+                        <th class="text-end">Total</th>
+                        <th class="text-center" style="width:7rem;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="entriesBody">
+                    <tr id="entriesEmptyRow">
+                        <td colspan="6" class="text-muted text-center py-4">No records yet.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="pos-sale-total-bar monthly-invoice-bar">
+            <div class="d-flex flex-column">
+                <span>Customer Total</span>
+                <strong id="customerTotal">0.00</strong>
+            </div>
+            <button type="button" id="btnCreateSalesInvoice" class="btn btn-success btn-sm" disabled>
+                <i class="bi bi-receipt" aria-hidden="true"></i> Add to Sales Invoice
+            </button>
+        </div>
+    </section>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    const antiforgery = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+    const entriesUrl = '@Url.Action("MonthlyEntries", "POS")';
+    const saveUrl = '@Url.Action("SaveMonthlyEntry", "POS")';
+    const deleteUrl = '@Url.Action("DeleteMonthlyEntry", "POS")';
+    const createInvoiceUrl = '@Url.Action("CreateMonthlySalesInvoice", "POS")';
+
+    let selectedCustomerUid = null;
+    let editingDetailUid = null;
+    let currentEntryCount = 0;
+
+    const customersTable = document.getElementById('customersTable');
+    const customerSearch = document.getElementById('customerSearch');
+    const selectedCustomerLabel = document.getElementById('selectedCustomerLabel');
+    const entryDate = document.getElementById('entryDate');
+    const entryProduct = document.getElementById('entryProduct');
+    const entryQty = document.getElementById('entryQty');
+    const entryPrice = document.getElementById('entryPrice');
+    const entryTotal = document.getElementById('entryTotal');
+    const btnAdd = document.getElementById('btnAddEntry');
+    const btnAddLabel = document.getElementById('btnAddLabel');
+    const btnCancelEdit = document.getElementById('btnCancelEdit');
+    const entriesBody = document.getElementById('entriesBody');
+    const entriesEmptyRow = document.getElementById('entriesEmptyRow');
+    const customerTotalEl = document.getElementById('customerTotal');
+    const recordsHint = document.getElementById('recordsHint');
+    const alertBox = document.getElementById('posAlert');
+    const btnCreateSalesInvoice = document.getElementById('btnCreateSalesInvoice');
+
+    function todayInputValue() {
+        const d = new Date();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return d.getFullYear() + '-' + m + '-' + day;
+    }
+
+    entryDate.value = todayInputValue();
+
+    function money(n) {
+        return Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function formatDisplayDate(iso) {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return iso;
+        return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    function showAlert(type, message) {
+        alertBox.className = 'alert alert-' + type;
+        alertBox.textContent = message;
+        alertBox.classList.remove('d-none');
+    }
+
+    function hideAlert() {
+        alertBox.classList.add('d-none');
+    }
+
+    function recalcTotal() {
+        const qty = parseFloat(entryQty.value) || 0;
+        const price = parseFloat(entryPrice.value) || 0;
+        entryTotal.value = money(qty * price);
+    }
+
+    entryQty.addEventListener('input', recalcTotal);
+    entryPrice.addEventListener('input', recalcTotal);
+
+    entryProduct.addEventListener('change', function () {
+        const opt = entryProduct.selectedOptions[0];
+        if (!opt || !opt.value) return;
+        const price = parseFloat(opt.getAttribute('data-price') || '0');
+        entryPrice.value = price.toFixed(2);
+        recalcTotal();
+    });
+
+    customerSearch.addEventListener('input', function () {
+        const q = customerSearch.value.trim().toLowerCase();
+        customersTable.querySelectorAll('.monthly-customer-row').forEach(function (row) {
+            const text = (row.getAttribute('data-code') + ' ' + row.getAttribute('data-name')).toLowerCase();
+            row.style.display = !q || text.indexOf(q) !== -1 ? '' : 'none';
+        });
+    });
+
+    customersTable.addEventListener('click', function (e) {
+        const row = e.target.closest('.monthly-customer-row');
+        if (!row) return;
+        selectCustomer(row);
+    });
+
+    function selectCustomer(row) {
+        customersTable.querySelectorAll('.monthly-customer-row.selected').forEach(r => r.classList.remove('selected'));
+        row.classList.add('selected');
+        selectedCustomerUid = parseInt(row.getAttribute('data-uid'), 10);
+        selectedCustomerLabel.textContent = row.getAttribute('data-name') + ' (' + row.getAttribute('data-code') + ')';
+        recordsHint.textContent = 'Showing records for ' + row.getAttribute('data-name');
+        clearEditMode();
+        hideAlert();
+        loadEntries();
+    }
+
+    function clearItemFields(keepDate) {
+        entryProduct.value = '';
+        entryQty.value = '1.0';
+        entryPrice.value = '0';
+        recalcTotal();
+        if (!keepDate) {
+            // intentionally keep date by default after Add
+        }
+    }
+
+    function clearEditMode() {
+        editingDetailUid = null;
+        btnAddLabel.textContent = 'Add';
+        btnCancelEdit.classList.add('d-none');
+        clearItemFields(true);
+    }
+
+    btnCancelEdit.addEventListener('click', function () {
+        clearEditMode();
+        hideAlert();
+    });
+
+    async function loadEntries() {
+        if (!selectedCustomerUid) {
+            renderEntries([]);
+            return;
+        }
+
+        try {
+            const res = await fetch(entriesUrl + '?customerUid=' + selectedCustomerUid, {
+                headers: { 'Accept': 'application/json' }
+            });
+            const rows = await res.json();
+            if (!res.ok) {
+                showAlert('danger', rows.message || 'Unable to load records.');
+                renderEntries([]);
+                return;
+            }
+            renderEntries(rows);
+        } catch (err) {
+            showAlert('danger', 'Unable to load records.');
+            renderEntries([]);
+        }
+    }
+
+    function renderEntries(rows) {
+        entriesBody.querySelectorAll('tr:not(#entriesEmptyRow)').forEach(r => r.remove());
+        currentEntryCount = rows && rows.length ? rows.length : 0;
+        btnCreateSalesInvoice.disabled = !(selectedCustomerUid && currentEntryCount > 0);
+
+        if (!rows || rows.length === 0) {
+            entriesEmptyRow.style.display = '';
+            customerTotalEl.textContent = money(0);
+            return;
+        }
+
+        entriesEmptyRow.style.display = 'none';
+        let total = 0;
+        rows.forEach(function (row) {
+            total += Number(row.lineTotal) || 0;
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td>' + formatDisplayDate(row.entryDate) + '</td>' +
+                '<td><div class="fw-semibold">' + escapeHtml(row.productName) + '</div>' +
+                '<div class="small text-muted">' + escapeHtml(row.productCode) + '</div></td>' +
+                '<td class="text-end">' + Number(row.quantity).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '</td>' +
+                '<td class="text-end">' + money(row.unitPrice) + '</td>' +
+                '<td class="text-end fw-semibold">' + money(row.lineTotal) + '</td>' +
+                '<td class="text-center text-nowrap">' +
+                '<button type="button" class="btn btn-sm btn-outline-primary me-1" data-action="edit" ' +
+                'data-detail="' + row.detailUid + '" data-product="' + row.productUid + '" ' +
+                'data-qty="' + row.quantity + '" data-price="' + row.unitPrice + '" ' +
+                'data-date="' + toInputDate(row.entryDate) + '" title="Edit"><i class="bi bi-pencil"></i></button>' +
+                '<button type="button" class="btn btn-sm btn-outline-danger" data-action="delete" data-detail="' + row.detailUid + '" title="Delete"><i class="bi bi-trash"></i></button>' +
+                '</td>';
+            entriesBody.appendChild(tr);
+        });
+        customerTotalEl.textContent = money(total);
+    }
+
+    btnCreateSalesInvoice.addEventListener('click', async function () {
+        hideAlert();
+        if (!selectedCustomerUid) {
+            showAlert('warning', 'Select a monthly customer first.');
+            return;
+        }
+        if (currentEntryCount <= 0) {
+            showAlert('warning', 'Add at least one item entry first.');
+            return;
+        }
+        if (!confirm('Create a Sales Invoice for the selected customer with all item entry records?')) return;
+
+        btnCreateSalesInvoice.disabled = true;
+        try {
+            const res = await fetch(createInvoiceUrl + '?customerUid=' + selectedCustomerUid, {
+                method: 'POST',
+                headers: {
+                    'RequestVerificationToken': antiforgery,
+                    'Accept': 'application/json'
+                }
+            });
+            const result = await res.json();
+            if (!res.ok || !result.success) {
+                showAlert('danger', result.message || 'Unable to create sales invoice.');
+                btnCreateSalesInvoice.disabled = currentEntryCount <= 0;
+                return;
+            }
+
+            clearEditMode();
+            showAlert('success', result.message);
+            await loadEntries();
+        } catch (err) {
+            showAlert('danger', 'Unable to create sales invoice.');
+            btnCreateSalesInvoice.disabled = currentEntryCount <= 0;
+        }
+    });
+
+    function toInputDate(iso) {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return todayInputValue();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return d.getFullYear() + '-' + m + '-' + day;
+    }
+
+    entriesBody.addEventListener('click', function (e) {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const action = btn.getAttribute('data-action');
+        const detailUid = parseInt(btn.getAttribute('data-detail'), 10);
+
+        if (action === 'edit') {
+            editingDetailUid = detailUid;
+            entryDate.value = btn.getAttribute('data-date');
+            entryProduct.value = btn.getAttribute('data-product');
+            entryQty.value = parseFloat(btn.getAttribute('data-qty')).toFixed(1);
+            entryPrice.value = parseFloat(btn.getAttribute('data-price')).toFixed(2);
+            recalcTotal();
+            btnAddLabel.textContent = 'Update';
+            btnCancelEdit.classList.remove('d-none');
+            hideAlert();
+            return;
+        }
+
+        if (action === 'delete') {
+            if (!confirm('Delete this record?')) return;
+            deleteEntry(detailUid);
+        }
+    });
+
+    async function deleteEntry(detailUid) {
+        try {
+            const res = await fetch(deleteUrl + '?detailUid=' + detailUid, {
+                method: 'POST',
+                headers: {
+                    'RequestVerificationToken': antiforgery
+                }
+            });
+            const result = await res.json();
+            if (!res.ok || !result.success) {
+                showAlert('danger', result.message || 'Delete failed.');
+                return;
+            }
+            if (editingDetailUid === detailUid) clearEditMode();
+            showAlert('success', result.message);
+            loadEntries();
+        } catch (err) {
+            showAlert('danger', 'Delete failed.');
+        }
+    }
+
+    btnAdd.addEventListener('click', async function () {
+        hideAlert();
+        if (!selectedCustomerUid) {
+            showAlert('warning', 'Select a monthly customer first.');
+            return;
+        }
+        if (!entryDate.value) {
+            showAlert('warning', 'Select a date.');
+            return;
+        }
+        if (!entryProduct.value) {
+            showAlert('warning', 'Select an item.');
+            return;
+        }
+        const qty = Math.round((parseFloat(entryQty.value) || 0) * 10) / 10;
+        const price = parseFloat(entryPrice.value);
+        if (!(qty >= 0.1)) {
+            showAlert('warning', 'Quantity must be at least 0.1.');
+            return;
+        }
+        entryQty.value = qty.toFixed(1);
+        if (!(price >= 0) || Number.isNaN(price)) {
+            showAlert('warning', 'Enter a valid price.');
+            return;
+        }
+
+        btnAdd.disabled = true;
+        try {
+            const res = await fetch(saveUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': antiforgery
+                },
+                body: JSON.stringify({
+                    detailUid: editingDetailUid,
+                    customerUid: selectedCustomerUid,
+                    entryDate: entryDate.value,
+                    productUid: parseInt(entryProduct.value, 10),
+                    quantity: qty,
+                    unitPrice: price
+                })
+            });
+            const result = await res.json();
+            if (!res.ok || !result.success) {
+                showAlert('danger', result.message || 'Unable to save entry.');
+                return;
+            }
+
+            showAlert('success', result.message);
+            const keepDate = entryDate.value;
+            clearEditMode();
+            entryDate.value = keepDate;
+            loadEntries();
+        } catch (err) {
+            showAlert('danger', 'Unable to save entry.');
+        } finally {
+            btnAdd.disabled = false;
+        }
+    });
+
+    function escapeHtml(s) {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    recalcTotal();
+})();
+</script>
+}

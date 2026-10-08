@@ -1,16 +1,55 @@
 ﻿@model PurchaseInvoice
-@{ ViewData["Title"] = "Purchase Invoice Details"; }
-<h1 class="page-heading mb-3">Purchase Invoice Details</h1>
+@{
+    ViewData["Title"] = "Purchase Invoice Details";
+    string Text(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+}
+<h1 class="page-heading invoice-details-heading mb-3">Purchase Invoice Details</h1>
 <div class="bg-white border rounded p-3">
-    <dl class="row mb-0">
-        <dt class="col-sm-3">Invoice No</dt><dd class="col-sm-9">@Model.PurchaseInvoiceNo</dd>
-        <dt class="col-sm-3">Vendor Invoice</dt><dd class="col-sm-9">@Model.VendorInvoiceNo</dd>
-        <dt class="col-sm-3">Date</dt><dd class="col-sm-9">@Model.PurchaseDate</dd>
-        <dt class="col-sm-3">Net</dt><dd class="col-sm-9">@Model.NetAmount.ToString("N2")</dd>
-        <dt class="col-sm-3">Paid</dt><dd class="col-sm-9">@Model.PaidAmount.ToString("N2")</dd>
-        <dt class="col-sm-3">Status</dt><dd class="col-sm-9">@Model.InvoiceStatus</dd>
-    </dl>
-    <div class="mt-3">
+    <div class="invoice-meta-grid invoice-meta-form invoice-meta-readonly">
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Invoice No</div>
+            <div class="invoice-meta-field">@Model.PurchaseInvoiceNo</div>
+            <div class="invoice-meta-title">Vendor Invoice</div>
+            <div class="invoice-meta-field">@Text(Model.VendorInvoiceNo)</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Date</div>
+            <div class="invoice-meta-field">@Model.PurchaseDate.ToString("yyyy-MM-dd HH:mm")</div>
+            <div class="invoice-meta-title">Vendor UID</div>
+            <div class="invoice-meta-field">@Model.VendorUid</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Sub Total</div>
+            <div class="invoice-meta-field">@Model.SubTotal.ToString("N2")</div>
+            <div class="invoice-meta-title">Discount</div>
+            <div class="invoice-meta-field">@Model.DiscountAmount.ToString("N2")</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Tax</div>
+            <div class="invoice-meta-field">@Model.TaxAmount.ToString("N2")</div>
+            <div class="invoice-meta-title">Other Charges</div>
+            <div class="invoice-meta-field">@Model.OtherCharges.ToString("N2")</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Net Amount</div>
+            <div class="invoice-meta-field">@Model.NetAmount.ToString("N2")</div>
+            <div class="invoice-meta-title">Paid Amount</div>
+            <div class="invoice-meta-field">@Model.PaidAmount.ToString("N2")</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Balance</div>
+            <div class="invoice-meta-field">@Model.BalanceAmount.ToString("N2")</div>
+            <div class="invoice-meta-title">Payment Status</div>
+            <div class="invoice-meta-field">@Model.PaymentStatus</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Invoice Status</div>
+            <div class="invoice-meta-field">@Model.InvoiceStatus</div>
+            <div class="invoice-meta-title">Remarks</div>
+            <div class="invoice-meta-field">@Text(Model.Remarks)</div>
+        </div>
+    </div>
+    <div class="mt-3 d-flex gap-2">
         <a class="btn btn-primary" asp-action="Edit" asp-route-id="@Model.Uid">Edit</a>
         <a class="btn btn-outline-secondary" asp-action="Index">Back</a>
     </div>

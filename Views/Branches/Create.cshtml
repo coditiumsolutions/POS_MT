@@ -1,6 +1,6 @@
-﻿@model BranchFormViewModel
+@model BranchFormViewModel
 @{ ViewData["Title"] = "Add Branch"; }
-<h1 class="page-heading mb-3">Add Branch</h1>
+<h1 class="page-heading invoice-details-heading mb-3">Add Branch</h1>
 <form asp-action="Create" method="post" class="bg-white border rounded p-3">
     @Html.AntiForgeryToken()
     <partial name="_Form" />

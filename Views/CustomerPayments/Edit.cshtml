@@ -1,6 +1,6 @@
-﻿@model CustomerPaymentFormViewModel
+@model CustomerPaymentFormViewModel
 @{ ViewData["Title"] = "Edit Customer Payment"; }
-<h1 class="page-heading mb-3">Edit Customer Payment</h1>
+<h1 class="page-heading invoice-details-heading mb-3">Edit Customer Payment</h1>
 <form asp-action="Edit" method="post" class="bg-white border rounded p-3">
     @Html.AntiForgeryToken()
     <input type="hidden" asp-for="Uid" />

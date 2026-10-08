@@ -1,8 +1,30 @@
 ﻿@model ExpenseCategoryFormViewModel
 <div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
-<div class="row g-3">
-<div class="col-md-4"><label asp-for="CategoryCode" class="form-label"></label><input asp-for="CategoryCode" class="form-control" /><span asp-validation-for="CategoryCode" class="text-danger"></span></div>
-<div class="col-md-8"><label asp-for="CategoryName" class="form-label"></label><input asp-for="CategoryName" class="form-control" /><span asp-validation-for="CategoryName" class="text-danger"></span></div>
-<div class="col-md-12"><label asp-for="Description" class="form-label"></label><textarea asp-for="Description" class="form-control" rows="2"></textarea></div>
-<div class="col-md-4 d-flex align-items-end"><div class="form-check mb-2"><input asp-for="IsActive" class="form-check-input" /><label asp-for="IsActive" class="form-check-label"></label></div></div>
+<div class="invoice-meta-grid invoice-meta-form">
+    <div class="invoice-meta-row">
+        <label asp-for="CategoryCode" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="CategoryCode" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="CategoryCode" class="text-danger"></span>
+        </div>
+        <label asp-for="CategoryName" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="CategoryName" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="CategoryName" class="text-danger"></span>
+        </div>
+    </div>
+    <div class="invoice-meta-row">
+        <label asp-for="IsActive" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field d-flex align-items-center">
+            <input asp-for="IsActive" class="form-check-input m-0" />
+        </div>
+        <div class="invoice-meta-title"></div>
+        <div class="invoice-meta-field"></div>
+    </div>
+    <div class="invoice-meta-row">
+        <label asp-for="Description" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field invoice-meta-field-span">
+            <textarea asp-for="Description" class="form-control form-control-sm invoice-meta-input" rows="2"></textarea>
+        </div>
+    </div>
 </div>

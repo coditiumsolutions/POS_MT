@@ -1,15 +1,31 @@
 ﻿@model Warehouse
-@{ ViewData["Title"] = "Warehouse Details"; }
-<h1 class="page-heading mb-3">Warehouse Details</h1>
+@{
+    ViewData["Title"] = "Warehouse Details";
+    string Text(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+}
+<h1 class="page-heading invoice-details-heading mb-3">Warehouse Details</h1>
 <div class="bg-white border rounded p-3">
-    <dl class="row mb-0">
-        <dt class="col-sm-3">Code</dt><dd class="col-sm-9">@Model.WarehouseCode</dd>
-        <dt class="col-sm-3">Name</dt><dd class="col-sm-9">@Model.WarehouseName</dd>
-        <dt class="col-sm-3">City</dt><dd class="col-sm-9">@Model.City</dd>
-        <dt class="col-sm-3">Contact</dt><dd class="col-sm-9">@Model.ContactPerson</dd>
-        <dt class="col-sm-3">Active</dt><dd class="col-sm-9">@(Model.IsActive ? "Yes" : "No")</dd>
-    </dl>
-    <div class="mt-3">
+    <div class="invoice-meta-grid invoice-meta-form invoice-meta-readonly">
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Warehouse Code</div>
+            <div class="invoice-meta-field">@Model.WarehouseCode</div>
+            <div class="invoice-meta-title">Warehouse Name</div>
+            <div class="invoice-meta-field">@Model.WarehouseName</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">City</div>
+            <div class="invoice-meta-field">@Text(Model.City)</div>
+            <div class="invoice-meta-title">Contact Person</div>
+            <div class="invoice-meta-field">@Text(Model.ContactPerson)</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Address</div>
+            <div class="invoice-meta-field">@Text(Model.Address)</div>
+            <div class="invoice-meta-title">Active</div>
+            <div class="invoice-meta-field">@(Model.IsActive ? "Yes" : "No")</div>
+        </div>
+    </div>
+    <div class="mt-3 d-flex gap-2">
         <a class="btn btn-primary" asp-action="Edit" asp-route-id="@Model.Uid">Edit</a>
         <a class="btn btn-outline-secondary" asp-action="Index">Back</a>
     </div>

@@ -13,15 +13,20 @@ public class CustomersController : Controller
 {
     private readonly POSDbContext _db;
     private readonly IAuditService _audit;
+    private readonly INavContextService _navContext;
 
-    public CustomersController(POSDbContext db, IAuditService audit)
+    public CustomersController(POSDbContext db, IAuditService audit, INavContextService navContext)
     {
         _db = db;
         _audit = audit;
+        _navContext = navContext;
     }
+
+    private void EnsureCustomersNav() => _navContext.SetArea("Customers");
 
     public async Task<IActionResult> Index(string? filter, CancellationToken ct)
     {
+        EnsureCustomersNav();
         ViewData["Filter"] = filter;
         var query = _db.Customers.AsNoTracking().AsQueryable();
         if (string.Equals(filter, "credit", StringComparison.OrdinalIgnoreCase))
@@ -45,6 +50,7 @@ public class CustomersController : Controller
 
     public IActionResult Create()
     {
+        EnsureCustomersNav();
         return View(new CustomerFormViewModel { IsActive = true });
     }
 
@@ -52,6 +58,7 @@ public class CustomersController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(CustomerFormViewModel model, CancellationToken ct)
     {
+        EnsureCustomersNav();
         if (!ModelState.IsValid)
         {
             return View(model);
@@ -74,6 +81,7 @@ public class CustomersController : Controller
 
     public async Task<IActionResult> Edit(int id, CancellationToken ct)
     {
+        EnsureCustomersNav();
         var entity = await _db.Customers.FindAsync([id], ct);
         if (entity is null)
         {
@@ -87,6 +95,7 @@ public class CustomersController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(int id, CustomerFormViewModel model, CancellationToken ct)
     {
+        EnsureCustomersNav();
         if (id != model.Uid)
         {
             return BadRequest();
@@ -119,6 +128,7 @@ public class CustomersController : Controller
 
     public async Task<IActionResult> Details(int id, CancellationToken ct)
     {
+        EnsureCustomersNav();
         var entity = await _db.Customers.AsNoTracking().FirstOrDefaultAsync(x => x.Uid == id, ct);
         return entity is null ? NotFound() : View(entity);
     }
@@ -127,6 +137,7 @@ public class CustomersController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Deactivate(int id, CancellationToken ct)
     {
+        EnsureCustomersNav();
         var entity = await _db.Customers.FindAsync([id], ct);
         if (entity is null)
         {

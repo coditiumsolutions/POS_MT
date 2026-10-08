@@ -1,57 +1,67 @@
 @model CustomerFormViewModel
 <div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
-<div class="row g-3">
-    <div class="col-md-4">
-        <label asp-for="CustomerCode" class="form-label"></label>
-        <input asp-for="CustomerCode" class="form-control" />
-        <span asp-validation-for="CustomerCode" class="text-danger"></span>
+<div class="invoice-meta-grid invoice-meta-form">
+    <div class="invoice-meta-row">
+        <label asp-for="CustomerCode" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="CustomerCode" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="CustomerCode" class="text-danger"></span>
+        </div>
+        <label asp-for="CustomerName" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="CustomerName" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="CustomerName" class="text-danger"></span>
+        </div>
     </div>
-    <div class="col-md-8">
-        <label asp-for="CustomerName" class="form-label"></label>
-        <input asp-for="CustomerName" class="form-control" />
-        <span asp-validation-for="CustomerName" class="text-danger"></span>
+    <div class="invoice-meta-row">
+        <label asp-for="MobileNo" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="MobileNo" class="form-control form-control-sm invoice-meta-input" />
+        </div>
+        <label asp-for="PhoneNo" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="PhoneNo" class="form-control form-control-sm invoice-meta-input" />
+        </div>
     </div>
-    <div class="col-md-4">
-        <label asp-for="MobileNo" class="form-label"></label>
-        <input asp-for="MobileNo" class="form-control" />
+    <div class="invoice-meta-row">
+        <label asp-for="Email" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="Email" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="Email" class="text-danger"></span>
+        </div>
+        <label asp-for="City" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="City" class="form-control form-control-sm invoice-meta-input" />
+        </div>
     </div>
-    <div class="col-md-4">
-        <label asp-for="PhoneNo" class="form-label"></label>
-        <input asp-for="PhoneNo" class="form-control" />
+    <div class="invoice-meta-row">
+        <label asp-for="Address" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="Address" class="form-control form-control-sm invoice-meta-input" />
+        </div>
+        <label asp-for="Ntn" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="Ntn" class="form-control form-control-sm invoice-meta-input" />
+        </div>
     </div>
-    <div class="col-md-4">
-        <label asp-for="Email" class="form-label"></label>
-        <input asp-for="Email" class="form-control" />
-        <span asp-validation-for="Email" class="text-danger"></span>
+    <div class="invoice-meta-row">
+        <label asp-for="OpeningBalance" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="OpeningBalance" class="form-control form-control-sm invoice-meta-input" />
+        </div>
+        <label asp-for="CreditLimit" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="CreditLimit" class="form-control form-control-sm invoice-meta-input" />
+        </div>
     </div>
-    <div class="col-md-8">
-        <label asp-for="Address" class="form-label"></label>
-        <input asp-for="Address" class="form-control" />
-    </div>
-    <div class="col-md-4">
-        <label asp-for="City" class="form-label"></label>
-        <input asp-for="City" class="form-control" />
-    </div>
-    <div class="col-md-4">
-        <label asp-for="Ntn" class="form-label"></label>
-        <input asp-for="Ntn" class="form-control" />
-    </div>
-    <div class="col-md-4">
-        <label asp-for="OpeningBalance" class="form-label"></label>
-        <input asp-for="OpeningBalance" class="form-control" />
-    </div>
-    <div class="col-md-4">
-        <label asp-for="CreditLimit" class="form-label"></label>
-        <input asp-for="CreditLimit" class="form-control" />
-    </div>
-    <div class="col-md-4">
-        <label asp-for="DiscountPercent" class="form-label"></label>
-        <input asp-for="DiscountPercent" class="form-control" />
-    </div>
-    <div class="col-md-4 d-flex align-items-end">
-        <div class="form-check mb-2">
-            <input asp-for="IsActive" class="form-check-input" />
-            <label asp-for="IsActive" class="form-check-label"></label>
+    <div class="invoice-meta-row">
+        <label asp-for="DiscountPercent" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="DiscountPercent" class="form-control form-control-sm invoice-meta-input" />
+        </div>
+        <label asp-for="IsActive" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field d-flex align-items-center">
+            <input asp-for="IsActive" class="form-check-input m-0" />
         </div>
     </div>
 </div>

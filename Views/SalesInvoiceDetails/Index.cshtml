@@ -1,14 +1,14 @@
-﻿@model SalesInvoiceIndexViewModel
+@model SalesInvoiceDetailIndexViewModel
 @{
-    ViewData["Title"] = "Sales Invoices";
+    ViewData["Title"] = "Invoice Details";
     var type = Model.CustomerType ?? string.Empty;
 }
+
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <div>
-        <h1 class="page-heading mb-1">Sales Invoices</h1>
-        <p class="text-muted mb-0">Records from SalesInvoices.</p>
+        <h1 class="page-heading mb-1">Invoice Details</h1>
+        <p class="text-muted mb-0">All line items from sales invoices.</p>
     </div>
-    <a class="btn btn-primary" asp-action="Create">Add New</a>
 </div>
 @if (TempData["Success"] != null) { <div class="alert alert-success">@TempData["Success"]</div> }
 @if (TempData["Error"] != null) { <div class="alert alert-danger">@TempData["Error"]</div> }
@@ -47,7 +47,7 @@
         <div class="col-md-5">
             <label class="form-label mb-1" for="search">Search</label>
             <input type="search" class="form-control" id="search" name="search" value="@Model.Search"
-                   placeholder="Invoice no, customer, status..." />
+                   placeholder="Invoice no, customer, product..." />
         </div>
         <div class="col-md-3 d-flex gap-2">
             <button type="submit" class="btn btn-primary">Filter</button>
@@ -62,12 +62,14 @@
             <tr>
                 <th>Invoice No</th>
                 <th>Date</th>
-                <th>Customer Name</th>
+                <th>Customer</th>
                 <th>Type</th>
-                <th>Net</th>
-                <th>Paid</th>
+                <th>Product</th>
+                <th class="text-end">Qty</th>
+                <th class="text-end">Price</th>
+                <th class="text-end">Total</th>
                 <th>Status</th>
-                <th style="width:190px">Actions</th>
+                <th style="width:140px">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -78,22 +80,24 @@
                 <td>@item.InvoiceDate.ToString("yyyy-MM-dd")</td>
                 <td>@item.CustomerName</td>
                 <td>@item.CustomerType</td>
-                <td>@item.NetAmount.ToString("N2")</td>
-                <td>@item.PaidAmount.ToString("N2")</td>
+                <td>
+                    <div class="fw-semibold">@item.ProductName</div>
+                    <div class="small text-muted">@item.ProductCode</div>
+                </td>
+                <td class="text-end">@item.Quantity.ToString("N3")</td>
+                <td class="text-end">@item.UnitPrice.ToString("N2")</td>
+                <td class="text-end">@item.LineTotal.ToString("N2")</td>
                 <td>@item.InvoiceStatus</td>
                 <td class="text-nowrap">
-                    <a class="btn btn-sm btn-outline-primary" asp-action="Edit" asp-route-id="@item.Uid">Edit</a>
-                    <a class="btn btn-sm btn-outline-secondary" asp-action="Details" asp-route-id="@item.Uid">View</a>
-                    <form asp-action="Cancel" asp-route-id="@item.Uid" method="post" class="d-inline">
-                        @Html.AntiForgeryToken()
-                        <button type="submit" class="btn btn-sm btn-outline-warning" onclick="return confirm('Cancel this record?');">Cancel</button>
-                    </form>
-                    <form asp-action="Delete" asp-route-id="@item.Uid" method="post" class="d-inline">
+                    <a class="btn btn-sm btn-outline-secondary"
+                       asp-action="Details"
+                       asp-route-id="@item.DetailUid">View</a>
+                    <form asp-action="Delete" asp-route-id="@item.DetailUid" method="post" class="d-inline">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="customerType" value="@Model.CustomerType" />
                         <input type="hidden" name="search" value="@Model.Search" />
                         <button type="submit" class="btn btn-sm btn-outline-danger"
-                                onclick="return confirm('Delete this sales invoice and all its detail lines?');">Delete</button>
+                                onclick="return confirm('Delete this invoice detail line?');">Delete</button>
                     </form>
                 </td>
             </tr>
@@ -101,4 +105,7 @@
         </tbody>
     </table>
 </div>
-@section Scripts { <script>posDataTable('#crudTable');</script> }
+
+@section Scripts {
+    <script>posDataTable('#crudTable');</script>
+}
