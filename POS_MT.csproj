@@ -18,4 +18,24 @@
     </PackageReference>
   </ItemGroup>
 
+  <!--
+    Local runs use ASPNETCORE_ENVIRONMENT=Development (appsettings.Development.json).
+    IIS / published hosts default to Production and only read appsettings.json.
+    After publish, copy the real POS_MT connection string into the published appsettings.json
+    so the server uses the same DB as local without committing secrets to source control.
+  -->
+  <Target Name="ApplyDevConnectionStringOnPublish" AfterTargets="Publish">
+    <PropertyGroup>
+      <_DevSettings>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\appsettings.Development.json'))</_DevSettings>
+      <_PublishSettings>$([System.IO.Path]::GetFullPath('$(PublishDir)appsettings.json'))</_PublishSettings>
+      <_ApplyCsScript>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\scripts\apply-dev-connection-string.ps1'))</_ApplyCsScript>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_DevSettings)')"
+           Text="appsettings.Development.json is missing. Create it from appsettings.Example.json before publishing." />
+    <Error Condition="!Exists('$(_ApplyCsScript)')"
+           Text="Missing scripts\apply-dev-connection-string.ps1" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_ApplyCsScript)&quot; -DevSettings &quot;$(_DevSettings)&quot; -PublishSettings &quot;$(_PublishSettings)&quot;" />
+    <Message Importance="high" Text="Applied Development connection string to $(PublishDir)appsettings.json" />
+  </Target>
+
 </Project>

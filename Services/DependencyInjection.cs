@@ -14,6 +14,16 @@ public static class DependencyInjection
             throw new InvalidOperationException("Connection string 'POS_MT' is missing from configuration.");
         }
 
+        if (connectionString.Contains("YOUR_SQL_SERVER", StringComparison.OrdinalIgnoreCase)
+            || connectionString.Contains("YOUR_USER", StringComparison.OrdinalIgnoreCase)
+            || connectionString.Contains("YOUR_PASSWORD", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Connection string 'POS_MT' still has placeholder values. " +
+                "On the server, set ConnectionStrings:POS_MT in appsettings.json (or environment variables). " +
+                "Locally, use appsettings.Development.json. Publish copies the Development connection string into the published appsettings.json.");
+        }
+
         services.AddHttpContextAccessor();
         services.AddDistributedMemoryCache();
         services.AddSession(options =>
