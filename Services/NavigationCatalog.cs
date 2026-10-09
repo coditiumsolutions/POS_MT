@@ -5,7 +5,9 @@ public sealed record NavLinkItem(
     string? Controller = null,
     string Action = "Index",
     string? Filter = null,
-    string IconClass = "bi-circle");
+    string IconClass = "bi-circle",
+    int? ItemMonth = null,
+    string? NavArea = null);
 
 public sealed record TopNavArea(string Key, string Title, IReadOnlyList<NavLinkItem> SubLinks);
 
@@ -14,6 +16,14 @@ public sealed record ModuleCardItem(string Name, string IconClass, string? Contr
 public static class NavigationCatalog
 {
     public const string SessionKey = "CurrentTopNav";
+
+    /// <summary>Sidebar links when viewing Dashboard / Home charts.</summary>
+    public static TopNavArea DashboardArea { get; } = new("Dashboard", "Dashboard",
+    [
+        new("Bar Graphs", "Dashboard", "Index", IconClass: "bi-bar-chart-fill", ItemMonth: 6),
+        new("Pie Graphs", "Dashboard", "PieGraphs", IconClass: "bi-pie-chart-fill"),
+        new("Slow / Dead Stock", "StockMovement", IconClass: "bi-hourglass-split", NavArea: "Dashboard")
+    ]);
 
     /// <summary>Second top-navbar main links (All Modules expands via twistee).</summary>
     public static IReadOnlyList<TopNavArea> TopAreas { get; } =
@@ -26,7 +36,8 @@ public static class NavigationCatalog
         new("Inventories", "Inventories",
         [
             new("Add Inventory", "Inventories", "Create", IconClass: "bi-plus-square"),
-            new("All Inventory", "Inventories", IconClass: "bi-boxes")
+            new("All Inventory", "Inventories", IconClass: "bi-boxes"),
+            new("Slow / Dead Stock", "StockMovement", IconClass: "bi-hourglass-split", NavArea: "Inventories")
         ]),
         new("Customers", "Customers",
         [
@@ -35,12 +46,14 @@ public static class NavigationCatalog
         ]),
         new("Reports", "Reports",
         [
-            new("Sales Report", "Reports", "TotalSale", IconClass: "bi-graph-up-arrow")
+            new("Sales Report", "Reports", "TotalSale", IconClass: "bi-graph-up-arrow"),
+            new("Slow / Dead Stock", "StockMovement", IconClass: "bi-hourglass-split", NavArea: "Reports")
         ]),
         new("AllModules", "All Modules",
         [
             new("Vendors", "Vendors", IconClass: "bi-truck"),
             new("Products", "Products", IconClass: "bi-box-seam"),
+            new("Inventories", "Inventories", IconClass: "bi-boxes"),
             new("Sales Invoice", "SalesInvoices", IconClass: "bi-receipt"),
             new("Report", "Reports", "TotalSale", IconClass: "bi-graph-up")
         ])
@@ -61,9 +74,8 @@ public static class NavigationCatalog
         ]),
         new("SalesInvoice", "Sales Invoice",
         [
-            new("Add Invoice", "SalesInvoices", "Create", IconClass: "bi-file-earmark-plus"),
-            new("All Invoice", "SalesInvoices", IconClass: "bi-receipt"),
-            new("Invoice Details", "SalesInvoiceDetails", IconClass: "bi-list-ul")
+            new("All Sales", "SalesInvoices", IconClass: "bi-receipt"),
+            new("All Sale Items", "SalesInvoiceDetails", IconClass: "bi-list-ul")
         ])
     ];
 
@@ -115,6 +127,12 @@ public static class NavigationCatalog
         if (string.IsNullOrWhiteSpace(key))
         {
             return null;
+        }
+
+        if (string.Equals(key, DashboardArea.Key, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(key, DashboardArea.Title, StringComparison.OrdinalIgnoreCase))
+        {
+            return DashboardArea;
         }
 
         return TopAreas.Concat(NestedModuleAreas).FirstOrDefault(a =>

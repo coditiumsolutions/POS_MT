@@ -41,7 +41,7 @@
 
             <header class="pos-topbar-secondary">
                 <nav class="pos-top-nav">
-                    <a class="pos-top-link @(IsController("Dashboard") && currentArea is null ? "active" : "")"
+                    <a class="pos-top-link @(IsController("Dashboard") || string.Equals(currentArea?.Key, "Dashboard", StringComparison.OrdinalIgnoreCase) ? "active" : "")"
                        asp-controller="Nav" asp-action="Clear">Home</a>
                     @foreach (var area in NavigationCatalog.TopAreas)
                     {
@@ -108,10 +108,14 @@
                         {
                             if (!string.IsNullOrWhiteSpace(link.Controller))
                             {
-                                <a class="pos-nav-link"
+                                var linkActive = IsController(link.Controller)
+                                                 && string.Equals(ViewContext.RouteData.Values["action"]?.ToString(), link.Action, StringComparison.OrdinalIgnoreCase);
+                                <a class="pos-nav-link @(linkActive ? "active" : "")"
                                    asp-controller="@link.Controller"
                                    asp-action="@link.Action"
-                                   asp-route-filter="@link.Filter">
+                                   asp-route-filter="@link.Filter"
+                                   asp-route-itemMonth="@link.ItemMonth"
+                                   asp-route-navArea="@link.NavArea">
                                     <i class="bi @link.IconClass" aria-hidden="true"></i>
                                     <span>@link.Title</span>
                                 </a>

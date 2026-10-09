@@ -1,0 +1,185 @@
+@model DashboardViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Pie Graphs";
+    var monthLabelsJson = JsonSerializer.Serialize(Model.MonthLabels);
+    var amountsJson = JsonSerializer.Serialize(Model.MonthlySalesAmounts);
+    var itemLabelsJson = JsonSerializer.Serialize(Model.ItemNameLabels);
+    var itemQtyJson = JsonSerializer.Serialize(Model.ItemQuantities);
+    var cashTotal = Model.MonthlyCashWalkInAmounts.Sum();
+    var monthlyTotal = Model.MonthlyCreditAmounts.Sum();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="page-heading mb-1">Pie Graphs</h1>
+        <p class="text-muted mb-0">Sales distribution for @Model.ChartYear.</p>
+    </div>
+</div>
+
+@if (!Model.DatabaseConnected)
+{
+    <div class="alert alert-warning" role="alert">@Model.StatusMessage</div>
+}
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="dashboard-chart-card">
+            <div class="dashboard-chart-card__header">
+                <h2 class="dashboard-chart-card__title">Monthly Sales — Amount</h2>
+                <p class="dashboard-chart-card__subtitle mb-0">Share of net sales by month (@Model.ChartYear)</p>
+            </div>
+            <div class="dashboard-chart-card__body dashboard-chart-card__body--pie">
+                <canvas id="pieAmountChart" aria-label="Monthly sales amount pie chart" role="img"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="dashboard-chart-card">
+            <div class="dashboard-chart-card__header dashboard-chart-card__header--with-filter">
+                <div>
+                    <h2 class="dashboard-chart-card__title">Sales by Item Name</h2>
+                    <p class="dashboard-chart-card__subtitle mb-0">
+                        Item quantity share — @Model.SelectedItemMonthName @Model.ChartYear
+                    </p>
+                </div>
+                <form method="get" asp-action="PieGraphs" class="dashboard-item-month-filter">
+                    <label class="form-label mb-1 small text-muted" for="itemMonth">Month</label>
+                    <select id="itemMonth"
+                            name="itemMonth"
+                            class="form-select form-select-sm"
+                            asp-items="Model.ItemMonthOptions"
+                            onchange="this.form.submit()"></select>
+                </form>
+            </div>
+            <div class="dashboard-chart-card__body dashboard-chart-card__body--pie">
+                <canvas id="pieItemsChart" aria-label="Sales by item name pie chart" role="img"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6 mx-auto">
+        <div class="dashboard-chart-card">
+            <div class="dashboard-chart-card__header">
+                <h2 class="dashboard-chart-card__title">Cash / Walk-in vs Monthly Customers</h2>
+                <p class="dashboard-chart-card__subtitle mb-0">Year total net sales by customer type (@Model.ChartYear)</p>
+            </div>
+            <div class="dashboard-chart-card__body dashboard-chart-card__body--pie">
+                <canvas id="pieCashWalkInChart" aria-label="Cash walk-in versus monthly pie chart" role="img"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        (function () {
+            const monthLabels = @Html.Raw(monthLabelsJson);
+            const amounts = @Html.Raw(amountsJson);
+            const itemLabels = @Html.Raw(itemLabelsJson);
+            const itemQty = @Html.Raw(itemQtyJson);
+            const cashTotal = @cashTotal.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            const monthlyTotal = @monthlyTotal.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+            const palette = [
+                '#059669', '#2563eb', '#ea580c', '#0891b2', '#d97706', '#e11d48',
+                '#7c3aed', '#0d9488', '#65a30d', '#db2777', '#4f46e5', '#b45309'
+            ];
+
+            function pieColors(count) {
+                const colors = [];
+                for (let i = 0; i < count; i++) {
+                    colors.push(palette[i % palette.length]);
+                }
+                return colors;
+            }
+
+            function pieOptions() {
+                return {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'right',
+                            labels: { boxWidth: 12, color: '#475569' }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function (ctx) {
+                                    const value = ctx.parsed ?? 0;
+                                    const label = ctx.label || ctx.dataset.label || '';
+                                    return label + ': ' + Number(value).toLocaleString(undefined, {
+                                        minimumFractionDigits: 0,
+                                        maximumFractionDigits: 2
+                                    });
+                                }
+                            }
+                        }
+                    }
+                };
+            }
+
+            const amountCtx = document.getElementById('pieAmountChart');
+            if (amountCtx) {
+                const filteredLabels = [];
+                const filteredData = [];
+                monthLabels.forEach(function (label, i) {
+                    const value = Number(amounts[i] || 0);
+                    if (value > 0) {
+                        filteredLabels.push(label);
+                        filteredData.push(value);
+                    }
+                });
+
+                new Chart(amountCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: filteredLabels.length ? filteredLabels : ['No sales'],
+                        datasets: [{
+                            data: filteredData.length ? filteredData : [1],
+                            backgroundColor: pieColors(filteredLabels.length || 1),
+                            borderWidth: 1,
+                            borderColor: '#fff'
+                        }]
+                    },
+                    options: pieOptions()
+                });
+            }
+
+            const itemsCtx = document.getElementById('pieItemsChart');
+            if (itemsCtx) {
+                new Chart(itemsCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: itemLabels.length ? itemLabels : ['No items'],
+                        datasets: [{
+                            data: itemLabels.length ? itemQty : [1],
+                            backgroundColor: pieColors(itemLabels.length || 1),
+                            borderWidth: 1,
+                            borderColor: '#fff'
+                        }]
+                    },
+                    options: pieOptions()
+                });
+            }
+
+            const cashCtx = document.getElementById('pieCashWalkInChart');
+            if (cashCtx) {
+                new Chart(cashCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: ['Cash / Walk-in', 'Monthly'],
+                        datasets: [{
+                            data: [Number(cashTotal), Number(monthlyTotal)],
+                            backgroundColor: ['rgba(234, 88, 12, 0.85)', 'rgba(8, 145, 178, 0.85)'],
+                            borderWidth: 1,
+                            borderColor: '#fff'
+                        }]
+                    },
+                    options: pieOptions()
+                });
+            }
+        })();
+    </script>
+}

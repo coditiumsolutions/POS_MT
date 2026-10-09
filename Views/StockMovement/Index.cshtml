@@ -1,0 +1,121 @@
+@model StockMovementIndexViewModel
+@{
+    ViewData["Title"] = "Slow / Dead Stock";
+    var navArea = ViewBag.NavArea as string ?? "Inventories";
+}
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+    <div>
+        <h1 class="page-heading mb-1">Slow / Dead Stock</h1>
+        <p class="text-muted mb-0">
+            Classifies on-hand products using sales history, stock levels, and purchase activity.
+            Fast ≤ @Model.FastMovingMaxDaysSinceSale days · Slow ≥ @Model.SlowMovingMinDaysSinceSale days · Dead ≥ @Model.DeadStockMinDaysSinceSale days
+            (trend window @Model.TrendWindowDays days).
+        </p>
+    </div>
+</div>
+
+<form method="get" asp-action="Index" class="bg-white border rounded p-3 mb-3">
+    <input type="hidden" name="navArea" value="@navArea" />
+    <div class="row g-3 align-items-end">
+        <div class="col-md-4 col-sm-6">
+            <label class="form-label" for="classification">Classification</label>
+            <select id="classification"
+                    name="classification"
+                    class="form-select"
+                    asp-items="Model.ClassificationOptions"></select>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <button type="submit" class="btn btn-primary w-100">Apply</button>
+        </div>
+    </div>
+</form>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3 col-sm-6">
+        <div class="metric-card">
+            <div class="metric-label">Fast-Moving</div>
+            <div class="metric-value text-success">@Model.FastMovingCount</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="metric-card">
+            <div class="metric-label">Slow-Moving</div>
+            <div class="metric-value text-warning">@Model.SlowMovingCount</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="metric-card metric-card-alert">
+            <div class="metric-label">Dead Stock</div>
+            <div class="metric-value text-danger">@Model.DeadStockCount</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="metric-card">
+            <div class="metric-label">Listed Stock Value</div>
+            <div class="metric-value">@Model.TotalStockValue.ToString("N2")</div>
+        </div>
+    </div>
+</div>
+
+<div class="table-responsive bg-white border rounded p-2">
+    <table id="stockMovementTable" class="table table-striped table-hover w-100">
+        <thead>
+            <tr>
+                <th>Product</th>
+                <th>Code</th>
+                <th class="text-end">Current Stock</th>
+                <th class="text-end">Stock Value</th>
+                <th>Last Sale</th>
+                <th class="text-end">Days Since Sale</th>
+                <th>Sales Trend</th>
+                <th>Last Purchase</th>
+                <th>Classification</th>
+            </tr>
+        </thead>
+        <tbody>
+        @if (Model.Rows.Count == 0)
+        {
+            <tr>
+                <td colspan="9" class="text-muted text-center py-4">No products matched the current filters.</td>
+            </tr>
+        }
+        else
+        {
+            foreach (var row in Model.Rows)
+            {
+                var badgeClass = row.Classification switch
+                {
+                    StockMovementClasses.FastMoving => "bg-success",
+                    StockMovementClasses.SlowMoving => "bg-warning text-dark",
+                    _ => "bg-danger"
+                };
+                <tr>
+                    <td>
+                        <a asp-controller="Products" asp-action="Details" asp-route-id="@row.ProductUid">@row.ProductName</a>
+                        @if (row.IsExcessInventory)
+                        {
+                            <span class="badge bg-secondary ms-1">Excess</span>
+                        }
+                    </td>
+                    <td>@row.ProductCode</td>
+                    <td class="text-end">@row.CurrentStock.ToString("N1")</td>
+                    <td class="text-end">@row.EstimatedStockValue.ToString("N2")</td>
+                    <td>@(row.LastSaleDate?.ToString("dd-MMM-yyyy") ?? "—")</td>
+                    <td class="text-end">@(row.DaysSinceLastSale?.ToString() ?? "—")</td>
+                    <td>@row.SalesTrend</td>
+                    <td>@(row.LastPurchaseDate?.ToString("dd-MMM-yyyy") ?? "—")</td>
+                    <td><span class="badge @badgeClass">@row.Classification</span></td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+    @if (Model.Rows.Count > 0)
+    {
+        <script>posDataTable('#stockMovementTable');</script>
+    }
+}

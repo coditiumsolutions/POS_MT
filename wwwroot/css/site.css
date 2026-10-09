@@ -1015,6 +1015,10 @@ a.pos-nav-link:hover {
   height: 320px;
 }
 
+.dashboard-chart-card__body--pie {
+  height: 320px;
+}
+
 .login-body {
   min-height: 100vh;
   display: flex;

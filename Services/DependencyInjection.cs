@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using POS_MT.Data;
 using POS_MT.Interfaces;
+using POS_MT.Options;
 
 namespace POS_MT.Services;
 
@@ -8,6 +9,8 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddPosServices(this IServiceCollection services, IConfiguration configuration)
     {
+        services.Configure<StockMovementOptions>(configuration.GetSection(StockMovementOptions.SectionName));
+
         var connectionString = configuration.GetConnectionString("POS_MT");
         if (string.IsNullOrWhiteSpace(connectionString))
         {
@@ -40,6 +43,7 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<IStockMovementService, StockMovementService>();
         services.AddScoped<INavContextService, NavContextService>();
 
         return services;
