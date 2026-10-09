@@ -14,9 +14,9 @@ public class DashboardController : Controller
         _dashboardService = dashboardService;
     }
 
-    public async Task<IActionResult> Index(CancellationToken cancellationToken)
+    public async Task<IActionResult> Index(int? itemMonth, CancellationToken cancellationToken)
     {
-        var model = await _dashboardService.GetSnapshotAsync(cancellationToken);
+        var model = await _dashboardService.GetSnapshotAsync(itemMonth, cancellationToken);
         return View(model);
     }
 }

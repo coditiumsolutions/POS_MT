@@ -1,9 +1,28 @@
 @model ProductFormViewModel
 @{ ViewData["Title"] = "Edit Product"; }
 <h1 class="page-heading invoice-details-heading mb-3">Edit Product</h1>
-<form asp-action="Edit" method="post" class="bg-white border rounded p-3">
-    @Html.AntiForgeryToken()
-    <input type="hidden" asp-for="Uid" />
-    <partial name="_Form" />
-    <partial name="_CrudFormActions" />
-</form>
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success">@TempData["Success"]</div>
+}
+<div class="bg-white border rounded p-3">
+    <form asp-action="Edit" method="post" id="productEditForm">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="Uid" />
+        <partial name="_Form" />
+    </form>
+    <div class="d-flex gap-2 mt-3 flex-wrap align-items-center">
+        <button type="submit" form="productEditForm" class="btn btn-primary">Save</button>
+        <a class="btn btn-outline-secondary" asp-action="Index">Back to list</a>
+        <form asp-action="Delete" asp-route-id="@Model.Uid" method="post" class="ms-auto">
+            @Html.AntiForgeryToken()
+            <button type="submit"
+                    class="btn btn-outline-danger"
+                    onclick="return confirm('Delete this product permanently?');">Delete</button>
+        </form>
+    </div>
+</div>

@@ -34,6 +34,39 @@ public class ProductsController : Controller {
   }
   public async Task<IActionResult> Details(int id, CancellationToken ct){ EnsureProductsNav(); var e=await _db.Products.AsNoTracking().FirstOrDefaultAsync(x=>x.Uid==id,ct); return e is null?NotFound():View(e);} 
   [HttpPost, ValidateAntiForgeryToken]
+  public async Task<IActionResult> Delete(int id, CancellationToken ct)
+  {
+    EnsureProductsNav();
+    var entity = await _db.Products.FindAsync([id], ct);
+    if (entity is null)
+    {
+      return NotFound();
+    }
+
+    var inSales = await _db.SalesInvoiceDetails.AsNoTracking().AnyAsync(x => x.ProductUid == id, ct);
+    var inPurchases = await _db.PurchaseInvoiceDetails.AsNoTracking().AnyAsync(x => x.ProductUid == id, ct);
+    var inAdjustments = await _db.StockAdjustmentDetails.AsNoTracking().AnyAsync(x => x.ProductUid == id, ct);
+    var inTransactions = await _db.InventoryTransactions.AsNoTracking().AnyAsync(x => x.ProductUid == id, ct);
+    if (inSales || inPurchases || inAdjustments || inTransactions)
+    {
+      TempData["Error"] = $"Cannot delete product {entity.ProductCode} because it is used in sales, purchases, stock adjustments, or inventory transactions.";
+      return RedirectToAction(nameof(Edit), new { id });
+    }
+
+    var inventoryRows = await _db.Inventories.Where(x => x.ProductUid == id).ToListAsync(ct);
+    if (inventoryRows.Count > 0)
+    {
+      _db.Inventories.RemoveRange(inventoryRows);
+    }
+
+    var code = entity.ProductCode;
+    _db.Products.Remove(entity);
+    await _db.SaveChangesAsync(ct);
+    await _audit.WriteAsync("Delete", "Products", id.ToString(), $"Deleted product {code}", ct);
+    TempData["Success"] = "Product deleted.";
+    return RedirectToAction(nameof(Index));
+  }
+  [HttpPost, ValidateAntiForgeryToken]
   public async Task<IActionResult> Deactivate(int id, CancellationToken ct){ EnsureProductsNav(); var e=await _db.Products.FindAsync([id],ct); if(e is null) return NotFound(); e.IsActive=false; e.UpdatedDate=DateTime.Now; await _db.SaveChangesAsync(ct); await _audit.WriteAsync("Cancel","Products",e.Uid.ToString(),$"Deactivated {e.ProductCode}",ct); TempData["Success"]="Product deactivated."; return RedirectToAction(nameof(Index)); }
   private static ProductFormViewModel ToForm(Product e)=> new(){Uid=e.Uid,ProductCode=e.ProductCode,Barcode=e.Barcode,ProductName=e.ProductName,CategoryUid=e.CategoryUid,UnitUid=e.UnitUid,BrandName=e.BrandName,PurchasePrice=e.PurchasePrice,SalePrice=e.SalePrice,WholesalePrice=e.WholesalePrice,MinimumStock=e.MinimumStock,MaximumStock=e.MaximumStock,TaxPercent=e.TaxPercent,DiscountPercent=e.DiscountPercent,IsTaxable=e.IsTaxable,IsActive=e.IsActive,Description=e.Description};
   private static Product ToEntity(ProductFormViewModel m)=> new(){ProductCode=m.ProductCode.Trim(),Barcode=m.Barcode,ProductName=m.ProductName.Trim(),CategoryUid=m.CategoryUid,UnitUid=m.UnitUid,BrandName=m.BrandName,PurchasePrice=m.PurchasePrice,SalePrice=m.SalePrice,WholesalePrice=m.WholesalePrice,MinimumStock=m.MinimumStock,MaximumStock=m.MaximumStock,TaxPercent=m.TaxPercent,DiscountPercent=m.DiscountPercent,IsTaxable=m.IsTaxable,IsActive=m.IsActive,Description=m.Description};

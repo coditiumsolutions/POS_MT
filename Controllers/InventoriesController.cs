@@ -36,4 +36,20 @@ public class InventoriesController : Controller {
     TempData["Success"]="Inventory updated."; return RedirectToAction(nameof(Index));
   }
   public async Task<IActionResult> Details(int id, CancellationToken ct){ var e=await _db.Inventories.AsNoTracking().FirstOrDefaultAsync(x=>x.Uid==id,ct); return e is null?NotFound():View(e);} 
+  [HttpPost, ValidateAntiForgeryToken]
+  public async Task<IActionResult> Delete(int id, CancellationToken ct)
+  {
+    var entity = await _db.Inventories.FindAsync([id], ct);
+    if (entity is null)
+    {
+      return NotFound();
+    }
+
+    var label = $"product {entity.ProductUid} / warehouse {entity.WarehouseUid}";
+    _db.Inventories.Remove(entity);
+    await _db.SaveChangesAsync(ct);
+    await _audit.WriteAsync("Delete", "Inventory", id.ToString(), $"Deleted inventory row ({label})", ct);
+    TempData["Success"] = "Inventory deleted.";
+    return RedirectToAction(nameof(Index));
+  }
 }

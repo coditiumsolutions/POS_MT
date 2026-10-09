@@ -1,0 +1,108 @@
+@model TotalSaleReportViewModel
+@{
+    ViewData["Title"] = "Total Sale for Monthly";
+}
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+    <div>
+        <h1 class="page-heading mb-1">Total Sale for Monthly</h1>
+        <p class="text-muted mb-0">Filter sales totals by month, year, and sale type.</p>
+    </div>
+</div>
+
+<form method="get" asp-action="TotalSale" class="bg-white border rounded p-3 mb-3">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-3 col-sm-6">
+            <label class="form-label" for="Month">Month</label>
+            <select asp-for="Month" asp-items="Model.Months" class="form-select" id="Month"></select>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <label class="form-label" for="Year">Year</label>
+            <select asp-for="Year" asp-items="Model.Years" class="form-select" id="Year"></select>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <label class="form-label" for="SaleType">Sale Type</label>
+            <select asp-for="SaleType" asp-items="Model.SaleTypes" class="form-select" id="SaleType"></select>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <button type="submit" class="btn btn-primary w-100">Apply</button>
+        </div>
+    </div>
+</form>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3 col-sm-6">
+        <div class="bg-white border rounded p-3 h-100">
+            <div class="text-muted small">Invoices</div>
+            <div class="fs-4 fw-semibold">@Model.InvoiceCount</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="bg-white border rounded p-3 h-100">
+            <div class="text-muted small">Total Sale</div>
+            <div class="fs-4 fw-semibold text-success">@Model.TotalNetAmount.ToString("N2")</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="bg-white border rounded p-3 h-100">
+            <div class="text-muted small">Paid</div>
+            <div class="fs-4 fw-semibold">@Model.TotalPaidAmount.ToString("N2")</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="bg-white border rounded p-3 h-100">
+            <div class="text-muted small">Balance</div>
+            <div class="fs-4 fw-semibold">@Model.TotalBalanceAmount.ToString("N2")</div>
+        </div>
+    </div>
+</div>
+
+<div class="table-responsive bg-white border rounded p-2">
+    <table id="totalSaleTable" class="table table-striped table-hover w-100">
+        <thead>
+            <tr>
+                <th>Invoice No</th>
+                <th>Date</th>
+                <th>Customer</th>
+                <th>Type</th>
+                <th class="text-end">Net Amount</th>
+                <th class="text-end">Paid</th>
+                <th>Status</th>
+                <th>Payment</th>
+            </tr>
+        </thead>
+        <tbody>
+        @if (Model.Rows.Count == 0)
+        {
+            <tr>
+                <td colspan="8" class="text-muted text-center py-4">No sales found for the selected filters.</td>
+            </tr>
+        }
+        else
+        {
+            foreach (var row in Model.Rows)
+            {
+                <tr>
+                    <td>
+                        <a asp-controller="SalesInvoices" asp-action="Details" asp-route-id="@row.Uid">@row.InvoiceNo</a>
+                    </td>
+                    <td>@row.InvoiceDate.ToString("dd-MMM-yyyy")</td>
+                    <td>@row.CustomerName</td>
+                    <td>@row.SaleType</td>
+                    <td class="text-end">@row.NetAmount.ToString("N2")</td>
+                    <td class="text-end">@row.PaidAmount.ToString("N2")</td>
+                    <td>@row.InvoiceStatus</td>
+                    <td>@row.PaymentStatus</td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+    @if (Model.Rows.Count > 0)
+    {
+        <script>posDataTable('#totalSaleTable');</script>
+    }
+}

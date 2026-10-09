@@ -1,21 +1,52 @@
 @{
     ViewData["Title"] = "POS";
 }
-<div class="mb-3">
-    <h1 class="page-heading mb-1">POS</h1>
-    <p class="text-muted mb-0">Choose a point-of-sale mode from the sidebar.</p>
-</div>
-<div class="row g-3">
-    <div class="col-md-6">
-        <a class="module-card w-100" asp-controller="POS" asp-action="Cash" title="Cash POS">
-            <span class="module-card-icon"><i class="bi bi-cash-stack" aria-hidden="true"></i></span>
-            <span class="module-card-name">Cash POS</span>
+<div class="pos-mode-page">
+    <header class="pos-mode-hero">
+        <h1 class="pos-mode-heading">Select a sales mode</h1>
+    </header>
+
+    <div class="pos-mode-grid">
+        <a class="pos-mode-card pos-mode-card--cash"
+           asp-controller="POS"
+           asp-action="Cash"
+           title="Cash POS">
+            <span class="pos-mode-card__accent" aria-hidden="true"></span>
+            <span class="pos-mode-card__icon" aria-hidden="true">
+                <i class="bi bi-cash-coin"></i>
+            </span>
+            <span class="pos-mode-card__body">
+                <span class="pos-mode-card__badge">Instant payment</span>
+                <span class="pos-mode-card__title">Cash POS</span>
+                <span class="pos-mode-card__desc">
+                    Walk-in checkout with immediate cash payment. Ideal for counter sales that settle on the spot.
+                </span>
+            </span>
+            <span class="pos-mode-card__cta">
+                <span>Open Cash POS</span>
+                <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </span>
         </a>
-    </div>
-    <div class="col-md-6">
-        <a class="module-card w-100" asp-controller="POS" asp-action="Credit" title="Monthly POS">
-            <span class="module-card-icon"><i class="bi bi-calendar-month" aria-hidden="true"></i></span>
-            <span class="module-card-name">Monthly POS</span>
+
+        <a class="pos-mode-card pos-mode-card--monthly"
+           asp-controller="POS"
+           asp-action="Credit"
+           title="Monthly POS">
+            <span class="pos-mode-card__accent" aria-hidden="true"></span>
+            <span class="pos-mode-card__icon" aria-hidden="true">
+                <i class="bi bi-calendar2-month"></i>
+            </span>
+            <span class="pos-mode-card__body">
+                <span class="pos-mode-card__badge">Credit billing</span>
+                <span class="pos-mode-card__title">Monthly POS</span>
+                <span class="pos-mode-card__desc">
+                    Bill monthly customers on credit. Invoice now and settle when payment is collected.
+                </span>
+            </span>
+            <span class="pos-mode-card__cta">
+                <span>Open Monthly POS</span>
+                <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </span>
         </a>
     </div>
 </div>

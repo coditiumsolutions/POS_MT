@@ -33,11 +33,16 @@ public static class NavigationCatalog
             new("Add Customers", "Customers", "Create", IconClass: "bi-person-plus"),
             new("All Customers", "Customers", IconClass: "bi-people")
         ]),
+        new("Reports", "Reports",
+        [
+            new("Sales Report", "Reports", "TotalSale", IconClass: "bi-graph-up-arrow")
+        ]),
         new("AllModules", "All Modules",
         [
             new("Vendors", "Vendors", IconClass: "bi-truck"),
             new("Products", "Products", IconClass: "bi-box-seam"),
-            new("Sales Invoice", "SalesInvoices", IconClass: "bi-receipt")
+            new("Sales Invoice", "SalesInvoices", IconClass: "bi-receipt"),
+            new("Report", "Reports", "TotalSale", IconClass: "bi-graph-up")
         ])
     ];
 
@@ -77,7 +82,7 @@ public static class NavigationCatalog
         new("Expenses", "bi-credit-card", "Expenses"),
         new("Inventory", "bi-boxes", "Inventories"),
         new("Stock Adjustments", "bi-arrow-left-right", "StockAdjustments"),
-        new("Reports", "bi-graph-up"),
+        new("Reports", "bi-graph-up", "Reports", "TotalSale"),
         new("Users", "bi-person-gear", "Users"),
         new("Terminals", "bi-display", "Terminals"),
         new("Branches", "bi-building", "Branches"),

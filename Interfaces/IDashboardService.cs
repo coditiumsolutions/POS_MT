@@ -4,5 +4,5 @@ namespace POS_MT.Interfaces;
 
 public interface IDashboardService
 {
-    Task<DashboardViewModel> GetSnapshotAsync(CancellationToken cancellationToken = default);
+    Task<DashboardViewModel> GetSnapshotAsync(int? itemMonth = null, CancellationToken cancellationToken = default);
 }
