@@ -10,7 +10,7 @@
     <div class="alert alert-success">@TempData["Success"]</div>
 }
 <div class="bg-white border rounded p-3">
-    <form asp-action="Edit" method="post" id="productEditForm">
+    <form asp-action="Edit" method="post" enctype="multipart/form-data" id="productEditForm">
         @Html.AntiForgeryToken()
         <input type="hidden" asp-for="Uid" />
         <partial name="_Form" />

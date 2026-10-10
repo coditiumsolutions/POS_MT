@@ -1,6 +1,6 @@
 ﻿POS_MT - Database Documentation
 ===============================
-Version   : 1.0.3
+Version   : 1.0.4
 UpdatedAt : 10/10/2026
 
 Database Information
@@ -245,6 +245,7 @@ DiscountPercent             decimal(5,2)            NO      NO        ((0))
 IsTaxable                   bit                     NO      NO        ((0))
 IsActive                    bit                     NO      NO        ((1))
 Description                 nvarchar(500)           YES     NO        
+ImagePath                   nvarchar(500)           YES     NO        
 CreatedDate                 datetime2               NO      NO        (sysdatetime())
 UpdatedDate                 datetime2               YES     NO        
 

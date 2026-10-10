@@ -6,6 +6,10 @@ pos_mt/
 pos_mt_02/
 *.rar
 .vs/
+
+## Uploaded product images (keep folder)
+wwwroot/uploads/products/*
+!wwwroot/uploads/products/.gitkeep
 *.user
 *.suo
 *.userosscache

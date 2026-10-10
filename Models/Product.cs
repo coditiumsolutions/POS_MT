@@ -62,6 +62,9 @@ public partial class Product
     [StringLength(500)]
     public string? Description { get; set; }
 
+    [StringLength(500)]
+    public string? ImagePath { get; set; }
+
     [Precision(0)]
     public DateTime CreatedDate { get; set; }
 

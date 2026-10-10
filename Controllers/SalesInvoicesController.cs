@@ -154,6 +154,21 @@ public class SalesInvoicesController : Controller {
   public async Task<IActionResult> Details(int id, CancellationToken ct)
   {
     EnsureSalesInvoiceNav();
+    var model = await LoadDetailsPageAsync(id, ct);
+    if (model is null) return NotFound();
+    return View(model);
+  }
+
+  public async Task<IActionResult> Print(int id, CancellationToken ct)
+  {
+    EnsureSalesInvoiceNav();
+    var model = await LoadDetailsPageAsync(id, ct);
+    if (model is null) return NotFound();
+    return View(model);
+  }
+
+  private async Task<SalesInvoiceDetailsPageViewModel?> LoadDetailsPageAsync(int id, CancellationToken ct)
+  {
     var row = await (
       from inv in _db.SalesInvoices.AsNoTracking()
       join c in _db.Customers.AsNoTracking() on inv.CustomerUid equals c.Uid into cj
@@ -162,10 +177,7 @@ public class SalesInvoicesController : Controller {
       select new { inv, c }
     ).FirstOrDefaultAsync(ct);
 
-    if (row is null)
-    {
-      return NotFound();
-    }
+    if (row is null) return null;
 
     var lines = await _db.SalesInvoiceDetails.AsNoTracking()
       .Where(x => x.SalesInvoiceUid == id)
@@ -190,7 +202,7 @@ public class SalesInvoicesController : Controller {
       customer?.CustomerName,
       row.inv.Remarks);
 
-    return View(new SalesInvoiceDetailsPageViewModel
+    return new SalesInvoiceDetailsPageViewModel
     {
       Uid = row.inv.Uid,
       InvoiceNo = row.inv.InvoiceNo,
@@ -209,7 +221,7 @@ public class SalesInvoicesController : Controller {
       PaymentStatus = row.inv.PaymentStatus,
       Remarks = row.inv.Remarks,
       Lines = lines
-    });
+    };
   }
 
   [HttpPost, ValidateAntiForgeryToken]
