@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using POS_MT.Data;
 using POS_MT.Interfaces;
@@ -48,10 +49,12 @@ public class CustomersController : Controller
         return View(list);
     }
 
-    public IActionResult Create()
+    public async Task<IActionResult> Create(CancellationToken ct)
     {
         EnsureCustomersNav();
-        return View(new CustomerFormViewModel { IsActive = true });
+        var model = new CustomerFormViewModel { IsActive = true };
+        await PopulateCityAreaOptionsAsync(model, ct);
+        return View(model);
     }
 
     [HttpPost]
@@ -61,12 +64,14 @@ public class CustomersController : Controller
         EnsureCustomersNav();
         if (!ModelState.IsValid)
         {
+            await PopulateCityAreaOptionsAsync(model, ct);
             return View(model);
         }
 
         if (await _db.Customers.AnyAsync(x => x.CustomerCode == model.CustomerCode, ct))
         {
             ModelState.AddModelError(nameof(model.CustomerCode), "Customer code already exists.");
+            await PopulateCityAreaOptionsAsync(model, ct);
             return View(model);
         }
 
@@ -88,7 +93,9 @@ public class CustomersController : Controller
             return NotFound();
         }
 
-        return View(MapToForm(entity));
+        var model = MapToForm(entity);
+        await PopulateCityAreaOptionsAsync(model, ct);
+        return View(model);
     }
 
     [HttpPost]
@@ -103,6 +110,7 @@ public class CustomersController : Controller
 
         if (!ModelState.IsValid)
         {
+            await PopulateCityAreaOptionsAsync(model, ct);
             return View(model);
         }
 
@@ -115,6 +123,7 @@ public class CustomersController : Controller
         if (await _db.Customers.AnyAsync(x => x.CustomerCode == model.CustomerCode && x.Uid != id, ct))
         {
             ModelState.AddModelError(nameof(model.CustomerCode), "Customer code already exists.");
+            await PopulateCityAreaOptionsAsync(model, ct);
             return View(model);
         }
 
@@ -162,6 +171,7 @@ public class CustomersController : Controller
         Email = e.Email,
         Address = e.Address,
         City = e.City,
+        Area = e.Area,
         Ntn = e.Ntn,
         OpeningBalance = e.OpeningBalance,
         CreditLimit = e.CreditLimit,
@@ -177,7 +187,8 @@ public class CustomersController : Controller
         PhoneNo = m.PhoneNo,
         Email = m.Email,
         Address = m.Address,
-        City = m.City,
+        City = string.IsNullOrWhiteSpace(m.City) ? null : m.City.Trim(),
+        Area = string.IsNullOrWhiteSpace(m.Area) ? null : m.Area.Trim(),
         Ntn = m.Ntn,
         OpeningBalance = m.OpeningBalance,
         CreditLimit = m.CreditLimit,
@@ -193,11 +204,57 @@ public class CustomersController : Controller
         e.PhoneNo = m.PhoneNo;
         e.Email = m.Email;
         e.Address = m.Address;
-        e.City = m.City;
+        e.City = string.IsNullOrWhiteSpace(m.City) ? null : m.City.Trim();
+        e.Area = string.IsNullOrWhiteSpace(m.Area) ? null : m.Area.Trim();
         e.Ntn = m.Ntn;
         e.OpeningBalance = m.OpeningBalance;
         e.CreditLimit = m.CreditLimit;
         e.DiscountPercent = m.DiscountPercent;
         e.IsActive = m.IsActive;
+    }
+
+    private async Task PopulateCityAreaOptionsAsync(CustomerFormViewModel model, CancellationToken ct)
+    {
+        var configs = await _db.Configurations.AsNoTracking()
+            .Where(x => x.ConfigKey == "Cities" || x.ConfigKey == "Areas")
+            .Select(x => new { x.ConfigKey, x.ConfigValue })
+            .ToListAsync(ct);
+
+        var citiesRaw = configs.FirstOrDefault(x => x.ConfigKey == "Cities")?.ConfigValue;
+        var areasRaw = configs.FirstOrDefault(x => x.ConfigKey == "Areas")?.ConfigValue;
+
+        model.CityOptions = BuildConfigOptions(citiesRaw, model.City, "Select city…");
+        model.AreaOptions = BuildConfigOptions(areasRaw, model.Area, "Select area…");
+    }
+
+    private static List<SelectListItem> BuildConfigOptions(string? csv, string? selected, string placeholder)
+    {
+        var values = (csv ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(selected)
+            && !values.Any(x => string.Equals(x, selected, StringComparison.OrdinalIgnoreCase)))
+        {
+            values.Insert(0, selected.Trim());
+        }
+
+        var items = new List<SelectListItem>
+        {
+            new() { Value = "", Text = placeholder, Selected = string.IsNullOrWhiteSpace(selected) }
+        };
+
+        items.AddRange(values.Select(v => new SelectListItem
+        {
+            Value = v,
+            Text = v,
+            Selected = !string.IsNullOrWhiteSpace(selected)
+                       && string.Equals(v, selected, StringComparison.OrdinalIgnoreCase)
+        }));
+
+        return items;
     }
 }

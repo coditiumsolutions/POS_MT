@@ -46,7 +46,7 @@ public class ReportsController : Controller
                   && inv.InvoiceStatus != "Cancelled"
             select new { inv, c };
 
-        if (selectedSaleType == "Cash")
+        if (selectedSaleType is "Cash" or "Walk-in")
         {
             query = query.Where(x => x.c != null &&
                 (x.c.CustomerCode == "C001" ||
@@ -78,7 +78,7 @@ public class ReportsController : Controller
                        x.c.CustomerName.Contains("Walk-in") ||
                        x.c.CustomerName.Contains("Walk-In") ||
                        x.c.CustomerName.Contains("Walk In")
-                        ? "Cash"
+                        ? "Walk-in"
                         : "Monthly"),
                 NetAmount = x.inv.NetAmount,
                 PaidAmount = x.inv.PaidAmount,
@@ -134,7 +134,8 @@ public class ReportsController : Controller
     [
         new SelectListItem { Value = "All", Text = "All", Selected = selectedSaleType == "All" },
         new SelectListItem { Value = "Monthly", Text = "Monthly", Selected = selectedSaleType == "Monthly" },
-        new SelectListItem { Value = "Cash", Text = "Cash", Selected = selectedSaleType == "Cash" }
+        new SelectListItem { Value = "Cash", Text = "Cash", Selected = selectedSaleType == "Cash" },
+        new SelectListItem { Value = "Walk-in", Text = "Walk-in", Selected = selectedSaleType == "Walk-in" }
     ];
 
     private static string NormalizeSaleType(string? saleType)
@@ -142,6 +143,12 @@ public class ReportsController : Controller
         if (string.Equals(saleType, "Cash", StringComparison.OrdinalIgnoreCase))
         {
             return "Cash";
+        }
+
+        if (string.Equals(saleType, "Walk-in", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(saleType, "Walkin", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Walk-in";
         }
 
         if (string.Equals(saleType, "All", StringComparison.OrdinalIgnoreCase))

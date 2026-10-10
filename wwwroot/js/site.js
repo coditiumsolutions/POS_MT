@@ -54,17 +54,49 @@
         });
     }
 
-    window.posDataTable = function (selector) {
+    window.posDataTable = function (selector, options) {
         if (!window.jQuery || !jQuery.fn.DataTable) {
             return;
         }
 
-        jQuery(selector).DataTable({
+        options = options || {};
+        var lengthBelow = !!options.lengthBelow;
+        var hideFilter = !!options.hideFilter;
+        delete options.lengthBelow;
+        delete options.hideFilter;
+
+        var config = {
             pageLength: 25,
             lengthMenu: [10, 25, 50, 100],
             order: [],
             autoWidth: false
-        });
+        };
+
+        // Bootstrap5 integration sets a default dom with "f" (search). Override completely when needed.
+        if (lengthBelow && hideFilter) {
+            config.dom =
+                "<'row dt-row'<'col-sm-12'tr>>" +
+                "<'row dt-controls-bottom align-items-center mt-2'<'col-sm-12 col-md-4'l><'col-sm-12 col-md-4'i><'col-sm-12 col-md-4'p>>";
+        } else if (lengthBelow) {
+            config.dom =
+                "<'row'<'col-sm-12 col-md-6'f>>" +
+                "<'row dt-row'<'col-sm-12'tr>>" +
+                "<'row dt-controls-bottom align-items-center mt-2'<'col-sm-12 col-md-4'l><'col-sm-12 col-md-4'i><'col-sm-12 col-md-4'p>>";
+        } else if (hideFilter) {
+            config.dom =
+                "<'row'<'col-sm-12 col-md-6'l>>" +
+                "<'row dt-row'<'col-sm-12'tr>>" +
+                "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>";
+        }
+
+        jQuery.extend(true, config, options);
+
+        // Ensure Bootstrap default search slot cannot come back.
+        if (hideFilter && typeof config.dom === "string") {
+            config.dom = config.dom.replace(/f/g, "");
+        }
+
+        return jQuery(selector).DataTable(config);
     };
 
     function closeTopDropdowns(except) {

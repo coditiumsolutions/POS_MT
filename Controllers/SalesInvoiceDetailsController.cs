@@ -25,7 +25,7 @@ public class SalesInvoiceDetailsController : Controller
     private void EnsureSalesInvoiceNav() => _navContext.SetArea("SalesInvoice");
 
     [HttpGet]
-    public async Task<IActionResult> Index(string? customerType, string? search, CancellationToken ct)
+    public async Task<IActionResult> Index(string? customerType, int? month, CancellationToken ct)
     {
         EnsureSalesInvoiceNav();
         ViewData["Title"] = "Invoice Details";
@@ -44,24 +44,29 @@ public class SalesInvoiceDetailsController : Controller
                  x.c.CustomerName.Contains("Walk-In") ||
                  x.c.CustomerName.Contains("Walk In")));
         }
+        else if (string.Equals(customerType, "credit", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(x => x.c != null &&
+                x.c.CustomerCode != "C001" &&
+                !x.c.CustomerName.Contains("Walk-in") &&
+                !x.c.CustomerName.Contains("Walk-In") &&
+                !x.c.CustomerName.Contains("Walk In") &&
+                (x.inv.Remarks == null || !x.inv.Remarks.StartsWith("Monthly Supply")));
+        }
         else if (string.Equals(customerType, "monthly", StringComparison.OrdinalIgnoreCase))
         {
             query = query.Where(x => x.c != null &&
                 x.c.CustomerCode != "C001" &&
                 !x.c.CustomerName.Contains("Walk-in") &&
                 !x.c.CustomerName.Contains("Walk-In") &&
-                !x.c.CustomerName.Contains("Walk In"));
+                !x.c.CustomerName.Contains("Walk In") &&
+                x.inv.Remarks != null &&
+                x.inv.Remarks.StartsWith("Monthly Supply"));
         }
 
-        if (!string.IsNullOrWhiteSpace(search))
+        if (month is >= 1 and <= 12)
         {
-            var term = search.Trim();
-            query = query.Where(x =>
-                x.inv.InvoiceNo.Contains(term) ||
-                (x.d.ProductCode != null && x.d.ProductCode.Contains(term)) ||
-                (x.d.ProductName != null && x.d.ProductName.Contains(term)) ||
-                (x.c != null && x.c.CustomerName.Contains(term)) ||
-                (x.c != null && x.c.CustomerCode.Contains(term)));
+            query = query.Where(x => x.inv.InvoiceDate.Month == month.Value);
         }
 
         var rows = await query
@@ -82,7 +87,9 @@ public class SalesInvoiceDetailsController : Controller
                        x.c.CustomerName.Contains("Walk-In") ||
                        x.c.CustomerName.Contains("Walk In")
                         ? "Walk-in"
-                        : "Monthly"),
+                        : (x.inv.Remarks != null && x.inv.Remarks.StartsWith("Monthly Supply")
+                            ? "Monthly"
+                            : "Credit")),
                 ProductCode = x.d.ProductCode ?? string.Empty,
                 ProductName = x.d.ProductName ?? string.Empty,
                 Quantity = x.d.Quantity,
@@ -95,7 +102,7 @@ public class SalesInvoiceDetailsController : Controller
         return View(new SalesInvoiceDetailIndexViewModel
         {
             CustomerType = customerType,
-            Search = search,
+            Month = month is >= 1 and <= 12 ? month : null,
             Rows = rows
         });
     }
@@ -132,7 +139,9 @@ public class SalesInvoiceDetailsController : Controller
                        c.CustomerName.Contains("Walk-In") ||
                        c.CustomerName.Contains("Walk In")
                         ? "Walk-in"
-                        : "Monthly"),
+                        : (inv.Remarks != null && inv.Remarks.StartsWith("Monthly Supply")
+                            ? "Monthly"
+                            : "Credit")),
                 ProductUid = d.ProductUid,
                 ProductCode = d.ProductCode ?? (p != null ? p.ProductCode : string.Empty),
                 ProductName = d.ProductName ?? (p != null ? p.ProductName : string.Empty),
@@ -153,14 +162,14 @@ public class SalesInvoiceDetailsController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Delete(int id, string? customerType, string? search, CancellationToken ct)
+    public async Task<IActionResult> Delete(int id, string? customerType, int? month, CancellationToken ct)
     {
         EnsureSalesInvoiceNav();
         var detail = await _db.SalesInvoiceDetails.FirstOrDefaultAsync(x => x.Uid == id, ct);
         if (detail is null)
         {
             TempData["Error"] = "Invoice detail was not found.";
-            return RedirectToAction(nameof(Index), new { customerType, search });
+            return RedirectToAction(nameof(Index), new { customerType, month });
         }
 
         var invoiceUid = detail.SalesInvoiceUid;
@@ -207,6 +216,6 @@ public class SalesInvoiceDetailsController : Controller
             $"Deleted invoice detail '{productLabel}' from invoice UID {invoiceUid}.", ct);
 
         TempData["Success"] = "Invoice detail deleted.";
-        return RedirectToAction(nameof(Index), new { customerType, search });
+        return RedirectToAction(nameof(Index), new { customerType, month });
     }
 }

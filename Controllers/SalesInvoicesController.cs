@@ -11,7 +11,7 @@ public class SalesInvoicesController : Controller {
     ViewBag.Customers=new SelectList(await _db.Customers.AsNoTracking().Where(x=>x.IsActive).OrderBy(x=>x.CustomerName).ToListAsync(ct),"Uid","CustomerName", selectedCustomerUid);
     ViewBag.PaymentMethods=new SelectList(await _db.PaymentMethods.AsNoTracking().Where(x=>x.IsActive).OrderBy(x=>x.PaymentName).ToListAsync(ct),"Uid","PaymentName", selectedPaymentMethodUid);
   }
-  public async Task<IActionResult> Index(string? customerType, string? search, CancellationToken ct)
+  public async Task<IActionResult> Index(string? customerType, int? month, string? search, CancellationToken ct)
   {
     EnsureSalesInvoiceNav();
     ViewData["Title"] = "Sales Invoices";
@@ -30,13 +30,29 @@ public class SalesInvoicesController : Controller {
          x.c.CustomerName.Contains("Walk-In") ||
          x.c.CustomerName.Contains("Walk In")));
     }
+    else if (string.Equals(customerType, "credit", StringComparison.OrdinalIgnoreCase))
+    {
+      query = query.Where(x => x.c != null &&
+        x.c.CustomerCode != "C001" &&
+        !x.c.CustomerName.Contains("Walk-in") &&
+        !x.c.CustomerName.Contains("Walk-In") &&
+        !x.c.CustomerName.Contains("Walk In") &&
+        (x.inv.Remarks == null || !x.inv.Remarks.StartsWith("Monthly Supply")));
+    }
     else if (string.Equals(customerType, "monthly", StringComparison.OrdinalIgnoreCase))
     {
       query = query.Where(x => x.c != null &&
         x.c.CustomerCode != "C001" &&
         !x.c.CustomerName.Contains("Walk-in") &&
         !x.c.CustomerName.Contains("Walk-In") &&
-        !x.c.CustomerName.Contains("Walk In"));
+        !x.c.CustomerName.Contains("Walk In") &&
+        x.inv.Remarks != null &&
+        x.inv.Remarks.StartsWith("Monthly Supply"));
+    }
+
+    if (month is >= 1 and <= 12)
+    {
+      query = query.Where(x => x.inv.InvoiceDate.Month == month.Value);
     }
 
     if (!string.IsNullOrWhiteSpace(search))
@@ -67,7 +83,9 @@ public class SalesInvoicesController : Controller {
              x.c.CustomerName.Contains("Walk-In") ||
              x.c.CustomerName.Contains("Walk In")
               ? "Walk-in"
-              : "Monthly"),
+              : (x.inv.Remarks != null && x.inv.Remarks.StartsWith("Monthly Supply")
+                  ? "Monthly"
+                  : "Credit")),
         NetAmount = x.inv.NetAmount,
         PaidAmount = x.inv.PaidAmount,
         InvoiceStatus = x.inv.InvoiceStatus,
@@ -77,6 +95,7 @@ public class SalesInvoicesController : Controller {
     return View(new SalesInvoiceIndexViewModel
     {
       CustomerType = customerType,
+      Month = month is >= 1 and <= 12 ? month : null,
       Search = search,
       Rows = list
     });
@@ -166,7 +185,10 @@ public class SalesInvoicesController : Controller {
       .ToListAsync(ct);
 
     var customer = row.c;
-    var customerTypeLabel = CustomerClassification.GetTypeLabel(customer?.CustomerCode, customer?.CustomerName);
+    var customerTypeLabel = CustomerClassification.GetSalesTypeLabel(
+      customer?.CustomerCode,
+      customer?.CustomerName,
+      row.inv.Remarks);
 
     return View(new SalesInvoiceDetailsPageViewModel
     {
@@ -194,14 +216,14 @@ public class SalesInvoicesController : Controller {
   public async Task<IActionResult> Cancel(int id, CancellationToken ct){ EnsureSalesInvoiceNav(); var e=await _db.SalesInvoices.FindAsync([id],ct); if(e is null) return NotFound(); e.InvoiceStatus="Cancelled"; e.UpdatedDate=DateTime.Now; await _db.SaveChangesAsync(ct); await _audit.WriteAsync("Cancel","SalesInvoices",e.Uid.ToString(),$"Cancelled sales invoice {e.InvoiceNo}",ct); TempData["Success"]="Sales invoice cancelled."; return RedirectToAction(nameof(Index)); }
 
   [HttpPost, ValidateAntiForgeryToken]
-  public async Task<IActionResult> Delete(int id, string? customerType, string? search, CancellationToken ct)
+  public async Task<IActionResult> Delete(int id, string? customerType, int? month, string? search, CancellationToken ct)
   {
     EnsureSalesInvoiceNav();
     var invoice = await _db.SalesInvoices.FirstOrDefaultAsync(x => x.Uid == id, ct);
     if (invoice is null)
     {
       TempData["Error"] = "Sales invoice was not found.";
-      return RedirectToAction(nameof(Index), new { customerType, search });
+      return RedirectToAction(nameof(Index), new { customerType, month, search });
     }
 
     var invoiceNo = invoice.InvoiceNo;
@@ -217,7 +239,7 @@ public class SalesInvoicesController : Controller {
       $"Deleted sales invoice {invoiceNo} and {details.Count} detail line(s).", ct);
 
     TempData["Success"] = $"Sales invoice {invoiceNo} deleted.";
-    return RedirectToAction(nameof(Index), new { customerType, search });
+    return RedirectToAction(nameof(Index), new { customerType, month, search });
   }
   private static SalesInvoiceFormViewModel ToForm(SalesInvoice e)=>new(){Uid=e.Uid,InvoiceNo=e.InvoiceNo,InvoiceDate=e.InvoiceDate,BranchUid=e.BranchUid,CustomerUid=e.CustomerUid,PaymentMethodUid=e.PaymentMethodUid,SubTotal=e.SubTotal,DiscountAmount=e.DiscountAmount,TaxAmount=e.TaxAmount,OtherCharges=e.OtherCharges,NetAmount=e.NetAmount,PaidAmount=e.PaidAmount,BalanceAmount=e.BalanceAmount,PaymentStatus=e.PaymentStatus,InvoiceStatus=e.InvoiceStatus,Remarks=e.Remarks};
   private static SalesInvoice ToEntity(SalesInvoiceFormViewModel m)=>new(){InvoiceNo=m.InvoiceNo.Trim(),InvoiceDate=m.InvoiceDate,BranchUid=m.BranchUid,CustomerUid=m.CustomerUid,PaymentMethodUid=m.PaymentMethodUid,SubTotal=m.SubTotal,DiscountAmount=m.DiscountAmount,TaxAmount=m.TaxAmount,OtherCharges=m.OtherCharges,NetAmount=m.NetAmount,PaidAmount=m.PaidAmount,BalanceAmount=m.BalanceAmount,PaymentStatus=m.PaymentStatus,InvoiceStatus=m.InvoiceStatus,Remarks=m.Remarks};

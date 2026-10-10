@@ -7,14 +7,23 @@
 
 <div class="pos-sale-layout">
     <section class="pos-sale-panel">
-        <div class="pos-sale-panel-header">
-            <h2 class="pos-sale-panel-title">Items</h2>
-            <div class="pos-sale-toolbar">
-                <input type="search" id="productSearch" class="form-control form-control-sm" placeholder="Search items..." />
-                <button type="button" id="btnAddToBasket" class="btn btn-primary btn-sm" disabled>
-                    <i class="bi bi-plus-lg" aria-hidden="true"></i> Add
+        <div class="pos-sale-panel-header pos-sale-panel-header--search">
+            <input type="search" id="productSearch" class="form-control form-control-sm" placeholder="Search items..." />
+        </div>
+        <div class="pos-category-toolbar" id="posCategoryToolbar" role="group" aria-label="Product categories">
+            <button type="button"
+                    class="btn btn-sm btn-outline-secondary pos-category-btn active"
+                    data-category-uid="">
+                All
+            </button>
+            @foreach (var cat in Model.Categories)
+            {
+                <button type="button"
+                        class="btn btn-sm btn-outline-secondary pos-category-btn"
+                        data-category-uid="@cat.Uid">
+                    @cat.CategoryName
                 </button>
-            </div>
+            }
         </div>
         <div class="table-responsive pos-sale-table-wrap">
             <table class="table table-hover table-sm align-middle mb-0" id="productsTable">
@@ -32,6 +41,7 @@
                         data-uid="@item.Uid"
                         data-code="@item.ProductCode"
                         data-name="@item.ProductName"
+                        data-category-uid="@(item.CategoryUid?.ToString() ?? "")"
                         data-price="@item.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)"
                         tabindex="0">
                         <td>@item.ProductCode</td>
@@ -103,15 +113,27 @@
     const basketBody = document.getElementById('basketBody');
     const basketEmptyRow = document.getElementById('basketEmptyRow');
     const basketTotalEl = document.getElementById('basketTotal');
-    const btnAdd = document.getElementById('btnAddToBasket');
     const btnClear = document.getElementById('btnClearBasket');
     const btnPrint = document.getElementById('btnPrintReceipt');
     const btnPay = document.getElementById('btnPay');
     const searchInput = document.getElementById('productSearch');
+    const categoryToolbar = document.getElementById('posCategoryToolbar');
     const alertBox = document.getElementById('posAlert');
+    let activeCategoryUid = '';
 
     function money(n) {
         return Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function applyProductFilters() {
+        const q = (searchInput?.value || '').trim().toLowerCase();
+        productsTable.querySelectorAll('.pos-product-row').forEach(function (row) {
+            const text = (row.getAttribute('data-code') + ' ' + row.getAttribute('data-name')).toLowerCase();
+            const rowCategory = row.getAttribute('data-category-uid') || '';
+            const matchesSearch = !q || text.indexOf(q) !== -1;
+            const matchesCategory = !activeCategoryUid || rowCategory === activeCategoryUid;
+            row.style.display = matchesSearch && matchesCategory ? '' : 'none';
+        });
     }
 
     function showAlert(type, message) {
@@ -133,12 +155,10 @@
         productsTable.querySelectorAll('.pos-product-row.selected').forEach(r => r.classList.remove('selected'));
         if (!row) {
             selectedUid = null;
-            btnAdd.disabled = true;
             return;
         }
         row.classList.add('selected');
         selectedUid = row.getAttribute('data-uid');
-        btnAdd.disabled = false;
     }
 
     productsTable.addEventListener('click', function (e) {
@@ -170,8 +190,6 @@
         renderBasket();
     }
 
-    btnAdd.addEventListener('click', addSelected);
-
     btnClear.addEventListener('click', function () {
         if (basket.size === 0) return;
         if (!confirm('Clear all items from the basket?')) return;
@@ -179,13 +197,20 @@
         renderBasket();
     });
 
-    searchInput.addEventListener('input', function () {
-        const q = searchInput.value.trim().toLowerCase();
-        productsTable.querySelectorAll('.pos-product-row').forEach(function (row) {
-            const text = (row.getAttribute('data-code') + ' ' + row.getAttribute('data-name')).toLowerCase();
-            row.style.display = !q || text.indexOf(q) !== -1 ? '' : 'none';
+    searchInput.addEventListener('input', applyProductFilters);
+
+    if (categoryToolbar) {
+        categoryToolbar.addEventListener('click', function (e) {
+            const btn = e.target.closest('.pos-category-btn');
+            if (!btn) return;
+            categoryToolbar.querySelectorAll('.pos-category-btn').forEach(function (b) {
+                b.classList.remove('active');
+            });
+            btn.classList.add('active');
+            activeCategoryUid = btn.getAttribute('data-category-uid') || '';
+            applyProductFilters();
         });
-    });
+    }
 
     basketBody.addEventListener('click', function (e) {
         const btn = e.target.closest('[data-action]');

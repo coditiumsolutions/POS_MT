@@ -20,6 +20,10 @@ public partial class POSDbContext : DbContext
 
     public virtual DbSet<CustomerPayment> CustomerPayments { get; set; }
 
+    public virtual DbSet<CustomerMonthlyItem> CustomerMonthlyItems { get; set; }
+
+    public virtual DbSet<Configuration> Configurations { get; set; }
+
     public virtual DbSet<Expense> Expenses { get; set; }
 
     public virtual DbSet<ExpenseCategory> ExpenseCategories { get; set; }
@@ -86,6 +90,17 @@ public partial class POSDbContext : DbContext
         {
             entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
             entity.Property(e => e.PaymentDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.Uid).ValueGeneratedOnAdd();
+        });
+
+        modelBuilder.Entity<CustomerMonthlyItem>(entity =>
+        {
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.Uid).ValueGeneratedOnAdd();
+        });
+
+        modelBuilder.Entity<Configuration>(entity =>
+        {
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 

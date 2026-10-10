@@ -1,0 +1,49 @@
+@model IEnumerable<Configuration>
+@{
+    ViewData["Title"] = "Configs";
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="page-heading mb-1">Configs</h1>
+        <p class="text-muted mb-0">Manage configuration values from Configuration table.</p>
+    </div>
+    <a class="btn btn-primary" asp-action="Create">Add New</a>
+</div>
+@if (TempData["Success"] != null) { <div class="alert alert-success">@TempData["Success"]</div> }
+@if (TempData["Error"] != null) { <div class="alert alert-danger">@TempData["Error"]</div> }
+<div class="table-responsive bg-white border rounded p-2">
+    <table id="crudTable" class="table table-striped table-hover w-100">
+        <thead>
+            <tr>
+                <th>Config Id</th>
+                <th>Key</th>
+                <th>Value</th>
+                <th style="width:190px">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var item in Model)
+        {
+            <tr>
+                <td>@(item.ConfigId?.ToString() ?? "—")</td>
+                <td>@(item.ConfigKey ?? "—")</td>
+                <td class="text-truncate" style="max-width:420px" title="@item.ConfigValue">
+                    @(string.IsNullOrWhiteSpace(item.ConfigValue) ? "—" : item.ConfigValue)
+                </td>
+                <td class="text-nowrap">
+                    <a class="btn btn-sm btn-outline-primary" asp-action="Edit" asp-route-id="@item.Uid">Edit</a>
+                    <a class="btn btn-sm btn-outline-secondary" asp-action="Details" asp-route-id="@item.Uid">View</a>
+                    <form asp-action="Delete" asp-route-id="@item.Uid" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-sm btn-outline-danger"
+                                onclick="return confirm('Delete this configuration?');">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+@section Scripts {
+    <script>posDataTable('#crudTable');</script>
+}

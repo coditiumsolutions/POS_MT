@@ -1,0 +1,23 @@
+@model ConfigurationFormViewModel
+<div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
+<div class="invoice-meta-grid invoice-meta-form">
+    <div class="invoice-meta-row">
+        <label asp-for="ConfigId" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="ConfigId" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="ConfigId" class="text-danger"></span>
+        </div>
+        <label asp-for="ConfigKey" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="ConfigKey" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="ConfigKey" class="text-danger"></span>
+        </div>
+    </div>
+    <div class="invoice-meta-row">
+        <label asp-for="ConfigValue" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field invoice-meta-field-span">
+            <textarea asp-for="ConfigValue" class="form-control form-control-sm invoice-meta-input" rows="4"></textarea>
+            <span asp-validation-for="ConfigValue" class="text-danger"></span>
+        </div>
+    </div>
+</div>

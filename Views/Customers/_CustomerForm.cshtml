@@ -31,18 +31,28 @@
         </div>
         <label asp-for="City" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <input asp-for="City" class="form-control form-control-sm invoice-meta-input" />
+            <select asp-for="City" asp-items="Model.CityOptions" class="form-select form-select-sm invoice-meta-input"></select>
+            <span asp-validation-for="City" class="text-danger"></span>
         </div>
     </div>
     <div class="invoice-meta-row">
+        <label asp-for="Area" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <select asp-for="Area" asp-items="Model.AreaOptions" class="form-select form-select-sm invoice-meta-input"></select>
+            <span asp-validation-for="Area" class="text-danger"></span>
+        </div>
         <label asp-for="Address" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
             <input asp-for="Address" class="form-control form-control-sm invoice-meta-input" />
         </div>
+    </div>
+    <div class="invoice-meta-row">
         <label asp-for="Ntn" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
             <input asp-for="Ntn" class="form-control form-control-sm invoice-meta-input" />
         </div>
+        <span class="invoice-meta-title" aria-hidden="true"></span>
+        <div class="invoice-meta-field" aria-hidden="true"></div>
     </div>
     <div class="invoice-meta-row">
         <label asp-for="OpeningBalance" class="invoice-meta-title"></label>

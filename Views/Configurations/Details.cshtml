@@ -1,0 +1,29 @@
+@model Configuration
+@{
+    ViewData["Title"] = "Config Details";
+    string Text(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+}
+<h1 class="page-heading invoice-details-heading mb-3">Config Details</h1>
+<div class="bg-white border rounded p-3">
+    <div class="invoice-meta-grid invoice-meta-form invoice-meta-readonly">
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Config Id</div>
+            <div class="invoice-meta-field">@(Model.ConfigId?.ToString() ?? "—")</div>
+            <div class="invoice-meta-title">Config Key</div>
+            <div class="invoice-meta-field">@Text(Model.ConfigKey)</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Config Value</div>
+            <div class="invoice-meta-field invoice-meta-field-span" style="white-space:pre-wrap">@Text(Model.ConfigValue)</div>
+        </div>
+    </div>
+    <div class="mt-3 d-flex gap-2">
+        <a class="btn btn-primary" asp-action="Edit" asp-route-id="@Model.Uid">Edit</a>
+        <a class="btn btn-outline-secondary" asp-action="Index">Back</a>
+        <form asp-action="Delete" asp-route-id="@Model.Uid" method="post" class="d-inline">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-outline-danger"
+                    onclick="return confirm('Delete this configuration?');">Delete</button>
+        </form>
+    </div>
+</div>

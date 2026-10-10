@@ -36,6 +36,9 @@ public partial class Customer
     [StringLength(100)]
     public string? City { get; set; }
 
+    [StringLength(100)]
+    public string? Area { get; set; }
+
     [Column("NTN")]
     [StringLength(50)]
     public string? Ntn { get; set; }

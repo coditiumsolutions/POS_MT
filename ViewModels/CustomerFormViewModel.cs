@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace POS_MT.ViewModels;
 
@@ -27,6 +28,9 @@ public sealed class CustomerFormViewModel
     [StringLength(100)]
     public string? City { get; set; }
 
+    [StringLength(100)]
+    public string? Area { get; set; }
+
     [StringLength(50), Display(Name = "NTN")]
     public string? Ntn { get; set; }
 
@@ -41,4 +45,7 @@ public sealed class CustomerFormViewModel
 
     [Display(Name = "Active")]
     public bool IsActive { get; set; } = true;
+
+    public IEnumerable<SelectListItem> CityOptions { get; set; } = [];
+    public IEnumerable<SelectListItem> AreaOptions { get; set; } = [];
 }

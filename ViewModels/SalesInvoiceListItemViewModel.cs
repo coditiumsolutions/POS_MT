@@ -16,6 +16,7 @@ public sealed class SalesInvoiceListItemViewModel
 public sealed class SalesInvoiceIndexViewModel
 {
     public string? CustomerType { get; set; }
+    public int? Month { get; set; }
     public string? Search { get; set; }
     public List<SalesInvoiceListItemViewModel> Rows { get; set; } = [];
 }
@@ -39,6 +40,7 @@ public sealed class SalesInvoiceDetailListItemViewModel
 public sealed class SalesInvoiceDetailIndexViewModel
 {
     public string? CustomerType { get; set; }
+    public int? Month { get; set; }
     public string? Search { get; set; }
     public List<SalesInvoiceDetailListItemViewModel> Rows { get; set; } = [];
 }

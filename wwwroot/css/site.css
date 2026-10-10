@@ -337,6 +337,11 @@ a.pos-nav-link:hover {
   cursor: default;
 }
 
+.module-search-wrap {
+  width: min(280px, 100%);
+  flex-shrink: 0;
+}
+
 .module-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -426,10 +431,13 @@ a.pos-nav-link:hover {
   --pos-monthly: #2563eb;
   --pos-monthly-deep: #1d4ed8;
   --pos-monthly-soft: #eff6ff;
+  --pos-supply: #ca8a04;
+  --pos-supply-deep: #a16207;
+  --pos-supply-soft: #fefce8;
   --pos-mode-ink: #0f172a;
   --pos-mode-muted: #64748b;
   --pos-mode-border: #e2e8f0;
-  max-width: 680px;
+  max-width: 960px;
   margin: 0;
   padding: 0.15rem 0 0.35rem;
 }
@@ -468,9 +476,15 @@ a.pos-nav-link:hover {
 
 .pos-mode-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.9rem;
   align-items: stretch;
+}
+
+@media (max-width: 991.98px) {
+  .pos-mode-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 767.98px) {
@@ -548,6 +562,12 @@ a.pos-nav-link:hover {
   --mode-accent: var(--pos-monthly);
   --mode-accent-deep: var(--pos-monthly-deep);
   --mode-soft: var(--pos-monthly-soft);
+}
+
+.pos-mode-card--supply {
+  --mode-accent: var(--pos-supply);
+  --mode-accent-deep: var(--pos-supply-deep);
+  --mode-soft: var(--pos-supply-soft);
 }
 
 .pos-mode-card__icon {
@@ -831,7 +851,15 @@ a.pos-nav-link:hover {
   gap: 0.75rem;
   padding: 0.75rem 0.9rem;
   border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc;
+}
+
+.pos-sale-panel-header--search {
+  justify-content: stretch;
+}
+
+.pos-sale-panel-header--search .form-control {
+  width: 100%;
+  flex: 1 1 auto;
 }
 
 .pos-sale-panel-title {
@@ -849,6 +877,31 @@ a.pos-nav-link:hover {
 
 .pos-sale-toolbar .form-control {
   width: min(220px, 40vw);
+}
+
+.pos-category-toolbar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.pos-category-btn {
+  width: 100%;
+  min-height: 2rem;
+  padding-left: 0.35rem;
+  padding-right: 0.35rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pos-category-btn.active {
+  background-color: #0d5f58;
+  border-color: #0d5f58;
+  color: #fff;
 }
 
 .pos-sale-table-wrap {
@@ -1264,4 +1317,56 @@ a.pos-nav-link:hover {
     flex: 0 0 100%;
     margin: 0.45rem 0.25rem 0.1rem;
   }
+}
+
+.monthly-supply-customer-row {
+  cursor: pointer;
+}
+
+.monthly-supply-customer-row.monthly-supply-row-expanded {
+  background-color: rgba(13, 95, 88, 0.08) !important;
+}
+
+.monthly-supply-detail-panel {
+  background: #f8fafb;
+  border-top: 2px solid #0d5f58;
+}
+
+.monthly-supply-items-heading {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #ea580c;
+  line-height: 1.2;
+}
+
+.monthly-supply-items-title-row {
+  row-gap: 0.25rem;
+}
+
+.sales-invoices-heading {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #ea580c;
+  line-height: 1.2;
+}
+
+.dt-controls-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.dt-controls-bottom .dataTables_length,
+.dt-controls-bottom .dataTables_info,
+.dt-controls-bottom .dataTables_paginate {
+  float: none !important;
+  padding-top: 0 !important;
+}
+
+/* Invoice Details: never show DataTables built-in search above the grid */
+.invoice-details-grid .dataTables_filter {
+  display: none !important;
 }

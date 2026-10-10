@@ -3,19 +3,31 @@
     ViewData["Title"] = Model.PageTitle;
 }
 
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
     <div>
         <h1 class="page-heading mb-1">@Model.PageTitle</h1>
         <p class="text-muted mb-0">@Model.PageSubtitle</p>
     </div>
+    <div class="module-search-wrap">
+        <input type="search"
+               id="moduleSearch"
+               class="form-control form-control-sm"
+               placeholder="Search modules..."
+               autocomplete="off"
+               aria-label="Search modules" />
+    </div>
 </div>
 
-<div class="module-grid">
+<div class="module-grid" id="moduleGrid">
     @foreach (var module in Model.Modules)
     {
         if (!string.IsNullOrWhiteSpace(module.Controller))
         {
-            <a class="module-card" asp-controller="@module.Controller" asp-action="@module.Action" title="@module.Name">
+            <a class="module-card"
+               asp-controller="@module.Controller"
+               asp-action="@module.Action"
+               title="@module.Name"
+               data-module-name="@module.Name">
                 <span class="module-card-icon">
                     <i class="bi @module.IconClass" aria-hidden="true"></i>
                 </span>
@@ -24,7 +36,10 @@
         }
         else
         {
-            <a class="module-card module-card-disabled" href="#" title="@module.Name — no matching table">
+            <a class="module-card module-card-disabled"
+               href="#"
+               title="@module.Name — no matching table"
+               data-module-name="@module.Name">
                 <span class="module-card-icon">
                     <i class="bi @module.IconClass" aria-hidden="true"></i>
                 </span>
@@ -33,3 +48,27 @@
         }
     }
 </div>
+<p id="moduleSearchEmpty" class="text-muted d-none mt-3 mb-0">No modules match your search.</p>
+
+@section Scripts {
+<script>
+(function () {
+    const input = document.getElementById('moduleSearch');
+    const grid = document.getElementById('moduleGrid');
+    const empty = document.getElementById('moduleSearchEmpty');
+    if (!input || !grid) return;
+
+    input.addEventListener('input', function () {
+        const q = input.value.trim().toLowerCase();
+        let visible = 0;
+        grid.querySelectorAll('.module-card').forEach(function (card) {
+            const name = (card.getAttribute('data-module-name') || '').toLowerCase();
+            const show = !q || name.indexOf(q) !== -1;
+            card.style.display = show ? '' : 'none';
+            if (show) visible += 1;
+        });
+        if (empty) empty.classList.toggle('d-none', visible > 0);
+    });
+})();
+</script>
+}

@@ -3,6 +3,7 @@ bin/
 obj/
 build/
 pos_mt/
+pos_mt_02/
 *.rar
 .vs/
 *.user

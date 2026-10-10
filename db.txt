@@ -1,7 +1,7 @@
 ﻿POS_MT - Database Documentation
 ===============================
-Version   : 1.0.0
-UpdatedAt : 2026-10-07
+Version   : 1.0.3
+UpdatedAt : 10/10/2026
 
 Database Information
 --------------------
@@ -13,10 +13,12 @@ Provider : SQL Server
 
 Note: Password, host, and full connection string are kept in local appsettings.Development.json / deploy build config only (not stored in this file).
 
-Tables (24)
+Tables (26)
 -----------
 AuditLogs
 Branches
+Configuration
+CustomerMonthlyItems
 CustomerPayments
 Customers
 ExpenseCategories
@@ -58,6 +60,14 @@ OldValue                    nvarchar(max)           YES     NO
 NewValue                    nvarchar(max)           YES     NO        
 IPAddress                   nvarchar(50)            YES     NO        
 
+=== Configuration ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+ConfigId                    int                     YES     NO        
+ConfigKey                   varchar(50)             YES     NO        
+ConfigValue                 varchar(max)            YES     NO        
+
 === Branches ===
 Column                      Type                    Null    Identity  Default
 ------------------------------------------------------------------------------------------
@@ -90,6 +100,27 @@ TerminalUID                 int                     YES     NO
 Remarks                     nvarchar(500)           YES     NO        
 CreatedDate                 datetime2               NO      NO        (sysdatetime())
 
+=== CustomerMonthlyItems ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+CustomerCode                nvarchar(50)            NO      NO        
+CustomerName                nvarchar(200)           NO      NO        
+ProductCode                 nvarchar(50)            NO      NO        
+ProductName                 nvarchar(200)           NO      NO        
+BrandName                   nvarchar(100)           YES     NO        
+Quantity                    decimal(18,3)           NO      NO        ((0))
+UnitPrice                   decimal(18,2)           NO      NO        ((0))
+CustomerUID                 int                     YES     NO        
+ProductUID                  int                     YES     NO        
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+UpdatedDate                 datetime2               YES     NO        
+
+Indexes (non-PK):
+  IX_CustomerMonthlyItems_CustomerCode (CustomerCode)
+  IX_CustomerMonthlyItems_CustomerUID (CustomerUID)
+  IX_CustomerMonthlyItems_ProductCode (ProductCode)
+
 === Customers ===
 Column                      Type                    Null    Identity  Default
 ------------------------------------------------------------------------------------------
@@ -99,15 +130,16 @@ CustomerName                nvarchar(200)           NO      NO
 MobileNo                    nvarchar(30)            YES     NO        
 PhoneNo                     nvarchar(30)            YES     NO        
 Email                       nvarchar(150)           YES     NO        
-Address                     nvarchar(500)           YES     NO        
-City                        nvarchar(100)           YES     NO        
-NTN                         nvarchar(50)            YES     NO        
+Address                     nvarchar(500)           YES     NO
+City                        nvarchar(100)           YES     NO
+Area                        nvarchar(100)           YES     NO
+NTN                         nvarchar(50)            YES     NO
 OpeningBalance              decimal(18,2)           NO      NO        ((0))
 CreditLimit                 decimal(18,2)           NO      NO        ((0))
 DiscountPercent             decimal(5,2)            NO      NO        ((0))
 IsActive                    bit                     NO      NO        ((1))
 CreatedDate                 datetime2               NO      NO        (sysdatetime())
-UpdatedDate                 datetime2               YES     NO        
+UpdatedDate                 datetime2               YES     NO
 
 === ExpenseCategories ===
 Column                      Type                    Null    Identity  Default

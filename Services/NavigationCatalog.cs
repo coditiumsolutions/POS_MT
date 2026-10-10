@@ -31,18 +31,18 @@ public static class NavigationCatalog
         new("POS", "POS",
         [
             new("Cash POS", "POS", "Cash", IconClass: "bi-cash-stack"),
-            new("Monthly POS", "POS", "Credit", IconClass: "bi-calendar-month")
-        ]),
-        new("Inventories", "Inventories",
-        [
-            new("Add Inventory", "Inventories", "Create", IconClass: "bi-plus-square"),
-            new("All Inventory", "Inventories", IconClass: "bi-boxes"),
-            new("Slow / Dead Stock", "StockMovement", IconClass: "bi-hourglass-split", NavArea: "Inventories")
+            new("Credit POS", "POS", "Credit", IconClass: "bi-calendar-month"),
+            new("Monthly Supply", "POS", "MonthlySupply", IconClass: "bi-calendar2-check")
         ]),
         new("Customers", "Customers",
         [
             new("Add Customers", "Customers", "Create", IconClass: "bi-person-plus"),
             new("All Customers", "Customers", IconClass: "bi-people")
+        ]),
+        new("SalesInvoice", "Invoices",
+        [
+            new("All Sales", "SalesInvoices", IconClass: "bi-receipt"),
+            new("All Sale Items", "SalesInvoiceDetails", IconClass: "bi-list-ul")
         ]),
         new("Reports", "Reports",
         [
@@ -53,9 +53,7 @@ public static class NavigationCatalog
         [
             new("Vendors", "Vendors", IconClass: "bi-truck"),
             new("Products", "Products", IconClass: "bi-box-seam"),
-            new("Inventories", "Inventories", IconClass: "bi-boxes"),
-            new("Sales Invoice", "SalesInvoices", IconClass: "bi-receipt"),
-            new("Report", "Reports", "TotalSale", IconClass: "bi-graph-up")
+            new("Inventories", "Inventories", IconClass: "bi-boxes")
         ])
     ];
 
@@ -108,6 +106,7 @@ public static class NavigationCatalog
         new("Terminals", "bi-display", "Terminals"),
         new("Branches", "bi-building", "Branches"),
         new("Warehouses", "bi-house-door", "Warehouses"),
+        new("Configs", "bi-sliders", "Configurations"),
         new("Audit Logs", "bi-journal-text", "AuditLogs")
     ];
 

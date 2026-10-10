@@ -31,20 +31,41 @@
         <a class="pos-mode-card pos-mode-card--monthly"
            asp-controller="POS"
            asp-action="Credit"
-           title="Monthly POS">
+           title="Credit POS">
             <span class="pos-mode-card__accent" aria-hidden="true"></span>
             <span class="pos-mode-card__icon" aria-hidden="true">
                 <i class="bi bi-calendar2-month"></i>
             </span>
             <span class="pos-mode-card__body">
                 <span class="pos-mode-card__badge">Credit billing</span>
-                <span class="pos-mode-card__title">Monthly POS</span>
+                <span class="pos-mode-card__title">Credit POS</span>
                 <span class="pos-mode-card__desc">
                     Bill monthly customers on credit. Invoice now and settle when payment is collected.
                 </span>
             </span>
             <span class="pos-mode-card__cta">
-                <span>Open Monthly POS</span>
+                <span>Open Credit POS</span>
+                <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </span>
+        </a>
+
+        <a class="pos-mode-card pos-mode-card--supply"
+           asp-controller="POS"
+           asp-action="MonthlySupply"
+           title="Monthly Supply">
+            <span class="pos-mode-card__accent" aria-hidden="true"></span>
+            <span class="pos-mode-card__icon" aria-hidden="true">
+                <i class="bi bi-calendar2-check"></i>
+            </span>
+            <span class="pos-mode-card__body">
+                <span class="pos-mode-card__badge">Customer supply</span>
+                <span class="pos-mode-card__title">Monthly Supply</span>
+                <span class="pos-mode-card__desc">
+                    Select monthly customers for supply planning and follow-up actions.
+                </span>
+            </span>
+            <span class="pos-mode-card__cta">
+                <span>Open Monthly Supply</span>
                 <i class="bi bi-arrow-right" aria-hidden="true"></i>
             </span>
         </a>

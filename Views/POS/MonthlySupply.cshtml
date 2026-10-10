@@ -1,0 +1,354 @@
+@model MonthlySupplyPageViewModel
+@{
+    ViewData["Title"] = "Monthly Supply";
+    var openCustomer = Model.OpenCustomerUid;
+}
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+    <div>
+        <h1 class="page-heading mb-1">Monthly Supply</h1>
+        <p class="text-muted mb-0">Select customers, choose a supply date, and click <strong>Add Supplied</strong>. One monthly invoice per customer per month — later supplies add detail lines to the same invoice. Double-click a row to edit items.</p>
+    </div>
+    <div class="text-muted small align-self-center">
+        Selected: <strong id="monthlySupplySelectedCount">0</strong>
+    </div>
+</div>
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success">@TempData["Success"]</div>
+}
+
+<form asp-action="MonthlySupplyContinue" method="post" id="monthlySupplyForm">
+    @Html.AntiForgeryToken()
+    <div class="mb-3 d-flex flex-wrap gap-2 align-items-end">
+        <div>
+            <label class="form-label small text-muted mb-1" for="supplyDate">Supply date</label>
+            <input type="date"
+                   name="supplyDate"
+                   id="supplyDate"
+                   class="form-control form-control-sm"
+                   value="@DateTime.Today.ToString("yyyy-MM-dd")"
+                   required />
+        </div>
+        <button type="submit"
+                class="btn btn-success"
+                id="monthlySupplyAddSuppliedBtn"
+                formaction="@Url.Action("AddMonthlySupplied", "POS")"
+                disabled>
+            Add Supplied
+        </button>
+        <button type="submit" class="btn btn-primary" id="monthlySupplyContinueBtn" disabled>
+            Open Items for Selected Customers
+        </button>
+        <a class="btn btn-outline-secondary" asp-action="Index">Back</a>
+        <div class="ms-auto" style="min-width: 220px;">
+            <label class="form-label small text-muted mb-1 visually-hidden" for="monthlySupplyFilter">Filter</label>
+            <input type="search" id="monthlySupplyFilter" class="form-control form-control-sm" placeholder="Filter customers…" autocomplete="off" />
+        </div>
+    </div>
+
+    <div class="table-responsive bg-white border rounded p-2">
+        <table id="monthlySupplyTable" class="table table-striped table-hover w-100 align-middle mb-0">
+            <thead>
+                <tr>
+                    <th style="width:42px">
+                        <input type="checkbox" id="monthlySupplySelectAll" class="form-check-input" title="Select all" />
+                    </th>
+                    <th>Code</th>
+                    <th>Customer Name</th>
+                    <th>Mobile</th>
+                    <th>Phone</th>
+                    <th>Area</th>
+                </tr>
+            </thead>
+            <tbody>
+            @if (Model.Customers.Count == 0)
+            {
+                <tr>
+                    <td colspan="6" class="text-muted text-center py-4">No monthly customers found.</td>
+                </tr>
+            }
+            else
+            {
+                foreach (var c in Model.Customers)
+                {
+                    <tr class="monthly-supply-customer-row"
+                        data-customer-uid="@c.Uid"
+                        data-customer-code="@c.CustomerCode"
+                        data-customer-name="@c.CustomerName"
+                        title="Double-click to open monthly items">
+                        <td class="monthly-supply-check-cell">
+                            <input type="checkbox"
+                                   class="form-check-input monthly-supply-check"
+                                   name="selectedCustomerUids"
+                                   value="@c.Uid"
+                                   data-uid="@c.Uid"
+                                   data-name="@c.CustomerName" />
+                        </td>
+                        <td>@c.CustomerCode</td>
+                        <td>@c.CustomerName</td>
+                        <td>@(string.IsNullOrWhiteSpace(c.MobileNo) ? "—" : c.MobileNo)</td>
+                        <td>@(string.IsNullOrWhiteSpace(c.PhoneNo) ? "—" : c.PhoneNo)</td>
+                        <td>@(string.IsNullOrWhiteSpace(c.Area) ? "—" : c.Area)</td>
+                    </tr>
+                    <tr class="monthly-supply-detail-row d-none" data-detail-for="@c.Uid" aria-hidden="true">
+                        <td colspan="6" class="p-0 border-0">
+                            <div class="monthly-supply-detail-panel">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2 px-3 pt-3">
+                                    <strong class="monthly-supply-detail-title">Monthly items — @c.CustomerName</strong>
+                                    <span class="text-muted small">Double-click the customer row again to close</span>
+                                </div>
+                                <div class="monthly-supply-items-loading text-muted px-3 pb-3">Loading items…</div>
+                                <div class="monthly-supply-items-host d-none px-3 pb-3"></div>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+            </tbody>
+        </table>
+    </div>
+</form>
+
+@section Scripts {
+    @if (Model.Customers.Count > 0)
+    {
+        <script>
+            (function () {
+                const itemsUrl = '@Url.Action("CustomerMonthlyItems", "POS")';
+                const updateUrl = '@Url.Action("UpdateMonthlySupplyItem", "POS")';
+                const deleteUrl = '@Url.Action("DeleteMonthlySupplyItem", "POS")';
+                const antiforgery = document.querySelector('#monthlySupplyForm input[name="__RequestVerificationToken"]')?.value || '';
+
+                const selectAll = document.getElementById('monthlySupplySelectAll');
+                const checks = Array.from(document.querySelectorAll('.monthly-supply-check'));
+                const countLabel = document.getElementById('monthlySupplySelectedCount');
+                const continueBtn = document.getElementById('monthlySupplyContinueBtn');
+                const addSuppliedBtn = document.getElementById('monthlySupplyAddSuppliedBtn');
+                const filterInput = document.getElementById('monthlySupplyFilter');
+                const openCustomerUid = @(openCustomer.HasValue ? openCustomer.Value.ToString() : "null");
+
+                let activeCustomerUid = null;
+                const loadedCustomers = new Set();
+
+                function refreshCount() {
+                    const selected = checks.filter(function (c) { return c.checked; }).length;
+                    countLabel.textContent = String(selected);
+                    continueBtn.disabled = selected === 0;
+                    if (addSuppliedBtn) {
+                        addSuppliedBtn.disabled = selected === 0;
+                    }
+                    if (selectAll) {
+                        selectAll.checked = selected > 0 && selected === checks.length;
+                        selectAll.indeterminate = selected > 0 && selected < checks.length;
+                    }
+                }
+
+                if (selectAll) {
+                    selectAll.addEventListener('change', function () {
+                        checks.forEach(function (c) { c.checked = selectAll.checked; });
+                        refreshCount();
+                    });
+                }
+
+                checks.forEach(function (c) {
+                    c.addEventListener('change', refreshCount);
+                    c.addEventListener('click', function (e) { e.stopPropagation(); });
+                });
+
+                function detailRowFor(uid) {
+                    return document.querySelector('.monthly-supply-detail-row[data-detail-for="' + uid + '"]');
+                }
+
+                function customerRowFor(uid) {
+                    return document.querySelector('.monthly-supply-customer-row[data-customer-uid="' + uid + '"]');
+                }
+
+                function closeAllDetails() {
+                    document.querySelectorAll('.monthly-supply-detail-row').forEach(function (row) {
+                        row.classList.add('d-none');
+                        row.setAttribute('aria-hidden', 'true');
+                    });
+                    document.querySelectorAll('.monthly-supply-customer-row').forEach(function (row) {
+                        row.classList.remove('monthly-supply-row-expanded');
+                    });
+                    activeCustomerUid = null;
+                }
+
+                function formatMoney(n) {
+                    return Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                }
+
+                function escapeHtml(text) {
+                    if (text == null) return '';
+                    return String(text)
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;');
+                }
+
+                function renderItems(host, customerUid, items) {
+                    if (!items || items.length === 0) {
+                        host.innerHTML = '<p class="text-muted mb-0">No monthly items for this customer yet. Use <strong>Open Items for Selected Customers</strong> to add products.</p>';
+                        return;
+                    }
+
+                    let rows = '';
+                    items.forEach(function (item) {
+                        const brand = item.brandName ? escapeHtml(item.brandName) : '—';
+                        const lineTotal = (item.quantity * item.unitPrice);
+                        rows += '<tr data-item-id="' + item.uid + '">' +
+                            '<td>' + escapeHtml(item.productCode) + '</td>' +
+                            '<td>' + escapeHtml(item.productName) + '</td>' +
+                            '<td>' + brand + '</td>' +
+                            '<td class="text-end monthly-supply-qty-display">' + formatMoney(item.quantity) + '</td>' +
+                            '<td class="text-end monthly-supply-price-display">' + formatMoney(item.unitPrice) + '</td>' +
+                            '<td class="text-end monthly-supply-line-total">' + formatMoney(lineTotal) + '</td>' +
+                            '<td class="text-end text-nowrap">' +
+                            '<button type="button" class="btn btn-sm btn-outline-primary monthly-supply-edit-btn me-1">Edit</button>' +
+                            '<form method="post" action="' + deleteUrl + '" class="d-inline monthly-supply-delete-form">' +
+                            '<input type="hidden" name="__RequestVerificationToken" value="' + antiforgery + '" />' +
+                            '<input type="hidden" name="id" value="' + item.uid + '" />' +
+                            '<input type="hidden" name="fromMonthlySupply" value="true" />' +
+                            '<input type="hidden" name="customerUid" value="' + customerUid + '" />' +
+                            '<button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>' +
+                            '</form>' +
+                            '</td></tr>';
+                    });
+
+                    host.innerHTML =
+                        '<div class="table-responsive border rounded bg-white">' +
+                        '<table class="table table-sm table-hover align-middle mb-0 monthly-supply-items-table">' +
+                        '<thead class="table-light"><tr>' +
+                        '<th>Product Code</th><th>Product Name</th><th>Brand</th>' +
+                        '<th class="text-end">Qty</th><th class="text-end">Unit Price</th><th class="text-end">Line Total</th><th class="text-end" style="width:140px">Actions</th>' +
+                        '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+
+                    host.querySelectorAll('.monthly-supply-delete-form').forEach(function (form) {
+                        form.addEventListener('submit', function (e) {
+                            if (!confirm('Delete this item from the customer monthly list?')) {
+                                e.preventDefault();
+                            }
+                        });
+                    });
+
+                    host.querySelectorAll('.monthly-supply-edit-btn').forEach(function (btn) {
+                        btn.addEventListener('click', function () {
+                            const tr = btn.closest('tr');
+                            if (!tr || tr.classList.contains('monthly-supply-editing')) return;
+                            const itemId = tr.getAttribute('data-item-id');
+                            const qtyCell = tr.querySelector('.monthly-supply-qty-display');
+                            const priceCell = tr.querySelector('.monthly-supply-price-display');
+                            const qtyVal = qtyCell.textContent.replace(/,/g, '');
+                            const priceVal = priceCell.textContent.replace(/,/g, '');
+                            tr.classList.add('monthly-supply-editing');
+                            tr.querySelector('td:last-child').innerHTML =
+                                '<form method="post" action="' + updateUrl + '" class="d-flex flex-wrap gap-1 justify-content-end align-items-center monthly-supply-update-form">' +
+                                '<input type="hidden" name="__RequestVerificationToken" value="' + antiforgery + '" />' +
+                                '<input type="hidden" name="Id" value="' + itemId + '" />' +
+                                '<input type="hidden" name="CustomerUid" value="' + customerUid + '" />' +
+                                '<label class="visually-hidden" for="qty-' + itemId + '">Quantity</label>' +
+                                '<input id="qty-' + itemId + '" name="Quantity" type="number" step="0.001" min="0.1" class="form-control form-control-sm" style="width:88px" value="' + qtyVal + '" required />' +
+                                '<label class="visually-hidden" for="price-' + itemId + '">Unit price</label>' +
+                                '<input id="price-' + itemId + '" name="UnitPrice" type="number" step="0.01" min="0" class="form-control form-control-sm" style="width:96px" value="' + priceVal + '" required />' +
+                                '<button type="submit" class="btn btn-sm btn-success">Save</button>' +
+                                '<button type="button" class="btn btn-sm btn-outline-secondary monthly-supply-cancel-edit">Cancel</button>' +
+                                '</form>';
+                            tr.querySelector('.monthly-supply-cancel-edit').addEventListener('click', function () {
+                                loadItems(customerUid, detailRowFor(customerUid), true);
+                            });
+                        });
+                    });
+                }
+
+                function loadItems(customerUid, detailRow, force) {
+                    const host = detailRow.querySelector('.monthly-supply-items-host');
+                    const loading = detailRow.querySelector('.monthly-supply-items-loading');
+                    if (!force && loadedCustomers.has(customerUid)) {
+                        loading.classList.add('d-none');
+                        host.classList.remove('d-none');
+                        return Promise.resolve();
+                    }
+
+                    loading.classList.remove('d-none');
+                    host.classList.add('d-none');
+                    loading.textContent = 'Loading items…';
+
+                    return fetch(itemsUrl + '?customerUid=' + encodeURIComponent(customerUid), {
+                        headers: { 'Accept': 'application/json' }
+                    }).then(function (res) {
+                        if (!res.ok) throw new Error('Failed to load items');
+                        return res.json();
+                    }).then(function (items) {
+                        loadedCustomers.add(customerUid);
+                        renderItems(host, customerUid, items);
+                        loading.classList.add('d-none');
+                        host.classList.remove('d-none');
+                    }).catch(function () {
+                        loading.textContent = 'Could not load items. Try again.';
+                        host.classList.add('d-none');
+                    });
+                }
+
+                function openCustomerDetail(uid) {
+                    const detailRow = detailRowFor(uid);
+                    const customerRow = customerRowFor(uid);
+                    if (!detailRow || !customerRow) return;
+
+                    if (activeCustomerUid === uid) {
+                        closeAllDetails();
+                        return;
+                    }
+
+                    closeAllDetails();
+                    activeCustomerUid = uid;
+                    detailRow.classList.remove('d-none');
+                    detailRow.setAttribute('aria-hidden', 'false');
+                    customerRow.classList.add('monthly-supply-row-expanded');
+                    loadItems(uid, detailRow, false);
+                    detailRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                }
+
+                document.querySelectorAll('.monthly-supply-customer-row').forEach(function (row) {
+                    row.addEventListener('dblclick', function (e) {
+                        if (e.target.closest('.monthly-supply-check-cell')) return;
+                        const uid = parseInt(row.getAttribute('data-customer-uid'), 10);
+                        if (!uid) return;
+                        openCustomerDetail(uid);
+                    });
+                });
+
+                if (filterInput) {
+                    filterInput.addEventListener('input', function () {
+                        const q = filterInput.value.trim().toLowerCase();
+                        document.querySelectorAll('.monthly-supply-customer-row').forEach(function (row) {
+                            const text = row.textContent.toLowerCase();
+                            const uid = row.getAttribute('data-customer-uid');
+                            const detail = detailRowFor(uid);
+                            const show = !q || text.indexOf(q) >= 0;
+                            row.classList.toggle('d-none', !show);
+                            if (!show && detail) {
+                                detail.classList.add('d-none');
+                                if (activeCustomerUid === parseInt(uid, 10)) {
+                                    activeCustomerUid = null;
+                                }
+                            }
+                        });
+                    });
+                }
+
+                refreshCount();
+
+                if (openCustomerUid) {
+                    openCustomerDetail(openCustomerUid);
+                }
+            })();
+        </script>
+    }
+}

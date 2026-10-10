@@ -2,65 +2,99 @@
 @{
     ViewData["Title"] = "Invoice Details";
     var type = Model.CustomerType ?? string.Empty;
+    var selectedMonth = Model.Month;
 }
 
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <div>
-        <h1 class="page-heading mb-1">Invoice Details</h1>
-        <p class="text-muted mb-0">All line items from sales invoices.</p>
-    </div>
+<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+    <span class="sales-invoices-heading">Invoice Details</span>
 </div>
 @if (TempData["Success"] != null) { <div class="alert alert-success">@TempData["Success"]</div> }
 @if (TempData["Error"] != null) { <div class="alert alert-danger">@TempData["Error"]</div> }
 
-<form method="get" class="bg-white border rounded p-3 mb-3">
+<form method="get" id="salesInvoiceDetailsFilterForm" class="bg-white border rounded p-2 mb-3">
     <div class="row g-2 align-items-end">
-        <div class="col-md-4">
-            <label class="form-label mb-1" for="customerType">Customer Type</label>
-            <select class="form-select" id="customerType" name="customerType">
+        <div class="col-6 col-md-2">
+            <label class="form-label mb-1" for="customerType">Type</label>
+            <select class="form-select form-select-sm" id="customerType" name="customerType">
                 @if (string.IsNullOrWhiteSpace(type))
                 {
-                    <option value="" selected>All Customers</option>
+                    <option value="" selected>All</option>
                 }
                 else
                 {
-                    <option value="">All Customers</option>
-                }
-                @if (string.Equals(type, "walkin", StringComparison.OrdinalIgnoreCase))
-                {
-                    <option value="walkin" selected>Walk-in Customers</option>
-                }
-                else
-                {
-                    <option value="walkin">Walk-in Customers</option>
+                    <option value="">All</option>
                 }
                 @if (string.Equals(type, "monthly", StringComparison.OrdinalIgnoreCase))
                 {
-                    <option value="monthly" selected>Monthly Customers</option>
+                    <option value="monthly" selected>Monthly</option>
                 }
                 else
                 {
-                    <option value="monthly">Monthly Customers</option>
+                    <option value="monthly">Monthly</option>
+                }
+                @if (string.Equals(type, "credit", StringComparison.OrdinalIgnoreCase))
+                {
+                    <option value="credit" selected>Credit</option>
+                }
+                else
+                {
+                    <option value="credit">Credit</option>
+                }
+                @if (string.Equals(type, "walkin", StringComparison.OrdinalIgnoreCase))
+                {
+                    <option value="walkin" selected>Walk-in</option>
+                }
+                else
+                {
+                    <option value="walkin">Walk-in</option>
                 }
             </select>
         </div>
-        <div class="col-md-5">
-            <label class="form-label mb-1" for="search">Search</label>
-            <input type="search" class="form-control" id="search" name="search" value="@Model.Search"
-                   placeholder="Invoice no, customer, product..." />
+        <div class="col-6 col-md-2">
+            <label class="form-label mb-1" for="month">Month</label>
+            <select class="form-select form-select-sm" id="month" name="month">
+                @if (selectedMonth is null)
+                {
+                    <option value="" selected>All Months</option>
+                }
+                else
+                {
+                    <option value="">All Months</option>
+                }
+                @for (var m = 1; m <= 12; m++)
+                {
+                    var name = System.Globalization.CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(m);
+                    if (selectedMonth == m)
+                    {
+                        <option value="@m" selected>@name</option>
+                    }
+                    else
+                    {
+                        <option value="@m">@name</option>
+                    }
+                }
+            </select>
         </div>
-        <div class="col-md-3 d-flex gap-2">
-            <button type="submit" class="btn btn-primary">Filter</button>
-            <a class="btn btn-outline-secondary" asp-action="Index">Clear</a>
+        <div class="col-12 col-md-auto flex-grow-1">
+            <label class="form-label mb-1" for="invoiceDetailsSearch">Search</label>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <input type="search"
+                       id="invoiceDetailsSearch"
+                       class="form-control form-control-sm"
+                       style="min-width: 180px; max-width: 280px;"
+                       placeholder="Search…"
+                       autocomplete="off" />
+                <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                <a class="btn btn-outline-secondary btn-sm" asp-action="Index">Clear</a>
+            </div>
         </div>
     </div>
 </form>
 
-<div class="table-responsive bg-white border rounded p-2">
-    <table id="crudTable" class="table table-striped table-hover w-100">
+<div class="table-responsive bg-white border rounded p-2 invoice-details-grid">
+    <table id="invoiceDetailsTable" class="table table-striped table-hover w-100">
         <thead>
             <tr>
-                <th>Invoice No</th>
                 <th>Date</th>
                 <th>Customer</th>
                 <th>Type</th>
@@ -76,7 +110,6 @@
         @foreach (var item in Model.Rows)
         {
             <tr>
-                <td>@item.InvoiceNo</td>
                 <td>@item.InvoiceDate.ToString("yyyy-MM-dd")</td>
                 <td>@item.CustomerName</td>
                 <td>@item.CustomerType</td>
@@ -95,7 +128,7 @@
                     <form asp-action="Delete" asp-route-id="@item.DetailUid" method="post" class="d-inline">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="customerType" value="@Model.CustomerType" />
-                        <input type="hidden" name="search" value="@Model.Search" />
+                        <input type="hidden" name="month" value="@Model.Month" />
                         <button type="submit" class="btn btn-sm btn-outline-danger"
                                 onclick="return confirm('Delete this invoice detail line?');">Delete</button>
                     </form>
@@ -107,5 +140,73 @@
 </div>
 
 @section Scripts {
-    <script>posDataTable('#crudTable');</script>
+    <script>
+        (function () {
+            if (!window.jQuery || !jQuery.fn.DataTable) return;
+
+            var $ = jQuery;
+            var selector = '#invoiceDetailsTable';
+
+            if ($.fn.DataTable.isDataTable(selector)) {
+                $(selector).DataTable().destroy();
+            }
+
+            // Override Bootstrap5 default that injects Search above the table
+            var previousDom = $.fn.dataTable.defaults.dom;
+            $.fn.dataTable.defaults.dom =
+                "<'row'<'col-sm-12'tr>>" +
+                "<'row dt-controls-bottom align-items-center mt-2'<'col-sm-12 col-md-4'l><'col-sm-12 col-md-4'i><'col-sm-12 col-md-4'p>>";
+
+            var table = $(selector).DataTable({
+                pageLength: 25,
+                lengthMenu: [10, 25, 50, 100],
+                order: [],
+                autoWidth: false,
+                dom:
+                    "<'row'<'col-sm-12'tr>>" +
+                    "<'row dt-controls-bottom align-items-center mt-2'<'col-sm-12 col-md-4'l><'col-sm-12 col-md-4'i><'col-sm-12 col-md-4'p>>",
+                initComplete: function () {
+                    var wrapper = $(selector).closest('.dataTables_wrapper');
+                    wrapper.find('.dataTables_filter').each(function () {
+                        $(this).closest('.row').has('.dataTables_filter').find('.dataTables_filter').parent().remove();
+                        $(this).remove();
+                    });
+                    wrapper.find('.dataTables_filter').remove();
+                }
+            });
+
+            $.fn.dataTable.defaults.dom = previousDom;
+
+            // Safety: strip any leftover DT search UI above the grid
+            setTimeout(function () {
+                $('.invoice-details-grid .dataTables_filter').remove();
+                $('.invoice-details-grid .dataTables_wrapper > .row').each(function () {
+                    var $row = $(this);
+                    if ($row.find('table').length === 0 && $row.find('.dataTables_filter').length) {
+                        $row.remove();
+                    }
+                });
+            }, 0);
+
+            var search = document.getElementById('invoiceDetailsSearch');
+            if (search) {
+                search.addEventListener('input', function () {
+                    table.search(search.value).draw();
+                });
+                search.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                    }
+                });
+            }
+
+            var form = document.getElementById('salesInvoiceDetailsFilterForm');
+            var type = document.getElementById('customerType');
+            var month = document.getElementById('month');
+            if (!form || !type || !month) return;
+            function submitFilter() { form.submit(); }
+            type.addEventListener('change', submitFilter);
+            month.addEventListener('change', submitFilter);
+        })();
+    </script>
 }

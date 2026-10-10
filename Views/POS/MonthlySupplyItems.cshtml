@@ -1,0 +1,141 @@
+@model MonthlySupplyItemsPageViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "Monthly Supply Items";
+    var priceMap = ViewBag.ProductPrices as Dictionary<string, decimal> ?? new Dictionary<string, decimal>();
+    var priceJson = JsonSerializer.Serialize(priceMap);
+}
+
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div class="d-flex align-items-center flex-wrap gap-2 monthly-supply-items-title-row">
+        <span class="monthly-supply-items-heading">Monthly Supply Items</span>
+        <span class="text-muted small mb-0">
+            Adding items for <strong class="text-body">@Model.ActiveCustomerCode — @Model.ActiveCustomerName</strong>
+        </span>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm"
+       asp-action="MonthlySupply">Back to customers</a>
+</div>
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success">@TempData["Success"]</div>
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-lg-4">
+        <div class="bg-white border rounded p-3 h-100">
+            <h2 class="h6 mb-3">Selected Customers</h2>
+            <div class="list-group list-group-flush">
+                @foreach (var c in Model.SelectedCustomers)
+                {
+                    var active = c.Uid == Model.ActiveCustomerUid;
+                    <a class="list-group-item list-group-item-action @(active ? "active" : "")"
+                       asp-action="MonthlySupplyItems"
+                       asp-route-customerUids="@Model.CustomerUidsQuery"
+                       asp-route-activeCustomerUid="@c.Uid">
+                        <div class="fw-semibold">@c.CustomerName</div>
+                        <div class="small @(active ? "" : "text-muted")">@c.CustomerCode</div>
+                    </a>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="bg-white border rounded p-3 mb-3">
+            <form asp-action="AddMonthlySupplyItem" method="post" class="row g-3 align-items-end">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="CustomerUid" value="@Model.ActiveCustomerUid" />
+                <input type="hidden" name="CustomerUids" value="@Model.CustomerUidsQuery" />
+                <div class="col-md-5">
+                    <label class="form-label" for="ProductUid">Product</label>
+                    <select name="ProductUid" id="ProductUid" class="form-select" asp-items="Model.Products" required>
+                        <option value="">Select product…</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label" for="Quantity">Quantity</label>
+                    <input type="number" step="0.1" min="0.1" name="Quantity" id="Quantity" class="form-control" value="1" required />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label" for="UnitPrice">Unit Price</label>
+                    <input type="number" step="0.01" min="0" name="UnitPrice" id="UnitPrice" class="form-control" value="0" required />
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary w-100">Add Item</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="table-responsive bg-white border rounded p-2">
+            <table class="table table-striped table-hover w-100 align-middle mb-0" id="monthlySupplyItemsTable">
+                <thead>
+                    <tr>
+                        <th>Product Code</th>
+                        <th>Product Name</th>
+                        <th>Brand</th>
+                        <th class="text-end">Qty</th>
+                        <th class="text-end">Unit Price</th>
+                        <th class="text-end">Line Total</th>
+                        <th style="width:90px"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @if (Model.Items.Count == 0)
+                {
+                    <tr>
+                        <td colspan="7" class="text-muted text-center py-4">No items yet for this customer.</td>
+                    </tr>
+                }
+                else
+                {
+                    foreach (var item in Model.Items)
+                    {
+                        <tr>
+                            <td>@item.ProductCode</td>
+                            <td>@item.ProductName</td>
+                            <td>@(string.IsNullOrWhiteSpace(item.BrandName) ? "—" : item.BrandName)</td>
+                            <td class="text-end">@item.Quantity.ToString("N1")</td>
+                            <td class="text-end">@item.UnitPrice.ToString("N2")</td>
+                            <td class="text-end">@item.LineTotal.ToString("N2")</td>
+                            <td>
+                                <form asp-action="DeleteMonthlySupplyItem" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@item.Uid" />
+                                    <input type="hidden" name="customerUids" value="@Model.CustomerUidsQuery" />
+                                    <input type="hidden" name="activeCustomerUid" value="@Model.ActiveCustomerUid" />
+                                    <button type="submit"
+                                            class="btn btn-sm btn-outline-danger"
+                                            onclick="return confirm('Delete this item?');">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            const prices = @Html.Raw(priceJson);
+            const productSelect = document.getElementById('ProductUid');
+            const unitPrice = document.getElementById('UnitPrice');
+            if (!productSelect || !unitPrice) return;
+
+            productSelect.addEventListener('change', function () {
+                const key = productSelect.value;
+                if (key && prices[key] != null) {
+                    unitPrice.value = Number(prices[key]).toFixed(2);
+                }
+            });
+        })();
+    </script>
+}
