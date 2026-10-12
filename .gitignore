@@ -4,12 +4,17 @@ obj/
 build/
 pos_mt/
 pos_mt_02/
+pos_mt_03/
+pos_mt_3/
 *.rar
 .vs/
 
 ## Uploaded product images (keep folder)
 wwwroot/uploads/products/*
 !wwwroot/uploads/products/.gitkeep
+
+## Local hub runtime state
+App_Data/
 *.user
 *.suo
 *.userosscache

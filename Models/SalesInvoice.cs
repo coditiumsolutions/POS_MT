@@ -17,6 +17,9 @@ public partial class SalesInvoice
     [Key]
     public int Uid { get; set; }
 
+    /// <summary>Client-generated unique id for offline/local-hub idempotent sync.</summary>
+    public Guid? ClientTransactionId { get; set; }
+
     [StringLength(50)]
     public string InvoiceNo { get; set; } = null!;
 

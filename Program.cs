@@ -1,9 +1,29 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
+using POS_MT.Cli;
 using POS_MT.Services;
 
+if (args.Length > 0 && string.Equals(args[0], "offline", StringComparison.OrdinalIgnoreCase))
+{
+    Environment.ExitCode = await OfflineCli.RunAsync(args.Skip(1).ToArray());
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
+
+// Published exe has no launchSettings — default Local Hub port (override with ASPNETCORE_URLS / Urls).
+var configuredUrls = builder.Configuration["Urls"]
+    ?? builder.Configuration["ASPNETCORE_URLS"]
+    ?? Environment.GetEnvironmentVariable("ASPNETCORE_URLS");
+if (string.IsNullOrWhiteSpace(configuredUrls))
+{
+    builder.WebHost.UseUrls("http://localhost:5227");
+}
+else
+{
+    builder.WebHost.UseUrls(configuredUrls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+}
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddAntiforgery(options =>

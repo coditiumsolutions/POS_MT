@@ -48,6 +48,8 @@ public partial class POSDbContext : DbContext
 
     public virtual DbSet<SalesInvoiceDetail> SalesInvoiceDetails { get; set; }
 
+    public virtual DbSet<SyncOutbox> SyncOutboxes { get; set; }
+
     public virtual DbSet<StockAdjustment> StockAdjustments { get; set; }
 
     public virtual DbSet<StockAdjustmentDetail> StockAdjustmentDetails { get; set; }
@@ -66,36 +68,39 @@ public partial class POSDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var isSqlite = Database.IsSqlite();
+        var nowSql = isSqlite ? "CURRENT_TIMESTAMP" : "(sysdatetime())";
+
         modelBuilder.Entity<AuditLog>(entity =>
         {
-            entity.Property(e => e.LogDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.LogDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
         modelBuilder.Entity<Branch>(entity =>
         {
-            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
         modelBuilder.Entity<Customer>(entity =>
         {
-            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
         modelBuilder.Entity<CustomerPayment>(entity =>
         {
-            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
-            entity.Property(e => e.PaymentDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
+            entity.Property(e => e.PaymentDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
         modelBuilder.Entity<CustomerMonthlyItem>(entity =>
         {
-            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
@@ -106,8 +111,8 @@ public partial class POSDbContext : DbContext
 
         modelBuilder.Entity<Expense>(entity =>
         {
-            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
-            entity.Property(e => e.ExpenseDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
+            entity.Property(e => e.ExpenseDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
@@ -120,13 +125,13 @@ public partial class POSDbContext : DbContext
         modelBuilder.Entity<Inventory>(entity =>
         {
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
-            entity.Property(e => e.UpdatedDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.UpdatedDate).HasDefaultValueSql(nowSql);
         });
 
         modelBuilder.Entity<InventoryTransaction>(entity =>
         {
-            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
-            entity.Property(e => e.TransactionDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
+            entity.Property(e => e.TransactionDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
@@ -138,14 +143,14 @@ public partial class POSDbContext : DbContext
 
         modelBuilder.Entity<Product>(entity =>
         {
-            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
         modelBuilder.Entity<ProductCategory>(entity =>
         {
-            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
@@ -158,10 +163,10 @@ public partial class POSDbContext : DbContext
 
         modelBuilder.Entity<PurchaseInvoice>(entity =>
         {
-            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.InvoiceStatus).HasDefaultValue("Completed");
             entity.Property(e => e.PaymentStatus).HasDefaultValue("Unpaid");
-            entity.Property(e => e.PurchaseDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.PurchaseDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
@@ -172,11 +177,18 @@ public partial class POSDbContext : DbContext
 
         modelBuilder.Entity<SalesInvoice>(entity =>
         {
-            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
-            entity.Property(e => e.InvoiceDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
+            entity.Property(e => e.InvoiceDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.InvoiceStatus).HasDefaultValue("Completed");
             entity.Property(e => e.PaymentStatus).HasDefaultValue("Unpaid");
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
+            var clientTxFilter = isSqlite
+                ? "ClientTransactionId IS NOT NULL"
+                : "[ClientTransactionId] IS NOT NULL";
+            entity.HasIndex(e => e.ClientTransactionId)
+                .IsUnique()
+                .HasFilter(clientTxFilter)
+                .HasDatabaseName("UX_SalesInvoices_ClientTransactionId");
         });
 
         modelBuilder.Entity<SalesInvoiceDetail>(entity =>
@@ -184,10 +196,18 @@ public partial class POSDbContext : DbContext
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
+        modelBuilder.Entity<SyncOutbox>(entity =>
+        {
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
+            entity.Property(e => e.Status).HasDefaultValue(SyncOutbox.StatusPending);
+            entity.Property(e => e.AttemptCount).HasDefaultValue(0);
+            entity.Property(e => e.Uid).ValueGeneratedOnAdd();
+        });
+
         modelBuilder.Entity<StockAdjustment>(entity =>
         {
-            entity.Property(e => e.AdjustmentDate).HasDefaultValueSql("(sysdatetime())");
-            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.AdjustmentDate).HasDefaultValueSql(nowSql);
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.Status).HasDefaultValue("Completed");
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
@@ -199,45 +219,70 @@ public partial class POSDbContext : DbContext
 
         modelBuilder.Entity<Terminal>(entity =>
         {
-            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
         modelBuilder.Entity<User>(entity =>
         {
-            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
         modelBuilder.Entity<UserSession>(entity =>
         {
-            entity.Property(e => e.LoginDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.LoginDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.SessionStatus).HasDefaultValue("Active");
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
         modelBuilder.Entity<Vendor>(entity =>
         {
-            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
         modelBuilder.Entity<VendorPayment>(entity =>
         {
-            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
-            entity.Property(e => e.PaymentDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
+            entity.Property(e => e.PaymentDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
         modelBuilder.Entity<Warehouse>(entity =>
         {
-            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(sysdatetime())");
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
+
+        if (isSqlite)
+        {
+            // SQL Server store types like varchar(max)/decimal(18,2) are invalid in SQLite DDL.
+            foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+            {
+                foreach (var property in entityType.GetProperties())
+                {
+                    var storeType = property.GetColumnType();
+                    if (string.IsNullOrWhiteSpace(storeType))
+                    {
+                        continue;
+                    }
+
+                    if (storeType.Contains("max", StringComparison.OrdinalIgnoreCase)
+                        || storeType.StartsWith("nvarchar", StringComparison.OrdinalIgnoreCase)
+                        || storeType.StartsWith("varchar", StringComparison.OrdinalIgnoreCase)
+                        || storeType.StartsWith("decimal", StringComparison.OrdinalIgnoreCase)
+                        || storeType.StartsWith("datetime", StringComparison.OrdinalIgnoreCase))
+                    {
+                        property.SetColumnType(null);
+                    }
+                }
+            }
+        }
 
         OnModelCreatingPartial(modelBuilder);
     }

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using POS_MT.Data;
 using POS_MT.Interfaces;
 using POS_MT.Models;
+using POS_MT.Services;
 using POS_MT.ViewModels;
 
 namespace POS_MT.Controllers;
@@ -16,12 +17,18 @@ public class POSController : Controller
     private readonly INavContextService _navContext;
     private readonly POSDbContext _db;
     private readonly IAuditService _audit;
+    private readonly ISyncOutboxService _syncOutbox;
 
-    public POSController(INavContextService navContext, POSDbContext db, IAuditService audit)
+    public POSController(
+        INavContextService navContext,
+        POSDbContext db,
+        IAuditService audit,
+        ISyncOutboxService syncOutbox)
     {
         _navContext = navContext;
         _db = db;
         _audit = audit;
+        _syncOutbox = syncOutbox;
     }
 
     [HttpGet]
@@ -232,6 +239,7 @@ public class POSController : Controller
 
                 invoice = new SalesInvoice
                 {
+                    ClientTransactionId = Guid.NewGuid(),
                     InvoiceNo = invoiceNo,
                     InvoiceDate = monthStart,
                     BranchUid = branchUid,
@@ -254,6 +262,10 @@ public class POSController : Controller
                 _db.SalesInvoices.Add(invoice);
                 await _db.SaveChangesAsync(ct);
                 createdNew = true;
+            }
+            else if (invoice.ClientTransactionId is null)
+            {
+                invoice.ClientTransactionId = Guid.NewGuid();
             }
 
             foreach (var line in monthlyItems)
@@ -298,6 +310,11 @@ public class POSController : Controller
                 await _audit.WriteAsync("Update", "SalesInvoices", invoice.Uid.ToString(),
                     $"Added {monthlyItems.Count} monthly supply detail line(s) to {invoice.InvoiceNo} for {customer.CustomerCode} on {supplyDay:yyyy-MM-dd}.", ct);
                 processed.Add($"{customer.CustomerCode}: updated {invoice.InvoiceNo} (+{monthlyItems.Count} lines)");
+            }
+
+            if (invoice.ClientTransactionId is Guid supplyTx)
+            {
+                await _syncOutbox.EnqueueSalesInvoiceAsync(invoice.Uid, supplyTx, ct);
             }
         }
 
@@ -750,6 +767,7 @@ public class POSController : Controller
 
                 invoice = new SalesInvoice
                 {
+                    ClientTransactionId = Guid.NewGuid(),
                     InvoiceNo = invoiceNo,
                     InvoiceDate = entryDate,
                     BranchUid = branchUid,
@@ -769,6 +787,10 @@ public class POSController : Controller
                 };
                 _db.SalesInvoices.Add(invoice);
                 await _db.SaveChangesAsync(ct);
+            }
+            else if (invoice.ClientTransactionId is null)
+            {
+                invoice.ClientTransactionId = Guid.NewGuid();
             }
 
             detail = new SalesInvoiceDetail
@@ -798,6 +820,11 @@ public class POSController : Controller
         }
 
         await tx.CommitAsync(ct);
+
+        if (invoice.ClientTransactionId is Guid monthlyTx)
+        {
+            await _syncOutbox.EnqueueSalesInvoiceAsync(invoice.Uid, monthlyTx, ct);
+        }
 
         return Ok(new MonthlyEntryApiResult
         {
@@ -926,11 +953,20 @@ public class POSController : Controller
         primary.PaymentStatus = "Unpaid";
         primary.InvoiceStatus = "Completed";
         primary.UpdatedDate = DateTime.Now;
+        if (primary.ClientTransactionId is null)
+        {
+            primary.ClientTransactionId = Guid.NewGuid();
+        }
         await _db.SaveChangesAsync(ct);
 
         await _audit.WriteAsync("Update", "SalesInvoices", primary.Uid.ToString(),
             $"Finalized monthly sales invoice {primary.InvoiceNo} for {customer.CustomerName} with {detailCount} item(s).", ct);
         await tx.CommitAsync(ct);
+
+        if (primary.ClientTransactionId is Guid finalizedTx)
+        {
+            await _syncOutbox.EnqueueSalesInvoiceAsync(primary.Uid, finalizedTx, ct);
+        }
 
         return Ok(new MonthlyEntryApiResult
         {
@@ -1032,6 +1068,25 @@ public class POSController : Controller
             userUid = parsedUserId;
         }
 
+        var clientTxId = request.ClientTransactionId is Guid g && g != Guid.Empty
+            ? g
+            : Guid.NewGuid();
+
+        var existingByClient = await _db.SalesInvoices.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.ClientTransactionId == clientTxId, ct);
+        if (existingByClient is not null)
+        {
+            return Ok(new PosCheckoutResultViewModel
+            {
+                Success = true,
+                Message = $"Sale already saved as {existingByClient.InvoiceNo}.",
+                InvoiceUid = existingByClient.Uid,
+                InvoiceNo = existingByClient.InvoiceNo,
+                NetAmount = existingByClient.NetAmount,
+                InvoiceDate = existingByClient.InvoiceDate
+            });
+        }
+
         var invoiceNo = $"POS-{mode[0]}-{DateTime.Now:yyyyMMddHHmmssfff}";
         while (await _db.SalesInvoices.AnyAsync(x => x.InvoiceNo == invoiceNo, ct))
         {
@@ -1059,6 +1114,7 @@ public class POSController : Controller
 
         var invoice = new SalesInvoice
         {
+            ClientTransactionId = clientTxId,
             InvoiceNo = invoiceNo,
             InvoiceDate = DateTime.Now,
             BranchUid = branchUid,
@@ -1106,6 +1162,8 @@ public class POSController : Controller
         await _audit.WriteAsync("Create", "SalesInvoices", invoice.Uid.ToString(),
             $"POS {mode} sale {invoice.InvoiceNo} amount {invoice.NetAmount:N2}", ct);
         await tx.CommitAsync(ct);
+
+        await _syncOutbox.EnqueueSalesInvoiceAsync(invoice.Uid, clientTxId, ct);
 
         return Ok(new PosCheckoutResultViewModel
         {

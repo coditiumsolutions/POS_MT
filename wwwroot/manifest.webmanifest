@@ -1,0 +1,16 @@
+{
+  "name": "Coditium POS",
+  "short_name": "POS",
+  "description": "Coditium Point of Sale — local shop hub",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}

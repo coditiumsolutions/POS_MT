@@ -1,6 +1,6 @@
 ﻿POS_MT - Database Documentation
 ===============================
-Version   : 1.0.4
+Version   : 1.0.5
 UpdatedAt : 10/10/2026
 
 Database Information
@@ -13,7 +13,7 @@ Provider : SQL Server
 
 Note: Password, host, and full connection string are kept in local appsettings.Development.json / deploy build config only (not stored in this file).
 
-Tables (26)
+Tables (27)
 -----------
 AuditLogs
 Branches
@@ -35,6 +35,7 @@ SalesInvoiceDetails
 SalesInvoices
 StockAdjustmentDetails
 StockAdjustments
+SyncOutbox
 Terminals
 Users
 UserSessions
@@ -324,6 +325,7 @@ Remarks                     nvarchar(300)           YES     NO
 Column                      Type                    Null    Identity  Default
 ------------------------------------------------------------------------------------------
 uid                         int                     NO      YES       
+ClientTransactionId         uniqueidentifier        YES     NO        
 InvoiceNo                   nvarchar(50)            NO      NO        
 InvoiceDate                 datetime2               NO      NO        (sysdatetime())
 BranchUID                   int                     YES     NO        
@@ -343,6 +345,25 @@ InvoiceStatus               nvarchar(30)            NO      NO        ('Complete
 Remarks                     nvarchar(500)           YES     NO        
 CreatedDate                 datetime2               NO      NO        (sysdatetime())
 UpdatedDate                 datetime2               YES     NO        
+Indexes:
+  UX_SalesInvoices_ClientTransactionId (ClientTransactionId) UNIQUE WHERE ClientTransactionId IS NOT NULL
+
+=== SyncOutbox ===
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+EntityType                  nvarchar(50)            NO      NO        
+EntityUid                   int                     NO      NO        
+ClientTransactionId         uniqueidentifier        NO      NO        
+Status                      nvarchar(20)            NO      NO        ('Pending')
+AttemptCount                int                     NO      NO        ((0))
+LastError                   nvarchar(2000)          YES     NO        
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+UpdatedDate                 datetime2               YES     NO        
+SyncedDate                  datetime2               YES     NO        
+Indexes:
+  UX_SyncOutbox_ClientTransactionId (ClientTransactionId) UNIQUE
+  IX_SyncOutbox_Status_CreatedDate (Status, CreatedDate)
 
 === StockAdjustmentDetails ===
 Column                      Type                    Null    Identity  Default

@@ -10,6 +10,7 @@ public static class DependencyInjection
     public static IServiceCollection AddPosServices(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<StockMovementOptions>(configuration.GetSection(StockMovementOptions.SectionName));
+        services.Configure<PosHubOptions>(configuration.GetSection(PosHubOptions.SectionName));
 
         var connectionString = configuration.GetConnectionString("POS_MT");
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -24,7 +25,7 @@ public static class DependencyInjection
             throw new InvalidOperationException(
                 "Connection string 'POS_MT' still has placeholder values. " +
                 "On the server, set ConnectionStrings:POS_MT in appsettings.json (or environment variables). " +
-                "Locally, use appsettings.Development.json. Publish copies the Development connection string into the published appsettings.json.");
+                "For offline use, run: POS_MT.exe offline pull (creates local SQLite).");
         }
 
         services.AddHttpContextAccessor();
@@ -36,8 +37,29 @@ public static class DependencyInjection
             options.IdleTimeout = TimeSpan.FromHours(8);
         });
 
-        services.AddDbContext<POSDbContext>(options =>
-            options.UseSqlServer(connectionString));
+        services.AddSingleton<IOfflineSqlitePaths, OfflineSqlitePaths>();
+        services.AddSingleton<IPosConnectionRouter, PosConnectionRouter>();
+        services.AddHostedService<PosConnectionRefreshService>();
+        services.AddScoped<IOfflineSqliteSyncService, OfflineSqliteSyncService>();
+
+        services.AddDbContext<POSDbContext>((sp, options) =>
+        {
+            var router = sp.GetRequiredService<IPosConnectionRouter>();
+            var cs = router.GetOperationalConnectionString();
+            if (router.IsSqliteActive)
+            {
+                options.UseSqlite(cs);
+            }
+            else
+            {
+                options.UseSqlServer(cs);
+            }
+        });
+
+        services.AddSingleton<HubSyncStateStore>();
+        services.AddScoped<IHubStatusService, HubStatusService>();
+        services.AddScoped<ISyncOutboxService, SyncOutboxService>();
+        services.AddHostedService<CentralSyncWorker>();
 
         services.AddScoped<IPasswordHashService, PasswordHashService>();
         services.AddScoped<IAuthService, AuthService>();

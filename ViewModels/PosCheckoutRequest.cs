@@ -19,6 +19,9 @@ public sealed class PosCheckoutRequest
     [Required]
     public string Mode { get; set; } = "Cash";
 
+    /// <summary>Optional client-generated GUID for idempotent offline/local-hub checkout.</summary>
+    public Guid? ClientTransactionId { get; set; }
+
     [MinLength(1)]
     public List<PosCheckoutItemRequest> Items { get; set; } = [];
 }

@@ -352,6 +352,9 @@
                 },
                 body: JSON.stringify({
                     mode: posMode,
+                    clientTransactionId: (window.crypto && crypto.randomUUID)
+                        ? crypto.randomUUID()
+                        : null,
                     items: items.map(function (item) {
                         return {
                             productUid: parseInt(item.uid, 10),

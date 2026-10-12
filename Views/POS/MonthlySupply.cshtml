@@ -7,7 +7,7 @@
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
     <div>
         <h1 class="page-heading mb-1">Monthly Supply</h1>
-        <p class="text-muted mb-0">Select customers, choose a supply date, and click <strong>Add Supplied</strong>. One monthly invoice per customer per month — later supplies add detail lines to the same invoice. Double-click a row to edit items.</p>
+        <p class="text-muted mb-0">Select customers, choose a supply date, and click <strong>Add Supplied</strong>. One monthly invoice per customer per month — later supplies add detail lines to the same invoice. Use <strong>▶</strong> or double-click a row to view monthly items.</p>
     </div>
     <div class="text-muted small align-self-center">
         Selected: <strong id="monthlySupplySelectedCount">0</strong>
@@ -59,6 +59,10 @@
                     <th style="width:42px">
                         <input type="checkbox" id="monthlySupplySelectAll" class="form-check-input" title="Select all" />
                     </th>
+                    <th class="monthly-supply-expand-col" style="width:40px" title="Expand row for monthly items" scope="col">
+                        <span class="monthly-supply-expand-hdr" aria-hidden="true">&#9654;</span>
+                        <span class="visually-hidden">Expand</span>
+                    </th>
                     <th>Code</th>
                     <th>Customer Name</th>
                     <th>Mobile</th>
@@ -70,7 +74,7 @@
             @if (Model.Customers.Count == 0)
             {
                 <tr>
-                    <td colspan="6" class="text-muted text-center py-4">No monthly customers found.</td>
+                    <td colspan="7" class="text-muted text-center py-4">No monthly customers found.</td>
                 </tr>
             }
             else
@@ -81,7 +85,7 @@
                         data-customer-uid="@c.Uid"
                         data-customer-code="@c.CustomerCode"
                         data-customer-name="@c.CustomerName"
-                        title="Double-click to open monthly items">
+                        title="Click ▶ or double-click to view monthly items">
                         <td class="monthly-supply-check-cell">
                             <input type="checkbox"
                                    class="form-check-input monthly-supply-check"
@@ -90,6 +94,15 @@
                                    data-uid="@c.Uid"
                                    data-name="@c.CustomerName" />
                         </td>
+                        <td class="monthly-supply-expand-cell">
+                            <button type="button"
+                                    class="monthly-supply-twistee"
+                                    aria-expanded="false"
+                                    aria-label="Show monthly items for @c.CustomerName"
+                                    title="Show monthly items">
+                                <span class="monthly-supply-twistee-glyph" aria-hidden="true">&#9654;</span>
+                            </button>
+                        </td>
                         <td>@c.CustomerCode</td>
                         <td>@c.CustomerName</td>
                         <td>@(string.IsNullOrWhiteSpace(c.MobileNo) ? "—" : c.MobileNo)</td>
@@ -97,11 +110,11 @@
                         <td>@(string.IsNullOrWhiteSpace(c.Area) ? "—" : c.Area)</td>
                     </tr>
                     <tr class="monthly-supply-detail-row d-none" data-detail-for="@c.Uid" aria-hidden="true">
-                        <td colspan="6" class="p-0 border-0">
+                        <td colspan="7" class="p-0 border-0">
                             <div class="monthly-supply-detail-panel">
                                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2 px-3 pt-3">
                                     <strong class="monthly-supply-detail-title">Monthly items — @c.CustomerName</strong>
-                                    <span class="text-muted small">Double-click the customer row again to close</span>
+                                    <span class="text-muted small">Click ▶ again or double-click the row to close</span>
                                 </div>
                                 <div class="monthly-supply-items-loading text-muted px-3 pb-3">Loading items…</div>
                                 <div class="monthly-supply-items-host d-none px-3 pb-3"></div>
@@ -169,6 +182,13 @@
                     return document.querySelector('.monthly-supply-customer-row[data-customer-uid="' + uid + '"]');
                 }
 
+                function setTwisteeExpanded(customerRow, expanded) {
+                    const btn = customerRow?.querySelector('.monthly-supply-twistee');
+                    if (!btn) return;
+                    btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                    btn.setAttribute('title', expanded ? 'Hide monthly items' : 'Show monthly items');
+                }
+
                 function closeAllDetails() {
                     document.querySelectorAll('.monthly-supply-detail-row').forEach(function (row) {
                         row.classList.add('d-none');
@@ -176,6 +196,7 @@
                     });
                     document.querySelectorAll('.monthly-supply-customer-row').forEach(function (row) {
                         row.classList.remove('monthly-supply-row-expanded');
+                        setTwisteeExpanded(row, false);
                     });
                     activeCustomerUid = null;
                 }
@@ -311,6 +332,7 @@
                     detailRow.classList.remove('d-none');
                     detailRow.setAttribute('aria-hidden', 'false');
                     customerRow.classList.add('monthly-supply-row-expanded');
+                    setTwisteeExpanded(customerRow, true);
                     loadItems(uid, detailRow, false);
                     detailRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
                 }
@@ -322,6 +344,17 @@
                         if (!uid) return;
                         openCustomerDetail(uid);
                     });
+
+                    const twistee = row.querySelector('.monthly-supply-twistee');
+                    if (twistee) {
+                        twistee.addEventListener('click', function (e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const uid = parseInt(row.getAttribute('data-customer-uid'), 10);
+                            if (!uid) return;
+                            openCustomerDetail(uid);
+                        });
+                    }
                 });
 
                 if (filterInput) {
