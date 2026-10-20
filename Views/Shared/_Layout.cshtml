@@ -7,6 +7,15 @@
     var currentArea = NavContext.CurrentArea;
     var currentController = ViewContext.RouteData.Values["controller"]?.ToString();
     var afTokens = Antiforgery.GetAndStoreTokens(Context);
+    var sessionUserName = Context.Session.GetString(POS_MT.Controllers.AccountController.SessionUserNameKey);
+    var sessionTerminal = Context.Session.GetString(POS_MT.Controllers.AccountController.SessionTerminalNameKey);
+    var sessionBranch = Context.Session.GetString(POS_MT.Controllers.AccountController.SessionBranchKey);
+    if (string.IsNullOrWhiteSpace(sessionUserName))
+        sessionUserName = User.FindFirst("UserName")?.Value ?? User.Identity?.Name;
+    if (string.IsNullOrWhiteSpace(sessionTerminal))
+        sessionTerminal = User.FindFirst("TerminalName")?.Value;
+    if (string.IsNullOrWhiteSpace(sessionBranch))
+        sessionBranch = User.FindFirst("Branch")?.Value;
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -59,7 +68,11 @@
                             </div>
                         </div>
                         <div id="hubModeMessage" class="hub-mode-message" hidden role="status" aria-live="polite"></div>
-                        <span class="pos-user-name">@User.Identity.Name</span>
+                        <div class="pos-session-meta" title="Signed-in user session">
+                            <span class="pos-session-item"><span class="pos-session-label">User</span> @(string.IsNullOrWhiteSpace(sessionUserName) ? "—" : sessionUserName)</span>
+                            <span class="pos-session-item"><span class="pos-session-label">Terminal</span> @(string.IsNullOrWhiteSpace(sessionTerminal) ? "—" : sessionTerminal)</span>
+                            <span class="pos-session-item"><span class="pos-session-label">Branch</span> @(string.IsNullOrWhiteSpace(sessionBranch) ? "—" : sessionBranch)</span>
+                        </div>
                         <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">
                             @Html.AntiForgeryToken()
                             <button type="submit" class="btn btn-outline-light btn-sm">Logout</button>
@@ -139,7 +152,44 @@
                         <div class="pos-nav-label">@currentArea.Title</div>
                         @foreach (var link in currentArea.SubLinks)
                         {
-                            if (!string.IsNullOrWhiteSpace(link.Controller))
+                            if (link.Children is { Count: > 0 })
+                            {
+                                var groupActive = link.Children.Any(child =>
+                                    !string.IsNullOrWhiteSpace(child.Controller)
+                                    && IsController(child.Controller)
+                                    && string.Equals(ViewContext.RouteData.Values["action"]?.ToString(), child.Action, StringComparison.OrdinalIgnoreCase));
+                                <div class="pos-nav-group @(groupActive ? "open active" : "open")" data-side-nav-group>
+                                    <button type="button"
+                                            class="pos-nav-link pos-nav-group-toggle"
+                                            aria-expanded="true"
+                                            data-side-nav-twistee>
+                                        <i class="bi @link.IconClass" aria-hidden="true"></i>
+                                        <span>@link.Title</span>
+                                        <i class="bi bi-caret-right-fill pos-nav-group-caret" aria-hidden="true"></i>
+                                    </button>
+                                    <div class="pos-nav-group-menu">
+                                        @foreach (var child in link.Children)
+                                        {
+                                            if (string.IsNullOrWhiteSpace(child.Controller))
+                                            {
+                                                continue;
+                                            }
+                                            var childActive = IsController(child.Controller)
+                                                              && string.Equals(ViewContext.RouteData.Values["action"]?.ToString(), child.Action, StringComparison.OrdinalIgnoreCase);
+                                            <a class="pos-nav-link pos-nav-sublink @(childActive ? "active" : "")"
+                                               asp-controller="@child.Controller"
+                                               asp-action="@child.Action"
+                                               asp-route-filter="@child.Filter"
+                                               asp-route-itemMonth="@child.ItemMonth"
+                                               asp-route-navArea="@child.NavArea">
+                                                <i class="bi @child.IconClass" aria-hidden="true"></i>
+                                                <span>@child.Title</span>
+                                            </a>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(link.Controller))
                             {
                                 var linkActive = IsController(link.Controller)
                                                  && string.Equals(ViewContext.RouteData.Values["action"]?.ToString(), link.Action, StringComparison.OrdinalIgnoreCase);
@@ -168,12 +218,12 @@
                     }
 
                     <div class="pos-nav-permanent">
-                        <a class="pos-nav-link @(IsController("Modules") ? "active" : "")"
+                        <a class="pos-nav-link pos-nav-accent @(IsController("Modules") ? "active" : "")"
                            asp-controller="Modules" asp-action="Index">
                             <i class="bi bi-grid-3x3-gap" aria-hidden="true"></i>
                             <span>Modules</span>
                         </a>
-                        <a class="pos-nav-link @(IsController("Setup") ? "active" : "")"
+                        <a class="pos-nav-link pos-nav-accent @(IsController("Setup") ? "active" : "")"
                            asp-controller="Setup" asp-action="Index">
                             <i class="bi bi-gear" aria-hidden="true"></i>
                             <span>Setup</span>

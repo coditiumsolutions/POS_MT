@@ -7,7 +7,8 @@ public sealed record NavLinkItem(
     string? Filter = null,
     string IconClass = "bi-circle",
     int? ItemMonth = null,
-    string? NavArea = null);
+    string? NavArea = null,
+    IReadOnlyList<NavLinkItem>? Children = null);
 
 public sealed record TopNavArea(string Key, string Title, IReadOnlyList<NavLinkItem> SubLinks);
 
@@ -37,23 +38,24 @@ public static class NavigationCatalog
         new("Customers", "Customers",
         [
             new("Add Customers", "Customers", "Create", IconClass: "bi-person-plus"),
-            new("All Customers", "Customers", IconClass: "bi-people")
-        ]),
-        new("SalesInvoice", "Invoices",
-        [
-            new("All Sales", "SalesInvoices", IconClass: "bi-receipt"),
-            new("All Sale Items", "SalesInvoiceDetails", IconClass: "bi-list-ul")
+            new("All Customers", "Customers", IconClass: "bi-people"),
+            new("Add Payment", "CustomerPayments", "Create", IconClass: "bi-cash-coin"),
+            new("All Payments", "CustomerPayments", IconClass: "bi-wallet2")
         ]),
         new("Reports", "Reports",
         [
             new("Sales Report", "Reports", "TotalSale", IconClass: "bi-graph-up-arrow"),
+            new("Daily Report", "Reports", "DailyReport", IconClass: "bi-calendar-day"),
             new("Slow / Dead Stock", "StockMovement", IconClass: "bi-hourglass-split", NavArea: "Reports")
         ]),
         new("AllModules", "All Modules",
         [
             new("Vendors", "Vendors", IconClass: "bi-truck"),
             new("Products", "Products", IconClass: "bi-box-seam"),
-            new("Inventories", "Inventories", IconClass: "bi-boxes")
+            new("Inventories", "Inventories", IconClass: "bi-boxes"),
+            new("Purchases", "PurchaseInvoices", IconClass: "bi-cart-plus"),
+            new("Sales", "SalesInvoices", IconClass: "bi-receipt"),
+            new("Expenses", "Expenses", IconClass: "bi-credit-card")
         ])
     ];
 
@@ -67,8 +69,21 @@ public static class NavigationCatalog
         ]),
         new("Products", "Products",
         [
-            new("Add Product", "Products", "Create", IconClass: "bi-plus-circle"),
-            new("All Products", "Products", IconClass: "bi-box-seam")
+            new("Categories", IconClass: "bi-tags", Children:
+            [
+                new("Add Category", "ProductCategories", "Create", IconClass: "bi-plus-circle", NavArea: "Products"),
+                new("Categories", "ProductCategories", IconClass: "bi-tags", NavArea: "Products")
+            ]),
+            new("Products", IconClass: "bi-box-seam", Children:
+            [
+                new("Add Product", "Products", "Create", IconClass: "bi-plus-circle"),
+                new("All Products", "Products", IconClass: "bi-box-seam")
+            ])
+        ]),
+        new("Purchases", "Purchases",
+        [
+            new("All Purchases", "PurchaseInvoices", IconClass: "bi-cart-plus"),
+            new("Add Invoice", "PurchaseInvoices", "Create", IconClass: "bi-plus-circle")
         ]),
         new("SalesInvoice", "Sales Invoice",
         [

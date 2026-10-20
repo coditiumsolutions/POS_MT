@@ -15,12 +15,14 @@ public class CustomersController : Controller
     private readonly POSDbContext _db;
     private readonly IAuditService _audit;
     private readonly INavContextService _navContext;
+    private readonly ICustomerAdvanceService _advance;
 
-    public CustomersController(POSDbContext db, IAuditService audit, INavContextService navContext)
+    public CustomersController(POSDbContext db, IAuditService audit, INavContextService navContext, ICustomerAdvanceService advance)
     {
         _db = db;
         _audit = audit;
         _navContext = navContext;
+        _advance = advance;
     }
 
     private void EnsureCustomersNav() => _navContext.SetArea("Customers");
@@ -28,6 +30,7 @@ public class CustomersController : Controller
     public async Task<IActionResult> Index(string? filter, CancellationToken ct)
     {
         EnsureCustomersNav();
+        await _advance.EnsureSchemaAsync(ct);
         ViewData["Filter"] = filter;
         var query = _db.Customers.AsNoTracking().AsQueryable();
         if (string.Equals(filter, "credit", StringComparison.OrdinalIgnoreCase))
@@ -138,6 +141,7 @@ public class CustomersController : Controller
     public async Task<IActionResult> Details(int id, CancellationToken ct)
     {
         EnsureCustomersNav();
+        await _advance.EnsureSchemaAsync(ct);
         var entity = await _db.Customers.AsNoTracking().FirstOrDefaultAsync(x => x.Uid == id, ct);
         return entity is null ? NotFound() : View(entity);
     }
@@ -159,6 +163,114 @@ public class CustomersController : Controller
         await _audit.WriteAsync("Cancel", "Customers", entity.Uid.ToString(), $"Deactivated customer {entity.CustomerCode}", ct);
         TempData["Success"] = "Customer deactivated.";
         return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id, string? filter, CancellationToken ct)
+    {
+        EnsureCustomersNav();
+        var entity = await _db.Customers.FindAsync([id], ct);
+        if (entity is null)
+        {
+            return NotFound();
+        }
+
+        if (string.Equals(entity.CustomerCode, "C001", StringComparison.OrdinalIgnoreCase)
+            || entity.CustomerName.Contains("Walk-in", StringComparison.OrdinalIgnoreCase)
+            || entity.CustomerName.Contains("Walk-In", StringComparison.OrdinalIgnoreCase)
+            || entity.CustomerName.Contains("Walk In", StringComparison.OrdinalIgnoreCase))
+        {
+            TempData["Error"] = $"Cannot delete system customer {entity.CustomerCode}.";
+            return RedirectToAction(nameof(Index), new { filter });
+        }
+
+        var code = entity.CustomerCode;
+        var name = entity.CustomerName;
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            await RemoveCustomerUsageAsync(id, code, ct);
+            _db.Customers.Remove(entity);
+            await _db.SaveChangesAsync(ct);
+            await _audit.WriteAsync("Delete", "Customers", id.ToString(),
+                $"Deleted customer {code} ({name}) and related records.", ct);
+            await tx.CommitAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            await tx.RollbackAsync(ct);
+            TempData["Error"] = $"Cannot delete customer {code} because other records still use it.";
+            return RedirectToAction(nameof(Index), new { filter });
+        }
+
+        TempData["Success"] = $"Customer {code} and related records were deleted.";
+        return RedirectToAction(nameof(Index), new { filter });
+    }
+
+    private async Task RemoveCustomerUsageAsync(int customerId, string customerCode, CancellationToken ct)
+    {
+        var monthlyOverrides = await _db.CustomerMonthlySupplyOverrides
+            .Where(x => x.CustomerUid == customerId)
+            .ToListAsync(ct);
+        if (monthlyOverrides.Count > 0)
+            _db.CustomerMonthlySupplyOverrides.RemoveRange(monthlyOverrides);
+
+        var monthly = await _db.CustomerMonthlySupplies
+            .Where(x => x.CustomerUid == customerId || x.CustomerCode == customerCode)
+            .ToListAsync(ct);
+        if (monthly.Count > 0)
+            _db.CustomerMonthlySupplies.RemoveRange(monthly);
+
+        var payments = await _db.CustomerPayments
+            .Where(x => x.CustomerUid == customerId)
+            .ToListAsync(ct);
+        if (payments.Count > 0)
+            _db.CustomerPayments.RemoveRange(payments);
+
+        var invoices = await _db.SalesInvoices
+            .Where(x => x.CustomerUid == customerId)
+            .ToListAsync(ct);
+        if (invoices.Count > 0)
+        {
+            var invoiceIds = invoices.Select(x => x.Uid).ToList();
+            var details = await _db.SalesInvoiceDetails
+                .Where(x => invoiceIds.Contains(x.SalesInvoiceUid))
+                .ToListAsync(ct);
+            if (details.Count > 0)
+                _db.SalesInvoiceDetails.RemoveRange(details);
+
+            var inventoryTx = await _db.InventoryTransactions
+                .Where(x => x.ReferenceUid != null && invoiceIds.Contains(x.ReferenceUid.Value))
+                .ToListAsync(ct);
+            if (inventoryTx.Count > 0)
+                _db.InventoryTransactions.RemoveRange(inventoryTx);
+
+            _db.SalesInvoices.RemoveRange(invoices);
+        }
+
+        await _db.SaveChangesAsync(ct);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult OpenItems(int[]? selectedCustomerUids, string? filter)
+    {
+        EnsureCustomersNav();
+        if (selectedCustomerUids is null || selectedCustomerUids.Length == 0)
+        {
+            TempData["Error"] = "Select at least one customer.";
+            return RedirectToAction(nameof(Index), new { filter });
+        }
+
+        var ids = string.Join(",", selectedCustomerUids.Distinct().Where(x => x > 0));
+        if (string.IsNullOrWhiteSpace(ids))
+        {
+            TempData["Error"] = "Select at least one customer.";
+            return RedirectToAction(nameof(Index), new { filter });
+        }
+
+        return RedirectToAction("MonthlySupplyItems", "POS", new { customerUids = ids, returnTo = "Customers" });
     }
 
     private static CustomerFormViewModel MapToForm(Customer e) => new()

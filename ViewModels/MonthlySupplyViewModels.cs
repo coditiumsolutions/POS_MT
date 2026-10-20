@@ -28,6 +28,9 @@ public sealed class MonthlySupplyItemsPageViewModel
     public string CustomerUidsQuery { get; set; } = string.Empty;
     public IEnumerable<SelectListItem> Products { get; set; } = [];
     public List<MonthlySupplyItemRowViewModel> Items { get; set; } = [];
+
+    /// <summary>When set to Customers, Back returns to Customers Index.</summary>
+    public string? ReturnTo { get; set; }
 }
 
 public sealed class MonthlySupplyItemRowViewModel
@@ -40,6 +43,7 @@ public sealed class MonthlySupplyItemRowViewModel
     public string? BrandName { get; set; }
     public decimal Quantity { get; set; }
     public decimal UnitPrice { get; set; }
+    public decimal DeliveryCharges { get; set; }
     public decimal LineTotal => Quantity * UnitPrice;
 }
 
@@ -56,6 +60,9 @@ public sealed class MonthlySupplyUpdateItemRequest
 
     [Range(0, 99999999)]
     public decimal UnitPrice { get; set; }
+
+    [Range(0, 99999999)]
+    public decimal DeliveryCharges { get; set; }
 }
 
 public sealed class MonthlySupplyAddItemRequest
@@ -72,5 +79,10 @@ public sealed class MonthlySupplyAddItemRequest
     [Range(0, 99999999)]
     public decimal UnitPrice { get; set; }
 
+    [Range(0, 99999999)]
+    public decimal DeliveryCharges { get; set; }
+
     public string? CustomerUids { get; set; }
+
+    public string? ReturnTo { get; set; }
 }

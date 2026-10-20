@@ -3,6 +3,7 @@
     ViewData["Title"] = "Invoice Details";
     var type = Model.CustomerType ?? string.Empty;
     var selectedMonth = Model.Month;
+    var selectedDate = Model.Date?.ToString("yyyy-MM-dd") ?? string.Empty;
 }
 
 <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
@@ -75,6 +76,14 @@
                 }
             </select>
         </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label mb-1" for="date">Date</label>
+            <input type="date"
+                   class="form-control form-control-sm"
+                   id="date"
+                   name="date"
+                   value="@selectedDate" />
+        </div>
         <div class="col-12 col-md-auto flex-grow-1">
             <label class="form-label mb-1" for="invoiceDetailsSearch">Search</label>
             <div class="d-flex flex-wrap gap-2 align-items-center">
@@ -129,6 +138,7 @@
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="customerType" value="@Model.CustomerType" />
                         <input type="hidden" name="month" value="@Model.Month" />
+                        <input type="hidden" name="date" value="@selectedDate" />
                         <button type="submit" class="btn btn-sm btn-outline-danger"
                                 onclick="return confirm('Delete this invoice detail line?');">Delete</button>
                     </form>
@@ -203,10 +213,12 @@
             var form = document.getElementById('salesInvoiceDetailsFilterForm');
             var type = document.getElementById('customerType');
             var month = document.getElementById('month');
+            var date = document.getElementById('date');
             if (!form || !type || !month) return;
             function submitFilter() { form.submit(); }
             type.addEventListener('change', submitFilter);
             month.addEventListener('change', submitFilter);
+            if (date) date.addEventListener('change', submitFilter);
         })();
     </script>
 }

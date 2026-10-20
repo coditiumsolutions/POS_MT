@@ -34,6 +34,10 @@ public partial class CustomerPayment
     [Column(TypeName = "decimal(18, 2)")]
     public decimal Amount { get; set; }
 
+    /// <summary>Portion of <see cref="Amount"/> applied to <see cref="SalesInvoiceUid"/>; remainder increases customer advance.</summary>
+    [Column(TypeName = "decimal(18, 2)")]
+    public decimal AppliedToInvoiceAmount { get; set; }
+
     [StringLength(100)]
     public string? ReferenceNo { get; set; }
 

@@ -29,6 +29,10 @@ public partial class SalesInvoice
     [Column("BranchUID")]
     public int? BranchUid { get; set; }
 
+    /// <summary>Branch name from signed-in user session.</summary>
+    [StringLength(150)]
+    public string? Branch { get; set; }
+
     [Column("CustomerUID")]
     public int? CustomerUid { get; set; }
 
@@ -37,6 +41,10 @@ public partial class SalesInvoice
 
     [Column("TerminalUID")]
     public int? TerminalUid { get; set; }
+
+    /// <summary>Terminal name from signed-in user session.</summary>
+    [StringLength(100)]
+    public string? Terminal { get; set; }
 
     [Column("PaymentMethodUID")]
     public int? PaymentMethodUid { get; set; }

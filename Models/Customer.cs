@@ -46,6 +46,10 @@ public partial class Customer
     [Column(TypeName = "decimal(18, 2)")]
     public decimal OpeningBalance { get; set; }
 
+    /// <summary>Unallocated prepaid / advance balance available to apply on future invoices.</summary>
+    [Column(TypeName = "decimal(18, 2)")]
+    public decimal AdvanceBalance { get; set; }
+
     [Column(TypeName = "decimal(18, 2)")]
     public decimal CreditLimit { get; set; }
 

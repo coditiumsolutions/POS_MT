@@ -35,6 +35,12 @@ public partial class User
     [StringLength(50)]
     public string? UserType { get; set; }
 
+    [StringLength(100)]
+    public string? TerminalName { get; set; }
+
+    [StringLength(150)]
+    public string? Branch { get; set; }
+
     public bool IsActive { get; set; }
 
     [Precision(0)]

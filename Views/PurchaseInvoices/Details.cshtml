@@ -49,6 +49,35 @@
             <div class="invoice-meta-field">@Text(Model.Remarks)</div>
         </div>
     </div>
+    @{
+        var lines = ViewBag.Lines as IList<PurchaseInvoiceDetail> ?? [];
+    }
+    @if (lines.Count > 0)
+    {
+        <div class="table-responsive mt-3">
+            <table class="table table-sm table-striped mb-0">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th class="text-end">Qty</th>
+                        <th class="text-end">Unit Cost</th>
+                        <th class="text-end">Line Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var line in lines)
+                {
+                    <tr>
+                        <td>@(string.IsNullOrWhiteSpace(line.ProductName) ? line.ProductUid.ToString() : line.ProductName)</td>
+                        <td class="text-end">@line.Quantity.ToString("N3")</td>
+                        <td class="text-end">@line.UnitCost.ToString("N2")</td>
+                        <td class="text-end">@line.LineTotal.ToString("N2")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
     <div class="mt-3 d-flex gap-2">
         <a class="btn btn-primary" asp-action="Edit" asp-route-id="@Model.Uid">Edit</a>
         <a class="btn btn-outline-secondary" asp-action="Index">Back</a>

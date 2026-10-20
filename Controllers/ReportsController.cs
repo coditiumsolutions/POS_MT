@@ -24,18 +24,33 @@ public class ReportsController : Controller
     private void EnsureReportsNav() => _navContext.SetArea("Reports");
 
     [HttpGet]
-    public async Task<IActionResult> TotalSale(int? month, int? year, string? saleType, CancellationToken ct)
+    public async Task<IActionResult> TotalSale(int? month, int? year, string? saleType, DateTime? date, CancellationToken ct)
     {
         EnsureReportsNav();
         ViewData["Title"] = "Total Sale for Monthly";
 
         var now = DateTime.Now;
-        var selectedMonth = month is >= 1 and <= 12 ? month.Value : now.Month;
-        var selectedYear = year is int y && (y == now.Year || y == now.Year - 1) ? y : now.Year;
+        var selectedDate = date?.Date;
+        var selectedMonth = selectedDate?.Month
+            ?? (month is >= 1 and <= 12 ? month.Value : now.Month);
+        var allowedYears = new[] { 2025, 2026 };
+        var selectedYear = selectedDate?.Year
+            ?? (year is int y && allowedYears.Contains(y) ? y
+                : (allowedYears.Contains(now.Year) ? now.Year : 2026));
         var selectedSaleType = NormalizeSaleType(saleType);
 
-        var start = new DateTime(selectedYear, selectedMonth, 1);
-        var end = start.AddMonths(1);
+        DateTime start;
+        DateTime end;
+        if (selectedDate.HasValue)
+        {
+            start = selectedDate.Value;
+            end = start.AddDays(1);
+        }
+        else
+        {
+            start = new DateTime(selectedYear, selectedMonth, 1);
+            end = start.AddMonths(1);
+        }
 
         var query =
             from inv in _db.SalesInvoices.AsNoTracking()
@@ -91,9 +106,10 @@ public class ReportsController : Controller
         {
             Month = selectedMonth,
             Year = selectedYear,
+            Date = selectedDate,
             SaleType = selectedSaleType,
             Months = BuildMonthOptions(selectedMonth),
-            Years = BuildYearOptions(now.Year, selectedYear),
+            Years = BuildYearOptions(selectedYear),
             SaleTypes = BuildSaleTypeOptions(selectedSaleType),
             InvoiceCount = rows.Count,
             TotalNetAmount = rows.Sum(x => x.NetAmount),
@@ -105,6 +121,87 @@ public class ReportsController : Controller
         return View(model);
     }
 
+    [HttpGet]
+    public async Task<IActionResult> DailyReport(DateTime? date, string? saleType, CancellationToken ct)
+    {
+        EnsureReportsNav();
+        ViewData["Title"] = "Daily Report";
+
+        var selectedDate = (date ?? DateTime.Today).Date;
+        var selectedSaleType = string.IsNullOrWhiteSpace(saleType)
+            ? "All"
+            : NormalizeSaleType(saleType);
+        var dayStart = selectedDate;
+        var dayEnd = dayStart.AddDays(1);
+
+        var query =
+            from d in _db.SalesInvoiceDetails.AsNoTracking()
+            join inv in _db.SalesInvoices.AsNoTracking() on d.SalesInvoiceUid equals inv.Uid
+            join c in _db.Customers.AsNoTracking() on inv.CustomerUid equals c.Uid into cj
+            from c in cj.DefaultIfEmpty()
+            where inv.InvoiceDate >= dayStart
+                  && inv.InvoiceDate < dayEnd
+                  && inv.InvoiceStatus != "Cancelled"
+            select new { d, inv, c };
+
+        if (selectedSaleType is "Cash" or "Walk-in")
+        {
+            query = query.Where(x => x.c != null &&
+                (x.c.CustomerCode == "C001" ||
+                 x.c.CustomerName.Contains("Walk-in") ||
+                 x.c.CustomerName.Contains("Walk-In") ||
+                 x.c.CustomerName.Contains("Walk In")));
+        }
+        else if (selectedSaleType == "Monthly")
+        {
+            query = query.Where(x => x.c != null &&
+                x.c.CustomerCode != "C001" &&
+                !x.c.CustomerName.Contains("Walk-in") &&
+                !x.c.CustomerName.Contains("Walk-In") &&
+                !x.c.CustomerName.Contains("Walk In"));
+        }
+
+        var raw = await query
+            .OrderBy(x => x.inv.InvoiceDate)
+            .ThenBy(x => x.inv.Uid)
+            .ThenBy(x => x.d.Uid)
+            .Select(x => new
+            {
+                x.inv.Uid,
+                x.inv.InvoiceDate,
+                Item = x.d.ProductName ?? x.d.ProductCode ?? "—",
+                x.d.Quantity,
+                Amount = x.d.LineTotal,
+                DeliveryCharges = x.inv.OtherCharges
+            })
+            .ToListAsync(ct);
+
+        var seenInvoices = new HashSet<int>();
+        var rows = raw.Select(x =>
+        {
+            var showDelivery = seenInvoices.Add(x.Uid);
+            return new DailyReportRowViewModel
+            {
+                Date = x.InvoiceDate,
+                Item = x.Item,
+                Quantity = x.Quantity,
+                Amount = x.Amount,
+                DeliveryCharges = showDelivery ? x.DeliveryCharges : 0m
+            };
+        }).ToList();
+
+        return View(new DailyReportViewModel
+        {
+            Date = selectedDate,
+            SaleType = selectedSaleType,
+            SaleTypes = BuildSaleTypeOptions(selectedSaleType),
+            Rows = rows,
+            TotalQuantity = rows.Sum(x => x.Quantity),
+            TotalAmount = rows.Sum(x => x.Amount),
+            TotalDeliveryCharges = rows.Sum(x => x.DeliveryCharges)
+        });
+    }
+
     private static IEnumerable<SelectListItem> BuildMonthOptions(int selectedMonth) =>
         Enumerable.Range(1, 12)
             .Select(m => new SelectListItem
@@ -114,19 +211,19 @@ public class ReportsController : Controller
                 Selected = m == selectedMonth
             });
 
-    private static IEnumerable<SelectListItem> BuildYearOptions(int currentYear, int selectedYear) =>
+    private static IEnumerable<SelectListItem> BuildYearOptions(int selectedYear) =>
     [
         new SelectListItem
         {
-            Value = currentYear.ToString(CultureInfo.InvariantCulture),
-            Text = $"Current ({currentYear})",
-            Selected = selectedYear == currentYear
+            Value = "2025",
+            Text = "2025",
+            Selected = selectedYear == 2025
         },
         new SelectListItem
         {
-            Value = (currentYear - 1).ToString(CultureInfo.InvariantCulture),
-            Text = $"Previous ({currentYear - 1})",
-            Selected = selectedYear == currentYear - 1
+            Value = "2026",
+            Text = "2026",
+            Selected = selectedYear == 2026
         }
     ];
 

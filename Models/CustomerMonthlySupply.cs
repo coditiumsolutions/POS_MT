@@ -4,11 +4,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace POS_MT.Models;
 
-[Table("CustomerMonthlyItems")]
-[Index("CustomerCode", Name = "IX_CustomerMonthlyItems_CustomerCode")]
-[Index("ProductCode", Name = "IX_CustomerMonthlyItems_ProductCode")]
-[Index("CustomerUid", Name = "IX_CustomerMonthlyItems_CustomerUID")]
-public partial class CustomerMonthlyItem
+/// <summary>
+/// Standing monthly supply template for a customer (default products/qty).
+/// Day-specific changes live in <see cref="CustomerMonthlySupplyOverride"/>.
+/// </summary>
+[Table("CustomerMonthlySupply")]
+[Index("CustomerCode", Name = "IX_CustomerMonthlySupply_CustomerCode")]
+[Index("ProductCode", Name = "IX_CustomerMonthlySupply_ProductCode")]
+[Index("CustomerUid", Name = "IX_CustomerMonthlySupply_CustomerUID")]
+public partial class CustomerMonthlySupply
 {
     [Column("uid")]
     [Key]
@@ -34,6 +38,10 @@ public partial class CustomerMonthlyItem
 
     [Column(TypeName = "decimal(18, 2)")]
     public decimal UnitPrice { get; set; }
+
+    /// <summary>Per-line delivery charge. Treat null as 0.</summary>
+    [Column(TypeName = "decimal(18, 2)")]
+    public decimal? DeliveryCharges { get; set; }
 
     [Column("CustomerUID")]
     public int? CustomerUid { get; set; }

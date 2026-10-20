@@ -78,19 +78,21 @@ public sealed class HubStatusService : IHubStatusService
             snapshot.Connectivity = "Offline";
             if (failed > 0) snapshot.SyncStatus = "Sync Failed";
             else if (pending > 0) snapshot.SyncStatus = "Pending";
-            else if (!_options.IsLocalHub && string.Equals(syncStatus, "N/A", StringComparison.OrdinalIgnoreCase))
-                snapshot.SyncStatus = route.OnlineReachable ? "Pending" : "Idle";
+            else if (string.Equals(syncStatus, "Syncing", StringComparison.OrdinalIgnoreCase))
+                snapshot.SyncStatus = "Syncing";
+            else
+                snapshot.SyncStatus = "Idle";
         }
         else
         {
+            // Mode Online writes straight to central — outbox pending on SQLite must not show as Pending.
             snapshot.Connectivity = route.OnlineReachable ? "Online" : "Offline";
+            snapshot.PendingCount = 0;
+            snapshot.FailedCount = 0;
             if (!_options.IsLocalHub && !route.LocalReachable)
                 snapshot.SyncStatus = "N/A";
-            else if (string.Equals(syncStatus, "Syncing", StringComparison.OrdinalIgnoreCase))
-                snapshot.SyncStatus = "Syncing";
-            else if (failed > 0) snapshot.SyncStatus = "Sync Failed";
-            else if (pending > 0) snapshot.SyncStatus = "Pending";
-            else snapshot.SyncStatus = route.OnlineReachable ? "Synced" : snapshot.SyncStatus;
+            else
+                snapshot.SyncStatus = route.OnlineReachable ? "Synced" : "Offline";
         }
 
         return snapshot;

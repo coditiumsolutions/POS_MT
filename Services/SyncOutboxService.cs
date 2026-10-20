@@ -38,9 +38,8 @@ public sealed class SyncOutboxService : ISyncOutboxService
             return;
         }
 
-        // Queue only when operating on local SQLite.
-        var onLocal = _options.IsLocalHub
-            || string.Equals(_router.ActiveTarget, "Local", StringComparison.OrdinalIgnoreCase);
+        // Queue only when the active write target is local SQLite (not Mode Online / central).
+        var onLocal = string.Equals(_router.ActiveTarget, "Local", StringComparison.OrdinalIgnoreCase);
         if (!onLocal)
         {
             return;
@@ -80,11 +79,10 @@ public sealed class SyncOutboxService : ISyncOutboxService
 
     public async Task RefreshStatusCountsAsync(CancellationToken ct = default)
     {
-        var onLocal = _options.IsLocalHub
-            || string.Equals(_router.ActiveTarget, "Local", StringComparison.OrdinalIgnoreCase);
+        var onLocal = string.Equals(_router.ActiveTarget, "Local", StringComparison.OrdinalIgnoreCase);
         if (!onLocal)
         {
-            _state.Report("N/A", 0, 0);
+            _state.Report("Synced", 0, 0);
             return;
         }
 

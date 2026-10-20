@@ -135,6 +135,20 @@
         });
     });
 
+    document.querySelectorAll("[data-side-nav-twistee]").forEach(function (btn) {
+        btn.addEventListener("click", function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var group = btn.closest("[data-side-nav-group]");
+            if (!group) {
+                return;
+            }
+            var willOpen = !group.classList.contains("open");
+            group.classList.toggle("open", willOpen);
+            btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+        });
+    });
+
     document.addEventListener("click", function () {
         closeTopDropdowns(null);
     });

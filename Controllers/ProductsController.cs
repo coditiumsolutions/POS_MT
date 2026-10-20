@@ -148,31 +148,215 @@ public class ProductsController : Controller
         var entity = await _db.Products.FindAsync([id], ct);
         if (entity is null) return NotFound();
 
-        var inSales = await _db.SalesInvoiceDetails.AsNoTracking().AnyAsync(x => x.ProductUid == id, ct);
-        var inPurchases = await _db.PurchaseInvoiceDetails.AsNoTracking().AnyAsync(x => x.ProductUid == id, ct);
-        var inAdjustments = await _db.StockAdjustmentDetails.AsNoTracking().AnyAsync(x => x.ProductUid == id, ct);
-        var inTransactions = await _db.InventoryTransactions.AsNoTracking().AnyAsync(x => x.ProductUid == id, ct);
-        if (inSales || inPurchases || inAdjustments || inTransactions)
-        {
-            TempData["Error"] = $"Cannot delete product {entity.ProductCode} because it is used in sales, purchases, stock adjustments, or inventory transactions.";
-            return RedirectToAction(nameof(Edit), new { id });
-        }
-
-        var inventoryRows = await _db.Inventories.Where(x => x.ProductUid == id).ToListAsync(ct);
-        if (inventoryRows.Count > 0)
-        {
-            _db.Inventories.RemoveRange(inventoryRows);
-        }
-
         var code = entity.ProductCode;
         var imagePath = entity.ImagePath;
-        _db.Products.Remove(entity);
-        await _db.SaveChangesAsync(ct);
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            var removed = await RemoveProductUsageAsync(id, code, ct);
+            _db.Products.Remove(entity);
+            await _db.SaveChangesAsync(ct);
+            await _audit.WriteAsync("Delete", "Products", id.ToString(),
+                $"Deleted product {code} and related records (sales {removed.SalesLines}, purchases {removed.PurchaseLines}, adjustments {removed.AdjustmentLines}, inventory tx {removed.InventoryTransactions}, stock rows {removed.InventoryRows}).", ct);
+            await tx.CommitAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            await tx.RollbackAsync(ct);
+            TempData["Error"] = $"Cannot delete product {code} because other records still use it.";
+            return RedirectToAction(nameof(Index));
+        }
+
         TryDeleteProductImage(imagePath);
-        await _audit.WriteAsync("Delete", "Products", id.ToString(), $"Deleted product {code}", ct);
-        TempData["Success"] = "Product deleted.";
+        TempData["Success"] = $"Product {code} and its related records were deleted.";
         return RedirectToAction(nameof(Index));
     }
+
+    private async Task<ProductUsageRemoval> RemoveProductUsageAsync(int productId, string productCode, CancellationToken ct)
+    {
+        var salesDetails = await _db.SalesInvoiceDetails.Where(x => x.ProductUid == productId).ToListAsync(ct);
+        var purchaseDetails = await _db.PurchaseInvoiceDetails.Where(x => x.ProductUid == productId).ToListAsync(ct);
+        var adjustmentDetails = await _db.StockAdjustmentDetails.Where(x => x.ProductUid == productId).ToListAsync(ct);
+        var transactions = await _db.InventoryTransactions.Where(x => x.ProductUid == productId).ToListAsync(ct);
+        var inventoryRows = await _db.Inventories.Where(x => x.ProductUid == productId).ToListAsync(ct);
+        var monthly = await _db.CustomerMonthlySupplies
+            .Where(x => x.ProductUid == productId || x.ProductCode == productCode)
+            .ToListAsync(ct);
+        var monthlyOverrides = await _db.CustomerMonthlySupplyOverrides
+            .Where(x => x.ProductUid == productId || x.ProductCode == productCode)
+            .ToListAsync(ct);
+
+        var salesInvoiceIds = salesDetails.Select(x => x.SalesInvoiceUid).Distinct().ToList();
+        var purchaseInvoiceIds = purchaseDetails.Select(x => x.PurchaseInvoiceUid).Distinct().ToList();
+        var adjustmentIds = adjustmentDetails.Select(x => x.StockAdjustmentUid).Distinct().ToList();
+
+        if (salesDetails.Count > 0) _db.SalesInvoiceDetails.RemoveRange(salesDetails);
+        if (purchaseDetails.Count > 0) _db.PurchaseInvoiceDetails.RemoveRange(purchaseDetails);
+        if (adjustmentDetails.Count > 0) _db.StockAdjustmentDetails.RemoveRange(adjustmentDetails);
+        if (transactions.Count > 0) _db.InventoryTransactions.RemoveRange(transactions);
+        if (inventoryRows.Count > 0) _db.Inventories.RemoveRange(inventoryRows);
+        if (monthly.Count > 0) _db.CustomerMonthlySupplies.RemoveRange(monthly);
+        if (monthlyOverrides.Count > 0) _db.CustomerMonthlySupplyOverrides.RemoveRange(monthlyOverrides);
+        await _db.SaveChangesAsync(ct);
+
+        await RefreshSalesInvoicesAsync(salesInvoiceIds, ct);
+        await RefreshPurchaseInvoicesAsync(purchaseInvoiceIds, ct);
+        await RemoveEmptyAdjustmentsAsync(adjustmentIds, ct);
+
+        return new ProductUsageRemoval(
+            salesDetails.Count,
+            purchaseDetails.Count,
+            adjustmentDetails.Count,
+            transactions.Count,
+            inventoryRows.Count);
+    }
+
+    private async Task RefreshSalesInvoicesAsync(List<int> invoiceIds, CancellationToken ct)
+    {
+        if (invoiceIds.Count == 0) return;
+
+        var invoices = await _db.SalesInvoices.Where(x => invoiceIds.Contains(x.Uid)).ToListAsync(ct);
+        var remaining = await _db.SalesInvoiceDetails
+            .Where(x => invoiceIds.Contains(x.SalesInvoiceUid))
+            .ToListAsync(ct);
+        var linesByInvoice = remaining.GroupBy(x => x.SalesInvoiceUid).ToDictionary(g => g.Key, g => g.ToList());
+        var emptyIds = new List<int>();
+
+        foreach (var invoice in invoices)
+        {
+            if (!linesByInvoice.TryGetValue(invoice.Uid, out var lines) || lines.Count == 0)
+            {
+                emptyIds.Add(invoice.Uid);
+                continue;
+            }
+
+            ApplyInvoiceTotals(
+                lines.Sum(x => x.LineTotal),
+                lines.Sum(x => x.DiscountAmount),
+                lines.Sum(x => x.TaxAmount),
+                invoice.OtherCharges,
+                invoice.PaidAmount,
+                (sub, discount, tax, net, balance, status) =>
+                {
+                    invoice.SubTotal = sub;
+                    invoice.DiscountAmount = discount;
+                    invoice.TaxAmount = tax;
+                    invoice.NetAmount = net;
+                    invoice.BalanceAmount = balance;
+                    invoice.PaymentStatus = status;
+                    invoice.UpdatedDate = DateTime.Now;
+                });
+        }
+
+        if (emptyIds.Count > 0)
+        {
+            var payments = await _db.CustomerPayments
+                .Where(x => x.SalesInvoiceUid != null && emptyIds.Contains(x.SalesInvoiceUid.Value))
+                .ToListAsync(ct);
+            foreach (var payment in payments)
+                payment.SalesInvoiceUid = null;
+
+            _db.SalesInvoices.RemoveRange(invoices.Where(x => emptyIds.Contains(x.Uid)));
+        }
+
+        await _db.SaveChangesAsync(ct);
+    }
+
+    private async Task RefreshPurchaseInvoicesAsync(List<int> invoiceIds, CancellationToken ct)
+    {
+        if (invoiceIds.Count == 0) return;
+
+        var invoices = await _db.PurchaseInvoices.Where(x => invoiceIds.Contains(x.Uid)).ToListAsync(ct);
+        var remaining = await _db.PurchaseInvoiceDetails
+            .Where(x => invoiceIds.Contains(x.PurchaseInvoiceUid))
+            .ToListAsync(ct);
+        var linesByInvoice = remaining.GroupBy(x => x.PurchaseInvoiceUid).ToDictionary(g => g.Key, g => g.ToList());
+        var emptyIds = new List<int>();
+
+        foreach (var invoice in invoices)
+        {
+            if (!linesByInvoice.TryGetValue(invoice.Uid, out var lines) || lines.Count == 0)
+            {
+                emptyIds.Add(invoice.Uid);
+                continue;
+            }
+
+            ApplyInvoiceTotals(
+                lines.Sum(x => x.LineTotal),
+                lines.Sum(x => x.DiscountAmount),
+                lines.Sum(x => x.TaxAmount),
+                invoice.OtherCharges,
+                invoice.PaidAmount,
+                (sub, discount, tax, net, balance, status) =>
+                {
+                    invoice.SubTotal = sub;
+                    invoice.DiscountAmount = discount;
+                    invoice.TaxAmount = tax;
+                    invoice.NetAmount = net;
+                    invoice.BalanceAmount = balance;
+                    invoice.PaymentStatus = status;
+                    invoice.UpdatedDate = DateTime.Now;
+                });
+        }
+
+        if (emptyIds.Count > 0)
+        {
+            var payments = await _db.VendorPayments
+                .Where(x => x.PurchaseInvoiceUid != null && emptyIds.Contains(x.PurchaseInvoiceUid.Value))
+                .ToListAsync(ct);
+            foreach (var payment in payments)
+                payment.PurchaseInvoiceUid = null;
+
+            _db.PurchaseInvoices.RemoveRange(invoices.Where(x => emptyIds.Contains(x.Uid)));
+        }
+
+        await _db.SaveChangesAsync(ct);
+    }
+
+    private async Task RemoveEmptyAdjustmentsAsync(List<int> adjustmentIds, CancellationToken ct)
+    {
+        if (adjustmentIds.Count == 0) return;
+
+        var stillUsed = await _db.StockAdjustmentDetails.AsNoTracking()
+            .Where(x => adjustmentIds.Contains(x.StockAdjustmentUid))
+            .Select(x => x.StockAdjustmentUid)
+            .Distinct()
+            .ToListAsync(ct);
+        var emptyIds = adjustmentIds.Except(stillUsed).ToList();
+        if (emptyIds.Count == 0) return;
+
+        var empty = await _db.StockAdjustments.Where(x => emptyIds.Contains(x.Uid)).ToListAsync(ct);
+        if (empty.Count > 0)
+        {
+            _db.StockAdjustments.RemoveRange(empty);
+            await _db.SaveChangesAsync(ct);
+        }
+    }
+
+    private static void ApplyInvoiceTotals(
+        decimal lineTotal,
+        decimal lineDiscount,
+        decimal lineTax,
+        decimal otherCharges,
+        decimal paidAmount,
+        Action<decimal, decimal, decimal, decimal, decimal, string> apply)
+    {
+        var sub = Math.Round(lineTotal, 2);
+        var discount = Math.Round(lineDiscount, 2);
+        var tax = Math.Round(lineTax, 2);
+        var net = Math.Round(sub - discount + tax + otherCharges, 2);
+        if (net < 0) net = 0;
+        var balance = Math.Round(net - paidAmount, 2);
+        var status = paidAmount <= 0 ? "Unpaid" : paidAmount >= net ? "Paid" : "Partial";
+        apply(sub, discount, tax, net, balance, status);
+    }
+
+    private readonly record struct ProductUsageRemoval(
+        int SalesLines,
+        int PurchaseLines,
+        int AdjustmentLines,
+        int InventoryTransactions,
+        int InventoryRows);
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Deactivate(int id, CancellationToken ct)

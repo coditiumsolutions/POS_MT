@@ -275,6 +275,20 @@
         basketTotalEl.textContent = money(total);
     }
 
+    function formatReceiptDateTime(d) {
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const day = d.getDate();
+        const month = months[d.getMonth()];
+        const year = d.getFullYear();
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        return {
+            dateText: day + '-' + month + '-' + year,
+            timeText: hh + ':' + mm + ':' + ss
+        };
+    }
+
     function buildReceiptHtml(data) {
         const rows = data.items.map(function (item) {
             return '<tr><td>' + escapeHtml(item.name) + '</td><td style="text-align:center">' + item.qty +
@@ -282,19 +296,31 @@
                 '</td><td style="text-align:right">' + money(item.price * item.qty) + '</td></tr>';
         }).join('');
 
-        return '<!DOCTYPE html><html><head><title>Receipt ' + escapeHtml(data.invoiceNo || '') + '</title>' +
-            '<style>body{font-family:Segoe UI,Arial,sans-serif;padding:16px;color:#111}' +
-            'h1{font-size:18px;margin:0 0 8px}table{width:100%;border-collapse:collapse;margin-top:12px}' +
+        const printed = formatReceiptDateTime(new Date());
+
+        return '<!DOCTYPE html><html><head><title>Customer Bil ' + escapeHtml(data.invoiceNo || '') + '</title>' +
+            '<style>body{font-family:Segoe UI,Arial,sans-serif;padding:16px;color:#111;text-align:center}' +
+            '.shop-name{font-size:20px;font-weight:700;margin:0 0 4px;letter-spacing:0.02em}' +
+            '.shop-address{font-size:12px;margin:0 0 2px;color:#222;font-weight:600}' +
+            '.shop-phone{font-size:13px;margin:0 0 10px;color:#111}' +
+            '.bill-title{font-size:16px;font-weight:700;margin:0 0 8px;text-align:center}' +
+            '.meta{font-size:12px;color:#444;text-align:left;margin:2px 0}' +
+            '.meta-center{font-size:12px;color:#444;text-align:center;margin:2px 0 8px}' +
+            'table{width:100%;border-collapse:collapse;margin-top:12px;text-align:left}' +
             'th,td{border-bottom:1px solid #ddd;padding:6px 4px;font-size:13px}' +
             'th{text-align:left}.total{margin-top:12px;font-size:16px;font-weight:700;text-align:right}' +
-            '.meta{font-size:12px;color:#444}</style></head><body>' +
-            '<h1>Coditium POS</h1>' +
-            '<div class="meta">' + escapeHtml(posMode) + ' Receipt</div>' +
+            '.footer{margin-top:18px;padding-top:10px;border-top:1px dashed #999;font-size:11px;color:#333;text-align:center;line-height:1.45}' +
+            '</style></head><body>' +
+            '<div class="shop-name">THE FORM SHOP</div>' +
+            '<div class="shop-address">SHOP NO 02 SHOPPING GALLERY P-2 BA</div>' +
+            '<div class="shop-phone">0311-8858888</div>' +
+            '<div class="bill-title">Customer Bil</div>' +
             (data.invoiceNo ? '<div class="meta">Invoice: ' + escapeHtml(data.invoiceNo) + '</div>' : '') +
-            (data.invoiceDate ? '<div class="meta">Date: ' + escapeHtml(data.invoiceDate) + '</div>' : '') +
-            '<table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Line</th></tr></thead><tbody>' +
+            '<div class="meta-center">Date: ' + printed.dateText + ' &nbsp;&nbsp; Time: ' + printed.timeText + '</div>' +
+            '<table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Amount</th></tr></thead><tbody>' +
             rows + '</tbody></table>' +
             '<div class="total">Total: ' + money(data.total) + '</div>' +
+            '<div class="footer">Software By: Coditium Solutions<br>Web: www.coditium.com &nbsp; Mob: 0301-8882992</div>' +
             '<script>window.onload=function(){window.print();}<\\/script></body></html>';
     }
 

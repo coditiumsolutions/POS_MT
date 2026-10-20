@@ -9,5 +9,7 @@ public sealed class UserFormViewModel {
   [EmailAddress, StringLength(150)] public string? Email { get; set; }
   [Required, StringLength(50), Display(Name="Role")] public string RoleName { get; set; } = "Cashier";
   [StringLength(50), Display(Name="User Type")] public string? UserType { get; set; }
+  [Required, StringLength(100), Display(Name="Terminal")] public string TerminalName { get; set; } = string.Empty;
+  [StringLength(150), Display(Name="Branch")] public string? Branch { get; set; }
   [Display(Name="Active")] public bool IsActive { get; set; } = true;
 }

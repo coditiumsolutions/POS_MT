@@ -1,10 +1,21 @@
 ﻿@model VendorFormViewModel
+@{
+    var vendorCodeReadonly = ViewBag.VendorCodeReadonly as bool? == true;
+}
 <div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
 <div class="invoice-meta-grid invoice-meta-form">
     <div class="invoice-meta-row">
         <label asp-for="VendorCode" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <input asp-for="VendorCode" class="form-control form-control-sm invoice-meta-input" />
+            @if (vendorCodeReadonly)
+            {
+                <input asp-for="VendorCode" class="form-control form-control-sm invoice-meta-input" readonly />
+                <small class="text-muted">Auto-generated</small>
+            }
+            else
+            {
+                <input asp-for="VendorCode" class="form-control form-control-sm invoice-meta-input" />
+            }
             <span asp-validation-for="VendorCode" class="text-danger"></span>
         </div>
         <label asp-for="VendorName" class="invoice-meta-title"></label>

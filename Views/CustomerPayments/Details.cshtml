@@ -2,6 +2,10 @@
 @{
     ViewData["Title"] = "Customer Payment Details";
     string Text(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+    var customerName = ViewBag.CustomerName as string;
+    var invoiceNo = ViewBag.InvoiceNo as string;
+    var advanceBalance = ViewBag.AdvanceBalance as decimal? ?? 0m;
+    var toAdvance = Math.Max(0, Model.Amount - Model.AppliedToInvoiceAmount);
 }
 <h1 class="page-heading invoice-details-heading mb-3">Customer Payment Details</h1>
 <div class="bg-white border rounded p-3">
@@ -13,10 +17,22 @@
             <div class="invoice-meta-field">@Model.PaymentDate.ToString("yyyy-MM-dd HH:mm")</div>
         </div>
         <div class="invoice-meta-row">
-            <div class="invoice-meta-title">Customer UID</div>
-            <div class="invoice-meta-field">@Model.CustomerUid</div>
+            <div class="invoice-meta-title">Customer</div>
+            <div class="invoice-meta-field">@Text(customerName)</div>
             <div class="invoice-meta-title">Amount</div>
             <div class="invoice-meta-field">@Model.Amount.ToString("N2")</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Invoice</div>
+            <div class="invoice-meta-field">@Text(invoiceNo)</div>
+            <div class="invoice-meta-title">Applied to Invoice</div>
+            <div class="invoice-meta-field">@Model.AppliedToInvoiceAmount.ToString("N2")</div>
+        </div>
+        <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Added to Advance</div>
+            <div class="invoice-meta-field">@toAdvance.ToString("N2")</div>
+            <div class="invoice-meta-title">Customer Advance Now</div>
+            <div class="invoice-meta-field">@advanceBalance.ToString("N2")</div>
         </div>
         <div class="invoice-meta-row">
             <div class="invoice-meta-title">Reference</div>

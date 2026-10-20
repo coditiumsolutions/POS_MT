@@ -29,6 +29,11 @@ builder.Services.AddControllersWithViews();
 builder.Services.AddAntiforgery(options =>
 {
     options.HeaderName = "RequestVerificationToken";
+    // HTTP LocalHub (localhost:5227) cannot store SameSite=None;Secure cookies — that caused first-submit 400s.
+    options.Cookie.Name = ".POS_MT.Antiforgery";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
 });
 builder.Services.AddPosServices(builder.Configuration);
 

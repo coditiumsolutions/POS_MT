@@ -20,7 +20,9 @@ public partial class POSDbContext : DbContext
 
     public virtual DbSet<CustomerPayment> CustomerPayments { get; set; }
 
-    public virtual DbSet<CustomerMonthlyItem> CustomerMonthlyItems { get; set; }
+    public virtual DbSet<CustomerMonthlySupply> CustomerMonthlySupplies { get; set; }
+
+    public virtual DbSet<CustomerMonthlySupplyOverride> CustomerMonthlySupplyOverrides { get; set; }
 
     public virtual DbSet<Configuration> Configurations { get; set; }
 
@@ -88,6 +90,7 @@ public partial class POSDbContext : DbContext
         {
             entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.AdvanceBalance).HasDefaultValue(0m);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
@@ -95,10 +98,18 @@ public partial class POSDbContext : DbContext
         {
             entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.PaymentDate).HasDefaultValueSql(nowSql);
+            entity.Property(e => e.AppliedToInvoiceAmount).HasDefaultValue(0m);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
-        modelBuilder.Entity<CustomerMonthlyItem>(entity =>
+        modelBuilder.Entity<CustomerMonthlySupply>(entity =>
+        {
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
+            entity.Property(e => e.DeliveryCharges).HasDefaultValue(0m);
+            entity.Property(e => e.Uid).ValueGeneratedOnAdd();
+        });
+
+        modelBuilder.Entity<CustomerMonthlySupplyOverride>(entity =>
         {
             entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();

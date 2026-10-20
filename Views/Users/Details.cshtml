@@ -25,6 +25,12 @@
             <div class="invoice-meta-field">@Text(Model.Email)</div>
         </div>
         <div class="invoice-meta-row">
+            <div class="invoice-meta-title">Terminal</div>
+            <div class="invoice-meta-field">@Text(Model.TerminalName)</div>
+            <div class="invoice-meta-title">Branch</div>
+            <div class="invoice-meta-field">@Text(Model.Branch)</div>
+        </div>
+        <div class="invoice-meta-row">
             <div class="invoice-meta-title">Active</div>
             <div class="invoice-meta-field">@(Model.IsActive ? "Yes" : "No")</div>
             <div class="invoice-meta-title"></div>

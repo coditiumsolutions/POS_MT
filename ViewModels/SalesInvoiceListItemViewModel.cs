@@ -41,6 +41,7 @@ public sealed class SalesInvoiceDetailIndexViewModel
 {
     public string? CustomerType { get; set; }
     public int? Month { get; set; }
+    public DateTime? Date { get; set; }
     public string? Search { get; set; }
     public List<SalesInvoiceDetailListItemViewModel> Rows { get; set; } = [];
 }
@@ -91,6 +92,17 @@ public sealed class SalesInvoiceDetailsPageViewModel
     public string PaymentStatus { get; set; } = string.Empty;
     public string? Remarks { get; set; }
     public List<SalesInvoiceDetailLineViewModel> Lines { get; set; } = [];
+    public List<SalesInvoicePaymentRowViewModel> Payments { get; set; } = [];
+}
+
+public sealed class SalesInvoicePaymentRowViewModel
+{
+    public int Uid { get; set; }
+    public string PaymentNo { get; set; } = string.Empty;
+    public DateTime PaymentDate { get; set; }
+    public decimal Amount { get; set; }
+    public decimal AppliedToInvoiceAmount { get; set; }
+    public string? Remarks { get; set; }
 }
 
 public sealed class SalesInvoiceDetailLineViewModel

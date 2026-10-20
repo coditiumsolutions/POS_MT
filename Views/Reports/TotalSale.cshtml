@@ -18,11 +18,24 @@
             <select asp-for="Year" asp-items="Model.Years" class="form-select" id="Year"></select>
         </div>
         <div class="col-md-3 col-sm-6">
+            <label class="form-label" for="Date">Date <span class="text-muted fw-normal">(optional)</span></label>
+            <input type="date"
+                   class="form-control"
+                   id="Date"
+                   name="Date"
+                   value="@(Model.Date?.ToString("yyyy-MM-dd") ?? string.Empty)" />
+        </div>
+        <div class="col-md-3 col-sm-6">
             <label class="form-label" for="SaleType">Sale Type</label>
             <select asp-for="SaleType" asp-items="Model.SaleTypes" class="form-select" id="SaleType"></select>
         </div>
-        <div class="col-md-3 col-sm-6">
-            <button type="submit" class="btn btn-primary w-100">Apply</button>
+    </div>
+    <div class="row g-2 mt-3">
+        <div class="col-auto">
+            <button type="submit" class="btn btn-primary">Apply</button>
+        </div>
+        <div class="col-auto">
+            <a class="btn btn-outline-secondary" asp-action="TotalSale" asp-route-SaleType="All">Reset</a>
         </div>
     </div>
 </form>

@@ -19,6 +19,13 @@
     </PackageReference>
   </ItemGroup>
 
+  <!-- Publish output lives under build/ — exclude it so publish does not recurse into itself. -->
+  <ItemGroup>
+    <Content Remove="build\**;pos_mt\**;pos_mt_02\**;pos_mt_03\**;pos_mt_3\**;pos_mt_4\**;pos_16Oct26\**;pos_mt_17Oct2026\**;bin\**;obj\**" />
+    <None Remove="build\**;pos_mt\**;pos_mt_02\**;pos_mt_03\**;pos_mt_3\**;pos_mt_4\**;pos_16Oct26\**;pos_mt_17Oct2026\**;bin\**;obj\**" />
+    <EmbeddedResource Remove="build\**;pos_mt\**;pos_mt_02\**;pos_mt_03\**;pos_mt_3\**;pos_mt_4\**;pos_16Oct26\**;pos_mt_17Oct2026\**;bin\**;obj\**" />
+  </ItemGroup>
+
   <!--
     Local runs use ASPNETCORE_ENVIRONMENT=Development (appsettings.Development.json).
     IIS / published hosts default to Production and only read appsettings.json.

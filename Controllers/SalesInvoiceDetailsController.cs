@@ -25,7 +25,7 @@ public class SalesInvoiceDetailsController : Controller
     private void EnsureSalesInvoiceNav() => _navContext.SetArea("SalesInvoice");
 
     [HttpGet]
-    public async Task<IActionResult> Index(string? customerType, int? month, CancellationToken ct)
+    public async Task<IActionResult> Index(string? customerType, int? month, DateTime? date, CancellationToken ct)
     {
         EnsureSalesInvoiceNav();
         ViewData["Title"] = "Invoice Details";
@@ -69,6 +69,13 @@ public class SalesInvoiceDetailsController : Controller
             query = query.Where(x => x.inv.InvoiceDate.Month == month.Value);
         }
 
+        if (date.HasValue)
+        {
+            var dayStart = date.Value.Date;
+            var dayEnd = dayStart.AddDays(1);
+            query = query.Where(x => x.inv.InvoiceDate >= dayStart && x.inv.InvoiceDate < dayEnd);
+        }
+
         var rows = await query
             .OrderByDescending(x => x.inv.InvoiceDate)
             .ThenByDescending(x => x.inv.Uid)
@@ -103,6 +110,7 @@ public class SalesInvoiceDetailsController : Controller
         {
             CustomerType = customerType,
             Month = month is >= 1 and <= 12 ? month : null,
+            Date = date?.Date,
             Rows = rows
         });
     }
@@ -162,14 +170,14 @@ public class SalesInvoiceDetailsController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Delete(int id, string? customerType, int? month, CancellationToken ct)
+    public async Task<IActionResult> Delete(int id, string? customerType, int? month, DateTime? date, CancellationToken ct)
     {
         EnsureSalesInvoiceNav();
         var detail = await _db.SalesInvoiceDetails.FirstOrDefaultAsync(x => x.Uid == id, ct);
         if (detail is null)
         {
             TempData["Error"] = "Invoice detail was not found.";
-            return RedirectToAction(nameof(Index), new { customerType, month });
+            return RedirectToAction(nameof(Index), new { customerType, month, date = date?.ToString("yyyy-MM-dd") });
         }
 
         var invoiceUid = detail.SalesInvoiceUid;
@@ -216,6 +224,6 @@ public class SalesInvoiceDetailsController : Controller
             $"Deleted invoice detail '{productLabel}' from invoice UID {invoiceUid}.", ct);
 
         TempData["Success"] = "Invoice detail deleted.";
-        return RedirectToAction(nameof(Index), new { customerType, month });
+        return RedirectToAction(nameof(Index), new { customerType, month, date = date?.ToString("yyyy-MM-dd") });
     }
 }

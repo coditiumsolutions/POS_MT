@@ -4,10 +4,20 @@ namespace POS_MT.Controllers;
 [Authorize]
 public class SalesInvoicesController : Controller {
   private readonly POSDbContext _db; private readonly IAuditService _audit; private readonly INavContextService _navContext;
-  public SalesInvoicesController(POSDbContext db, IAuditService audit, INavContextService navContext){ _db=db; _audit=audit; _navContext=navContext; }
+  private readonly IInventoryLedgerService _inventory;
+  public SalesInvoicesController(POSDbContext db, IAuditService audit, INavContextService navContext, IInventoryLedgerService inventory){ _db=db; _audit=audit; _navContext=navContext; _inventory=inventory; }
   private void EnsureSalesInvoiceNav() => _navContext.SetArea("SalesInvoice");
-  private async Task LoadLookups(CancellationToken ct, int? selectedBranchUid = null, int? selectedCustomerUid = null, int? selectedPaymentMethodUid = null){
+  private async Task LoadLookups(CancellationToken ct, int? selectedBranchUid = null, int? selectedCustomerUid = null, int? selectedPaymentMethodUid = null, string? selectedBranch = null, string? selectedTerminal = null){
     ViewBag.Branches=new SelectList(await _db.Branches.AsNoTracking().Where(x=>x.IsActive).OrderBy(x=>x.BranchName).ToListAsync(ct),"Uid","BranchName", selectedBranchUid);
+    var branchNames = await _db.Branches.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.BranchName).Select(x => x.BranchName).ToListAsync(ct);
+    if (!string.IsNullOrWhiteSpace(selectedBranch) && !branchNames.Contains(selectedBranch))
+      branchNames.Insert(0, selectedBranch.Trim());
+    ViewBag.BranchNames = new SelectList(branchNames, selectedBranch);
+
+    var terminalNames = await _db.Terminals.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.TerminalName).Select(x => x.TerminalName).ToListAsync(ct);
+    if (!string.IsNullOrWhiteSpace(selectedTerminal) && !terminalNames.Contains(selectedTerminal))
+      terminalNames.Insert(0, selectedTerminal.Trim());
+    ViewBag.TerminalNames = new SelectList(terminalNames, selectedTerminal);
     ViewBag.Customers=new SelectList(await _db.Customers.AsNoTracking().Where(x=>x.IsActive).OrderBy(x=>x.CustomerName).ToListAsync(ct),"Uid","CustomerName", selectedCustomerUid);
     ViewBag.PaymentMethods=new SelectList(await _db.PaymentMethods.AsNoTracking().Where(x=>x.IsActive).OrderBy(x=>x.PaymentName).ToListAsync(ct),"Uid","PaymentName", selectedPaymentMethodUid);
   }
@@ -115,7 +125,7 @@ public class SalesInvoicesController : Controller {
     var e=await _db.SalesInvoices.FindAsync([id],ct);
     if(e is null) return NotFound();
     if(e.InvoiceStatus=="Cancelled"){ TempData["Error"]="Cancelled invoices cannot be edited."; return RedirectToAction(nameof(Index)); }
-    await LoadLookups(ct, e.BranchUid, e.CustomerUid, e.PaymentMethodUid);
+    await LoadLookups(ct, e.BranchUid, e.CustomerUid, e.PaymentMethodUid, e.Branch, e.Terminal);
     return View(ToForm(e));
   }
   [HttpPost, ValidateAntiForgeryToken]
@@ -142,7 +152,7 @@ public class SalesInvoicesController : Controller {
       model.BalanceAmount = e.BalanceAmount;
       model.PaymentStatus = e.PaymentStatus;
       model.InvoiceStatus = e.InvoiceStatus;
-      await LoadLookups(ct, model.BranchUid, e.CustomerUid, model.PaymentMethodUid);
+      await LoadLookups(ct, model.BranchUid, e.CustomerUid, model.PaymentMethodUid, model.Branch, model.Terminal);
       return View(model);
     }
     ApplyEditable(e, model);
@@ -154,6 +164,7 @@ public class SalesInvoicesController : Controller {
   public async Task<IActionResult> Details(int id, CancellationToken ct)
   {
     EnsureSalesInvoiceNav();
+    await RepairPaidAmountFromPaymentsAsync(id, ct);
     var model = await LoadDetailsPageAsync(id, ct);
     if (model is null) return NotFound();
     return View(model);
@@ -162,9 +173,43 @@ public class SalesInvoicesController : Controller {
   public async Task<IActionResult> Print(int id, CancellationToken ct)
   {
     EnsureSalesInvoiceNav();
+    await RepairPaidAmountFromPaymentsAsync(id, ct);
     var model = await LoadDetailsPageAsync(id, ct);
     if (model is null) return NotFound();
     return View(model);
+  }
+
+  /// <summary>
+  /// Rebuilds Paid/Balance from linked CustomerPayments when monthly recalculation
+  /// previously wiped PaidAmount while leaving ADV payment rows behind.
+  /// </summary>
+  private async Task RepairPaidAmountFromPaymentsAsync(int invoiceUid, CancellationToken ct)
+  {
+    var invoice = await _db.SalesInvoices.FirstOrDefaultAsync(x => x.Uid == invoiceUid, ct);
+    if (invoice is null || string.Equals(invoice.InvoiceStatus, "Cancelled", StringComparison.OrdinalIgnoreCase))
+      return;
+
+    var paidFromPayments = await _db.CustomerPayments.AsNoTracking()
+      .Where(x => x.SalesInvoiceUid == invoiceUid)
+      .SumAsync(x => (decimal?)x.AppliedToInvoiceAmount, ct) ?? 0m;
+
+    if (paidFromPayments <= 0 && invoice.PaidAmount <= 0)
+      return;
+
+    var corrected = paidFromPayments;
+    if (invoice.NetAmount > 0 && corrected > invoice.NetAmount)
+      corrected = invoice.NetAmount;
+
+    if (invoice.PaidAmount == corrected)
+      return;
+
+    invoice.PaidAmount = corrected;
+    invoice.BalanceAmount = Math.Max(0, invoice.NetAmount - invoice.PaidAmount);
+    invoice.PaymentStatus = invoice.PaidAmount <= 0
+      ? "Unpaid"
+      : invoice.PaidAmount >= invoice.NetAmount ? "Paid" : "Partial";
+    invoice.UpdatedDate = DateTime.Now;
+    await _db.SaveChangesAsync(ct);
   }
 
   private async Task<SalesInvoiceDetailsPageViewModel?> LoadDetailsPageAsync(int id, CancellationToken ct)
@@ -202,6 +247,21 @@ public class SalesInvoicesController : Controller {
       customer?.CustomerName,
       row.inv.Remarks);
 
+    var payments = await _db.CustomerPayments.AsNoTracking()
+      .Where(x => x.SalesInvoiceUid == id)
+      .OrderBy(x => x.PaymentDate)
+      .ThenBy(x => x.Uid)
+      .Select(x => new SalesInvoicePaymentRowViewModel
+      {
+        Uid = x.Uid,
+        PaymentNo = x.PaymentNo,
+        PaymentDate = x.PaymentDate,
+        Amount = x.Amount,
+        AppliedToInvoiceAmount = x.AppliedToInvoiceAmount,
+        Remarks = x.Remarks
+      })
+      .ToListAsync(ct);
+
     return new SalesInvoiceDetailsPageViewModel
     {
       Uid = row.inv.Uid,
@@ -220,12 +280,27 @@ public class SalesInvoicesController : Controller {
       InvoiceStatus = row.inv.InvoiceStatus,
       PaymentStatus = row.inv.PaymentStatus,
       Remarks = row.inv.Remarks,
-      Lines = lines
+      Lines = lines,
+      Payments = payments
     };
   }
 
   [HttpPost, ValidateAntiForgeryToken]
-  public async Task<IActionResult> Cancel(int id, CancellationToken ct){ EnsureSalesInvoiceNav(); var e=await _db.SalesInvoices.FindAsync([id],ct); if(e is null) return NotFound(); e.InvoiceStatus="Cancelled"; e.UpdatedDate=DateTime.Now; await _db.SaveChangesAsync(ct); await _audit.WriteAsync("Cancel","SalesInvoices",e.Uid.ToString(),$"Cancelled sales invoice {e.InvoiceNo}",ct); TempData["Success"]="Sales invoice cancelled."; return RedirectToAction(nameof(Index)); }
+  public async Task<IActionResult> Cancel(int id, CancellationToken ct)
+  {
+    EnsureSalesInvoiceNav();
+    var e = await _db.SalesInvoices.FindAsync([id], ct);
+    if (e is null) return NotFound();
+    await using var tx = await _db.Database.BeginTransactionAsync(ct);
+    e.InvoiceStatus = "Cancelled";
+    e.UpdatedDate = DateTime.Now;
+    await _inventory.ReverseSaleAsync(e.Uid, e.InvoiceNo, e.UserUid, e.TerminalUid, ct);
+    await _db.SaveChangesAsync(ct);
+    await _audit.WriteAsync("Cancel", "SalesInvoices", e.Uid.ToString(), $"Cancelled sales invoice {e.InvoiceNo}", ct);
+    await tx.CommitAsync(ct);
+    TempData["Success"] = "Sales invoice cancelled and stock restored.";
+    return RedirectToAction(nameof(Index));
+  }
 
   [HttpPost, ValidateAntiForgeryToken]
   public async Task<IActionResult> Delete(int id, string? customerType, int? month, string? search, CancellationToken ct)
@@ -239,6 +314,8 @@ public class SalesInvoicesController : Controller {
     }
 
     var invoiceNo = invoice.InvoiceNo;
+    await using var tx = await _db.Database.BeginTransactionAsync(ct);
+    await _inventory.ReverseSaleAsync(invoice.Uid, invoice.InvoiceNo, invoice.UserUid, invoice.TerminalUid, ct);
     var details = await _db.SalesInvoiceDetails.Where(x => x.SalesInvoiceUid == id).ToListAsync(ct);
     if (details.Count > 0)
     {
@@ -249,15 +326,18 @@ public class SalesInvoicesController : Controller {
     await _db.SaveChangesAsync(ct);
     await _audit.WriteAsync("Delete", "SalesInvoices", id.ToString(),
       $"Deleted sales invoice {invoiceNo} and {details.Count} detail line(s).", ct);
+    await tx.CommitAsync(ct);
 
     TempData["Success"] = $"Sales invoice {invoiceNo} deleted.";
     return RedirectToAction(nameof(Index), new { customerType, month, search });
   }
-  private static SalesInvoiceFormViewModel ToForm(SalesInvoice e)=>new(){Uid=e.Uid,InvoiceNo=e.InvoiceNo,InvoiceDate=e.InvoiceDate,BranchUid=e.BranchUid,CustomerUid=e.CustomerUid,PaymentMethodUid=e.PaymentMethodUid,SubTotal=e.SubTotal,DiscountAmount=e.DiscountAmount,TaxAmount=e.TaxAmount,OtherCharges=e.OtherCharges,NetAmount=e.NetAmount,PaidAmount=e.PaidAmount,BalanceAmount=e.BalanceAmount,PaymentStatus=e.PaymentStatus,InvoiceStatus=e.InvoiceStatus,Remarks=e.Remarks};
-  private static SalesInvoice ToEntity(SalesInvoiceFormViewModel m)=>new(){InvoiceNo=m.InvoiceNo.Trim(),InvoiceDate=m.InvoiceDate,BranchUid=m.BranchUid,CustomerUid=m.CustomerUid,PaymentMethodUid=m.PaymentMethodUid,SubTotal=m.SubTotal,DiscountAmount=m.DiscountAmount,TaxAmount=m.TaxAmount,OtherCharges=m.OtherCharges,NetAmount=m.NetAmount,PaidAmount=m.PaidAmount,BalanceAmount=m.BalanceAmount,PaymentStatus=m.PaymentStatus,InvoiceStatus=m.InvoiceStatus,Remarks=m.Remarks};
+  private static SalesInvoiceFormViewModel ToForm(SalesInvoice e)=>new(){Uid=e.Uid,InvoiceNo=e.InvoiceNo,InvoiceDate=e.InvoiceDate,BranchUid=e.BranchUid,Branch=e.Branch,Terminal=e.Terminal,CustomerUid=e.CustomerUid,PaymentMethodUid=e.PaymentMethodUid,SubTotal=e.SubTotal,DiscountAmount=e.DiscountAmount,TaxAmount=e.TaxAmount,OtherCharges=e.OtherCharges,NetAmount=e.NetAmount,PaidAmount=e.PaidAmount,BalanceAmount=e.BalanceAmount,PaymentStatus=e.PaymentStatus,InvoiceStatus=e.InvoiceStatus,Remarks=e.Remarks};
+  private static SalesInvoice ToEntity(SalesInvoiceFormViewModel m)=>new(){InvoiceNo=m.InvoiceNo.Trim(),InvoiceDate=m.InvoiceDate,BranchUid=m.BranchUid,Branch=NormalizeName(m.Branch),Terminal=NormalizeName(m.Terminal),CustomerUid=m.CustomerUid,PaymentMethodUid=m.PaymentMethodUid,SubTotal=m.SubTotal,DiscountAmount=m.DiscountAmount,TaxAmount=m.TaxAmount,OtherCharges=m.OtherCharges,NetAmount=m.NetAmount,PaidAmount=m.PaidAmount,BalanceAmount=m.BalanceAmount,PaymentStatus=m.PaymentStatus,InvoiceStatus=m.InvoiceStatus,Remarks=m.Remarks};
   private static void ApplyEditable(SalesInvoice e, SalesInvoiceFormViewModel m)
   {
     e.BranchUid = m.BranchUid;
+    e.Branch = NormalizeName(m.Branch);
+    e.Terminal = NormalizeName(m.Terminal);
     e.PaymentMethodUid = m.PaymentMethodUid;
     e.PaidAmount = m.PaidAmount;
     e.Remarks = string.IsNullOrWhiteSpace(m.Remarks) ? null : m.Remarks.Trim();
@@ -268,4 +348,7 @@ public class SalesInvoicesController : Controller {
         ? "Paid"
         : "Partial";
   }
+
+  private static string? NormalizeName(string? value) =>
+    string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

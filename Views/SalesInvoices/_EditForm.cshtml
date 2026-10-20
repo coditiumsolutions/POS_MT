@@ -17,6 +17,20 @@
     <h2 class="invoice-meta-section-title">Editable</h2>
     <div class="invoice-meta-grid invoice-meta-form">
         <div class="invoice-meta-row">
+            <label asp-for="Branch" class="invoice-meta-title"></label>
+            <div class="invoice-meta-field">
+                <select asp-for="Branch" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.BranchNames">
+                    <option value="">-- Select --</option>
+                </select>
+            </div>
+            <label asp-for="Terminal" class="invoice-meta-title"></label>
+            <div class="invoice-meta-field">
+                <select asp-for="Terminal" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.TerminalNames">
+                    <option value="">-- Select --</option>
+                </select>
+            </div>
+        </div>
+        <div class="invoice-meta-row">
             <label asp-for="BranchUid" class="invoice-meta-title"></label>
             <div class="invoice-meta-field">
                 <select asp-for="BranchUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Branches">

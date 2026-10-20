@@ -1,7 +1,7 @@
 ﻿POS_MT - Database Documentation
 ===============================
-Version   : 1.0.5
-UpdatedAt : 10/10/2026
+Version   : 1.0.11
+UpdatedAt : 10/16/2026
 
 Database Information
 --------------------
@@ -13,12 +13,13 @@ Provider : SQL Server
 
 Note: Password, host, and full connection string are kept in local appsettings.Development.json / deploy build config only (not stored in this file).
 
-Tables (27)
+Tables (28)
 -----------
 AuditLogs
 Branches
 Configuration
-CustomerMonthlyItems
+CustomerMonthlySupply
+CustomerMonthlySupplyOverrides
 CustomerPayments
 Customers
 ExpenseCategories
@@ -101,7 +102,8 @@ TerminalUID                 int                     YES     NO
 Remarks                     nvarchar(500)           YES     NO        
 CreatedDate                 datetime2               NO      NO        (sysdatetime())
 
-=== CustomerMonthlyItems ===
+=== CustomerMonthlySupply ===
+(Standing monthly supply template. Renamed from CustomerMonthlyItems.)
 Column                      Type                    Null    Identity  Default
 ------------------------------------------------------------------------------------------
 uid                         int                     NO      YES       
@@ -112,15 +114,39 @@ ProductName                 nvarchar(200)           NO      NO
 BrandName                   nvarchar(100)           YES     NO        
 Quantity                    decimal(18,3)           NO      NO        ((0))
 UnitPrice                   decimal(18,2)           NO      NO        ((0))
-CustomerUID                 int                     YES     NO        
-ProductUID                  int                     YES     NO        
+DeliveryCharges             decimal(18,2)           NO      NO        ((0))
+CustomerUID                 int                     YES     NO
+ProductUID                  int                     YES     NO
+CreatedDate                 datetime2               NO      NO        (sysdatetime())
+UpdatedDate                 datetime2               YES     NO
+
+Indexes (non-PK):
+  IX_CustomerMonthlySupply_CustomerCode (CustomerCode)
+  IX_CustomerMonthlySupply_CustomerUID (CustomerUID)
+  IX_CustomerMonthlySupply_ProductCode (ProductCode)
+
+=== CustomerMonthlySupplyOverrides ===
+(Per-day qty/skip/one-off overrides for Add Supplied. Does not change the standing template.)
+Column                      Type                    Null    Identity  Default
+------------------------------------------------------------------------------------------
+uid                         int                     NO      YES       
+CustomerUID                 int                     NO      NO        
+ProductUID                  int                     NO      NO        
+CustomerCode                nvarchar(50)            NO      NO        
+ProductCode                 nvarchar(50)            NO      NO        
+ProductName                 nvarchar(200)           NO      NO        
+BrandName                   nvarchar(100)           YES     NO        
+SupplyDate                  date                    NO      NO        
+Quantity                    decimal(18,3)           NO      NO        ((0))
+UnitPrice                   decimal(18,2)           NO      NO        ((0))
+Remarks                     nvarchar(500)           YES     NO        
 CreatedDate                 datetime2               NO      NO        (sysdatetime())
 UpdatedDate                 datetime2               YES     NO        
 
 Indexes (non-PK):
-  IX_CustomerMonthlyItems_CustomerCode (CustomerCode)
-  IX_CustomerMonthlyItems_CustomerUID (CustomerUID)
-  IX_CustomerMonthlyItems_ProductCode (ProductCode)
+  UX_CustomerMonthlySupplyOverrides_Customer_Product_Date (CustomerUID, ProductUID, SupplyDate) UNIQUE
+  IX_CustomerMonthlySupplyOverrides_CustomerUID (CustomerUID)
+  IX_CustomerMonthlySupplyOverrides_SupplyDate (SupplyDate)
 
 === Customers ===
 Column                      Type                    Null    Identity  Default
@@ -203,6 +229,9 @@ Remarks                     nvarchar(500)           YES     NO
 UserUID                     int                     YES     NO        
 TerminalUID                 int                     YES     NO        
 CreatedDate                 datetime2               NO      NO        (sysdatetime())
+Notes:
+  TransactionType values used by app: Purchase, PurchaseReversal, Sale, SaleReversal.
+  Sales reduce Inventory.CurrentQuantity; purchases increase it. Sale shortfalls are noted on SalesInvoices.Remarks.
 
 === PaymentMethods ===
 Column                      Type                    Null    Identity  Default
@@ -324,15 +353,17 @@ Remarks                     nvarchar(300)           YES     NO
 === SalesInvoices ===
 Column                      Type                    Null    Identity  Default
 ------------------------------------------------------------------------------------------
-uid                         int                     NO      YES       
-ClientTransactionId         uniqueidentifier        YES     NO        
-InvoiceNo                   nvarchar(50)            NO      NO        
+uid                         int                     NO      YES
+ClientTransactionId         uniqueidentifier        YES     NO
+InvoiceNo                   nvarchar(50)            NO      NO
 InvoiceDate                 datetime2               NO      NO        (sysdatetime())
-BranchUID                   int                     YES     NO        
-CustomerUID                 int                     YES     NO        
-UserUID                     int                     YES     NO        
-TerminalUID                 int                     YES     NO        
-PaymentMethodUID            int                     YES     NO        
+BranchUID                   int                     YES     NO
+Branch                      nvarchar(150)           YES     NO
+CustomerUID                 int                     YES     NO
+UserUID                     int                     YES     NO
+TerminalUID                 int                     YES     NO
+Terminal                    nvarchar(100)           YES     NO
+PaymentMethodUID            int                     YES     NO
 SubTotal                    decimal(18,2)           NO      NO        ((0))
 DiscountAmount              decimal(18,2)           NO      NO        ((0))
 TaxAmount                   decimal(18,2)           NO      NO        ((0))
@@ -408,18 +439,20 @@ UpdatedDate                 datetime2               YES     NO
 === Users ===
 Column                      Type                    Null    Identity  Default
 ------------------------------------------------------------------------------------------
-uid                         int                     NO      YES       
-UserName                    nvarchar(100)           NO      NO        
-FullName                    nvarchar(200)           NO      NO        
-PasswordHash                nvarchar(500)           NO      NO        
-MobileNo                    nvarchar(30)            YES     NO        
-Email                       nvarchar(150)           YES     NO        
-RoleName                    nvarchar(50)            NO      NO        
-UserType                    nvarchar(50)            YES     NO        
+uid                         int                     NO      YES
+UserName                    nvarchar(100)           NO      NO
+FullName                    nvarchar(200)           NO      NO
+PasswordHash                nvarchar(500)           NO      NO
+MobileNo                    nvarchar(30)            YES     NO
+Email                       nvarchar(150)           YES     NO
+RoleName                    nvarchar(50)            NO      NO
+UserType                    nvarchar(50)            YES     NO
+TerminalName                nvarchar(100)           YES     NO
+Branch                      nvarchar(150)           YES     NO
 IsActive                    bit                     NO      NO        ((1))
-LastLoginDate               datetime2               YES     NO        
+LastLoginDate               datetime2               YES     NO
 CreatedDate                 datetime2               NO      NO        (sysdatetime())
-UpdatedDate                 datetime2               YES     NO        
+UpdatedDate                 datetime2               YES     NO
 
 === UserSessions ===
 Column                      Type                    Null    Identity  Default

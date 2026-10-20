@@ -7,7 +7,7 @@
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
     <div>
         <h1 class="page-heading mb-1">Monthly Supply</h1>
-        <p class="text-muted mb-0">Select customers, choose a supply date, and click <strong>Add Supplied</strong>. One monthly invoice per customer per month — later supplies add detail lines to the same invoice. Use <strong>▶</strong> or double-click a row to view monthly items.</p>
+        <p class="text-muted mb-0">Select customers, choose a supply date, and click <strong>Add Supplied</strong>. Standing list is <strong>CustomerMonthlySupply</strong>; use day overrides when a customer wants less/more on that date only. Use <strong>▶</strong> or double-click a row.</p>
     </div>
     <div class="text-muted small align-self-center">
         Selected: <strong id="monthlySupplySelectedCount">0</strong>
@@ -23,6 +23,7 @@
     <div class="alert alert-success">@TempData["Success"]</div>
 }
 
+@* Toolbar form only — checkboxes use form="monthlySupplyForm" so expand-panel forms are not nested (nested forms caused HTTP 400). *@
 <form asp-action="MonthlySupplyContinue" method="post" id="monthlySupplyForm">
     @Html.AntiForgeryToken()
     <div class="mb-3 d-flex flex-wrap gap-2 align-items-end">
@@ -51,6 +52,7 @@
             <input type="search" id="monthlySupplyFilter" class="form-control form-control-sm" placeholder="Filter customers…" autocomplete="off" />
         </div>
     </div>
+</form>
 
     <div class="table-responsive bg-white border rounded p-2">
         <table id="monthlySupplyTable" class="table table-striped table-hover w-100 align-middle mb-0">
@@ -89,6 +91,7 @@
                         <td class="monthly-supply-check-cell">
                             <input type="checkbox"
                                    class="form-check-input monthly-supply-check"
+                                   form="monthlySupplyForm"
                                    name="selectedCustomerUids"
                                    value="@c.Uid"
                                    data-uid="@c.Uid"
@@ -113,8 +116,8 @@
                         <td colspan="7" class="p-0 border-0">
                             <div class="monthly-supply-detail-panel">
                                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2 px-3 pt-3">
-                                    <strong class="monthly-supply-detail-title">Monthly items — @c.CustomerName</strong>
-                                    <span class="text-muted small">Click ▶ again or double-click the row to close</span>
+                                    <strong class="monthly-supply-detail-title">Monthly supply — @c.CustomerName</strong>
+                                    <span class="text-muted small">Standing list + day overrides for the Supply date above</span>
                                 </div>
                                 <div class="monthly-supply-items-loading text-muted px-3 pb-3">Loading items…</div>
                                 <div class="monthly-supply-items-host d-none px-3 pb-3"></div>
@@ -126,17 +129,20 @@
             </tbody>
         </table>
     </div>
-</form>
 
 @section Scripts {
     @if (Model.Customers.Count > 0)
     {
         <script>
             (function () {
-                const itemsUrl = '@Url.Action("CustomerMonthlyItems", "POS")';
+                const itemsUrl = '@Url.Action("CustomerMonthlySupplyItems", "POS")';
+                const forDateUrl = '@Url.Action("CustomerMonthlySupplyForDate", "POS")';
                 const updateUrl = '@Url.Action("UpdateMonthlySupplyItem", "POS")';
                 const deleteUrl = '@Url.Action("DeleteMonthlySupplyItem", "POS")';
+                const upsertOverrideUrl = '@Url.Action("UpsertMonthlySupplyOverride", "POS")';
+                const deleteOverrideUrl = '@Url.Action("DeleteMonthlySupplyOverride", "POS")';
                 const antiforgery = document.querySelector('#monthlySupplyForm input[name="__RequestVerificationToken"]')?.value || '';
+                const supplyDateInput = document.getElementById('supplyDate');
 
                 const selectAll = document.getElementById('monthlySupplySelectAll');
                 const checks = Array.from(document.querySelectorAll('.monthly-supply-check'));
@@ -214,84 +220,305 @@
                         .replace(/"/g, '&quot;');
                 }
 
-                function renderItems(host, customerUid, items) {
-                    if (!items || items.length === 0) {
-                        host.innerHTML = '<p class="text-muted mb-0">No monthly items for this customer yet. Use <strong>Open Items for Selected Customers</strong> to add products.</p>';
-                        return;
+                function getSupplyDateValue() {
+                    return (supplyDateInput && supplyDateInput.value) ? supplyDateInput.value : new Date().toISOString().slice(0, 10);
+                }
+
+                function postForm(url, fields) {
+                    const body = new URLSearchParams();
+                    body.set('__RequestVerificationToken', antiforgery);
+                    Object.keys(fields).forEach(function (k) {
+                        if (fields[k] != null) body.set(k, String(fields[k]));
+                    });
+                    return fetch(url, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'RequestVerificationToken': antiforgery,
+                            'Accept': 'application/json'
+                        },
+                        body: body.toString()
+                    }).then(function (res) {
+                        return res.json().then(function (data) {
+                            return { ok: res.ok, data: data };
+                        });
+                    });
+                }
+
+                function renderItems(host, customerUid, payload) {
+                    const items = payload.template || [];
+                    const overrides = payload.overrides || [];
+                    const effective = payload.effective || [];
+                    const products = payload.products || [];
+                    const day = payload.supplyDate || getSupplyDateValue();
+
+                    let standingHtml;
+                    if (!items.length) {
+                        standingHtml = '<p class="text-muted mb-2">No standing supply yet. Use <strong>Open Items for Selected Customers</strong> to add products.</p>';
+                    } else {
+                        let rows = '';
+                        items.forEach(function (item) {
+                            const brand = item.brandName ? escapeHtml(item.brandName) : '—';
+                            const lineTotal = (item.quantity * item.unitPrice);
+                            const ov = overrides.find(function (o) { return o.productUid === item.productUid; });
+                            const isSkipped = !!(ov && ov.quantity <= 0);
+                            const isUpdated = !!(ov && ov.quantity > 0);
+                            const overrideLabel = isUpdated ? 'Item Updated' : (ov ? 'Change day' : 'Override day');
+                            const skipLabel = isSkipped ? 'Item Skipped' : 'Skip day';
+                            const overrideBtnClass = isUpdated ? 'btn-warning' : 'btn-outline-warning';
+                            const skipBtnClass = isSkipped ? 'btn-secondary' : 'btn-outline-secondary';
+                            const overrideDisabled = isUpdated ? ' disabled' : '';
+                            const skipDisabled = isSkipped ? ' disabled' : '';
+                            const overrideQty = isUpdated ? ov.quantity : item.quantity;
+                            const deliveryCharges = (item.deliveryCharges == null || item.deliveryCharges === '') ? 0 : Number(item.deliveryCharges);
+                            rows += '<tr class="monthly-supply-item-row" data-item-id="' + item.uid + '" data-product-uid="' + item.productUid + '" title="Double-click to edit or delete standing item">' +
+                                '<td>' + escapeHtml(item.productCode) + '</td>' +
+                                '<td>' + escapeHtml(item.productName) + '</td>' +
+                                '<td>' + brand + '</td>' +
+                                '<td class="text-end monthly-supply-qty-display">' + formatMoney(item.quantity) + '</td>' +
+                                '<td class="text-end monthly-supply-price-display">' + formatMoney(item.unitPrice) + '</td>' +
+                                '<td class="text-end monthly-supply-delivery-display">' + formatMoney(deliveryCharges) + '</td>' +
+                                '<td class="text-end">' + formatMoney(lineTotal) + '</td>' +
+                                '<td class="text-end text-nowrap monthly-supply-day-actions">' +
+                                '<button type="button" class="btn btn-sm ' + overrideBtnClass + ' monthly-supply-override-btn me-1" data-product-uid="' + item.productUid + '" data-qty="' + overrideQty + '" data-price="' + item.unitPrice + '"' + overrideDisabled + ' title="' + (isUpdated ? 'Day qty already updated — Clear in Day overrides to change again' : 'Change quantity for this supply date only') + '">' +
+                                overrideLabel + '</button>' +
+                                '<button type="button" class="btn btn-sm ' + skipBtnClass + ' monthly-supply-skip-btn" data-product-uid="' + item.productUid + '" data-price="' + item.unitPrice + '"' + skipDisabled + ' title="' + (isSkipped ? 'Already skipped for this date — Clear in Day overrides to undo' : 'Skip this product for this supply date') + '">' +
+                                skipLabel + '</button>' +
+                                '<button type="button" class="btn btn-sm btn-outline-danger monthly-supply-delete-item-btn ms-1" data-item-id="' + item.uid + '" title="Remove this product from the customer standing supply">Delete</button>' +
+                                '</td></tr>' +
+                                '<tr class="monthly-supply-item-detail-row d-none" data-item-detail-for="' + item.uid + '" aria-hidden="true">' +
+                                '<td colspan="8" class="p-0 border-0">' +
+                                '<div class="monthly-supply-item-record p-3 bg-light border-bottom">' +
+                                '<div class="fw-semibold mb-2">Standing item — ' + escapeHtml(item.productCode) + ' · ' + escapeHtml(item.productName) + '</div>' +
+                                '<form method="post" action="' + updateUrl + '" class="row g-2 align-items-end monthly-supply-item-edit-form">' +
+                                '<input type="hidden" name="__RequestVerificationToken" value="' + antiforgery + '" />' +
+                                '<input type="hidden" name="Id" value="' + item.uid + '" />' +
+                                '<input type="hidden" name="CustomerUid" value="' + customerUid + '" />' +
+                                '<div class="col-auto"><label class="form-label small mb-0">Qty</label>' +
+                                '<input name="Quantity" type="number" step="0.001" min="0.1" class="form-control form-control-sm" style="width:88px" value="' + item.quantity + '" required /></div>' +
+                                '<div class="col-auto"><label class="form-label small mb-0">Unit price</label>' +
+                                '<input name="UnitPrice" type="number" step="0.01" min="0" class="form-control form-control-sm" style="width:96px" value="' + item.unitPrice + '" required /></div>' +
+                                '<div class="col-auto"><label class="form-label small mb-0">Delivery charges</label>' +
+                                '<input name="DeliveryCharges" type="number" step="0.01" min="0" class="form-control form-control-sm" style="width:110px" value="' + deliveryCharges + '" required /></div>' +
+                                '<div class="col-auto"><button type="submit" class="btn btn-sm btn-success">Save</button></div>' +
+                                '<div class="col-auto"><button type="button" class="btn btn-sm btn-outline-secondary monthly-supply-close-item-record">Close</button></div>' +
+                                '</form>' +
+                                '<form method="post" action="' + deleteUrl + '" class="mt-2 monthly-supply-delete-form">' +
+                                '<input type="hidden" name="__RequestVerificationToken" value="' + antiforgery + '" />' +
+                                '<input type="hidden" name="id" value="' + item.uid + '" />' +
+                                '<input type="hidden" name="fromMonthlySupply" value="true" />' +
+                                '<input type="hidden" name="customerUid" value="' + customerUid + '" />' +
+                                '<button type="submit" class="btn btn-sm btn-outline-danger">Delete from standing supply</button>' +
+                                '</form>' +
+                                '</div></td></tr>';
+                        });
+                        standingHtml =
+                            '<h6 class="mb-2">Standing supply (template)</h6>' +
+                            '<p class="text-muted small mb-2">Double-click a row to edit or delete the standing item. Change day / Skip day apply only to the supply date above.</p>' +
+                            '<div class="table-responsive border rounded bg-white mb-3">' +
+                            '<table class="table table-sm table-hover align-middle mb-0 monthly-supply-items-table">' +
+                            '<thead class="table-light"><tr>' +
+                            '<th>Product Code</th><th>Product Name</th><th>Brand</th>' +
+                            '<th class="text-end">Qty</th><th class="text-end">Unit Price</th><th class="text-end">Delivery Charges</th><th class="text-end">Line Total</th><th class="text-end">Actions</th>' +
+                            '</tr></thead><tbody>' + rows + '</tbody></table></div>';
                     }
 
-                    let rows = '';
-                    items.forEach(function (item) {
-                        const brand = item.brandName ? escapeHtml(item.brandName) : '—';
-                        const lineTotal = (item.quantity * item.unitPrice);
-                        rows += '<tr data-item-id="' + item.uid + '">' +
-                            '<td>' + escapeHtml(item.productCode) + '</td>' +
-                            '<td>' + escapeHtml(item.productName) + '</td>' +
-                            '<td>' + brand + '</td>' +
-                            '<td class="text-end monthly-supply-qty-display">' + formatMoney(item.quantity) + '</td>' +
-                            '<td class="text-end monthly-supply-price-display">' + formatMoney(item.unitPrice) + '</td>' +
-                            '<td class="text-end monthly-supply-line-total">' + formatMoney(lineTotal) + '</td>' +
-                            '<td class="text-end text-nowrap">' +
-                            '<button type="button" class="btn btn-sm btn-outline-primary monthly-supply-edit-btn me-1">Edit</button>' +
-                            '<form method="post" action="' + deleteUrl + '" class="d-inline monthly-supply-delete-form">' +
-                            '<input type="hidden" name="__RequestVerificationToken" value="' + antiforgery + '" />' +
-                            '<input type="hidden" name="id" value="' + item.uid + '" />' +
-                            '<input type="hidden" name="fromMonthlySupply" value="true" />' +
-                            '<input type="hidden" name="customerUid" value="' + customerUid + '" />' +
-                            '<button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>' +
-                            '</form>' +
-                            '</td></tr>';
+                    let effectiveRows = '';
+                    effective.forEach(function (line) {
+                        const tag = line.isSkipped ? '<span class="badge text-bg-secondary">Skip</span>'
+                            : (line.isOverride ? '<span class="badge text-bg-warning">Override</span>' : '<span class="badge text-bg-success">Template</span>');
+                        effectiveRows += '<tr class="' + (line.isSkipped ? 'table-secondary' : '') + '">' +
+                            '<td>' + escapeHtml(line.productCode) + '</td>' +
+                            '<td>' + escapeHtml(line.productName) + ' ' + tag + '</td>' +
+                            '<td class="text-end">' + (line.isSkipped ? '0' : formatMoney(line.quantity)) + '</td>' +
+                            '<td class="text-end">' + formatMoney(line.unitPrice) + '</td></tr>';
                     });
 
-                    host.innerHTML =
-                        '<div class="table-responsive border rounded bg-white">' +
-                        '<table class="table table-sm table-hover align-middle mb-0 monthly-supply-items-table">' +
-                        '<thead class="table-light"><tr>' +
-                        '<th>Product Code</th><th>Product Name</th><th>Brand</th>' +
-                        '<th class="text-end">Qty</th><th class="text-end">Unit Price</th><th class="text-end">Line Total</th><th class="text-end" style="width:140px">Actions</th>' +
-                        '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+                    let overrideRowsHtml = '';
+                    overrides.forEach(function (ov) {
+                        overrideRowsHtml += '<tr>' +
+                            '<td>' + escapeHtml(ov.productCode) + '</td>' +
+                            '<td>' + escapeHtml(ov.productName) + '</td>' +
+                            '<td class="text-end">' + formatMoney(ov.quantity) + (ov.quantity <= 0 ? ' (skip)' : '') + '</td>' +
+                            '<td class="text-end">' + formatMoney(ov.unitPrice) + '</td>' +
+                            '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger monthly-supply-clear-override" data-override-id="' + ov.uid + '">Clear</button></td></tr>';
+                    });
+
+                    let productOptions = '<option value="">Select product…</option>';
+                    products.forEach(function (p) {
+                        productOptions += '<option value="' + p.uid + '" data-price="' + p.salePrice + '">' +
+                            escapeHtml(p.code) + ' — ' + escapeHtml(p.name) + '</option>';
+                    });
+
+                    host.innerHTML = standingHtml +
+                        '<h6 class="mb-1">Will deliver on <span class="text-primary">' + escapeHtml(day) + '</span> (Add Supplied)</h6>' +
+                        '<p class="text-muted small mb-2">Overrides apply only to this supply date. Standing supply stays unchanged.</p>' +
+                        '<div class="table-responsive border rounded bg-white mb-3">' +
+                        '<table class="table table-sm align-middle mb-0"><thead class="table-light"><tr>' +
+                        '<th>Code</th><th>Product</th><th class="text-end">Qty</th><th class="text-end">Price</th></tr></thead>' +
+                        '<tbody>' + (effectiveRows || '<tr><td colspan="4" class="text-muted">Nothing to deliver for this date.</td></tr>') +
+                        '</tbody></table></div>' +
+                        '<h6 class="mb-2">Day overrides' + (overrides.length ? '' : ' <span class="text-muted fw-normal">(none)</span>') + '</h6>' +
+                        (overrides.length
+                            ? '<div class="table-responsive border rounded bg-white mb-3"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Code</th><th>Product</th><th class="text-end">Qty</th><th class="text-end">Price</th><th></th></tr></thead><tbody>' + overrideRowsHtml + '</tbody></table></div>'
+                            : '') +
+                        '<div class="border rounded bg-white p-3 mb-1">' +
+                        '<div class="fw-semibold mb-2">Add / change override for ' + escapeHtml(day) + '</div>' +
+                        '<div class="row g-2 align-items-end">' +
+                        '<div class="col-md-5"><label class="form-label small mb-0">Product</label>' +
+                        '<select class="form-select form-select-sm monthly-supply-override-product">' + productOptions + '</select></div>' +
+                        '<div class="col-md-2"><label class="form-label small mb-0">Qty (0 = skip)</label>' +
+                        '<input type="number" step="0.001" min="0" class="form-control form-control-sm monthly-supply-override-qty" value="1" /></div>' +
+                        '<div class="col-md-2"><label class="form-label small mb-0">Unit price</label>' +
+                        '<input type="number" step="0.01" min="0" class="form-control form-control-sm monthly-supply-override-price" value="0" /></div>' +
+                        '<div class="col-md-3"><button type="button" class="btn btn-sm btn-warning monthly-supply-save-override">Save day override</button></div>' +
+                        '</div></div>';
+
+                    function closeAllItemRecords() {
+                        host.querySelectorAll('.monthly-supply-item-detail-row').forEach(function (row) {
+                            row.classList.add('d-none');
+                            row.setAttribute('aria-hidden', 'true');
+                        });
+                        host.querySelectorAll('.monthly-supply-item-row').forEach(function (row) {
+                            row.classList.remove('monthly-supply-item-row-open');
+                        });
+                    }
+
+                    function openItemRecord(itemUid) {
+                        const detail = host.querySelector('.monthly-supply-item-detail-row[data-item-detail-for="' + itemUid + '"]');
+                        const itemRow = host.querySelector('.monthly-supply-item-row[data-item-id="' + itemUid + '"]');
+                        if (!detail || !itemRow) return;
+                        const alreadyOpen = !detail.classList.contains('d-none');
+                        closeAllItemRecords();
+                        if (alreadyOpen) return;
+                        detail.classList.remove('d-none');
+                        detail.setAttribute('aria-hidden', 'false');
+                        itemRow.classList.add('monthly-supply-item-row-open');
+                        detail.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                    }
+
+                    host.querySelectorAll('.monthly-supply-item-row').forEach(function (row) {
+                        row.addEventListener('dblclick', function (e) {
+                            if (e.target.closest('button, a, input, select, textarea, form')) return;
+                            const itemUid = row.getAttribute('data-item-id');
+                            if (itemUid) openItemRecord(itemUid);
+                        });
+                    });
+
+                    host.querySelectorAll('.monthly-supply-close-item-record').forEach(function (btn) {
+                        btn.addEventListener('click', function () {
+                            closeAllItemRecords();
+                        });
+                    });
 
                     host.querySelectorAll('.monthly-supply-delete-form').forEach(function (form) {
                         form.addEventListener('submit', function (e) {
-                            if (!confirm('Delete this item from the customer monthly list?')) {
+                            if (!confirm('Delete this product from the customer standing supply?')) {
                                 e.preventDefault();
                             }
                         });
                     });
 
-                    host.querySelectorAll('.monthly-supply-edit-btn').forEach(function (btn) {
+                    host.querySelectorAll('.monthly-supply-delete-item-btn').forEach(function (btn) {
+                        btn.addEventListener('click', function (e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const itemUid = btn.getAttribute('data-item-id');
+                            const form = host.querySelector('.monthly-supply-item-detail-row[data-item-detail-for="' + itemUid + '"] .monthly-supply-delete-form');
+                            if (form) form.requestSubmit();
+                        });
+                    });
+
+                    function saveOverride(productUid, qty, price) {
+                        return postForm(upsertOverrideUrl, {
+                            customerUid: customerUid,
+                            productUid: productUid,
+                            supplyDate: day,
+                            quantity: qty,
+                            unitPrice: price || 0
+                        }).then(function (result) {
+                            if (!result.ok || !result.data.success) {
+                                alert((result.data && result.data.message) || 'Could not save override.');
+                                return;
+                            }
+                            loadItems(customerUid, detailRowFor(customerUid), true);
+                        });
+                    }
+
+                    host.querySelectorAll('.monthly-supply-override-btn').forEach(function (btn) {
                         btn.addEventListener('click', function () {
-                            const tr = btn.closest('tr');
-                            if (!tr || tr.classList.contains('monthly-supply-editing')) return;
-                            const itemId = tr.getAttribute('data-item-id');
-                            const qtyCell = tr.querySelector('.monthly-supply-qty-display');
-                            const priceCell = tr.querySelector('.monthly-supply-price-display');
-                            const qtyVal = qtyCell.textContent.replace(/,/g, '');
-                            const priceVal = priceCell.textContent.replace(/,/g, '');
-                            tr.classList.add('monthly-supply-editing');
-                            tr.querySelector('td:last-child').innerHTML =
-                                '<form method="post" action="' + updateUrl + '" class="d-flex flex-wrap gap-1 justify-content-end align-items-center monthly-supply-update-form">' +
-                                '<input type="hidden" name="__RequestVerificationToken" value="' + antiforgery + '" />' +
-                                '<input type="hidden" name="Id" value="' + itemId + '" />' +
-                                '<input type="hidden" name="CustomerUid" value="' + customerUid + '" />' +
-                                '<label class="visually-hidden" for="qty-' + itemId + '">Quantity</label>' +
-                                '<input id="qty-' + itemId + '" name="Quantity" type="number" step="0.001" min="0.1" class="form-control form-control-sm" style="width:88px" value="' + qtyVal + '" required />' +
-                                '<label class="visually-hidden" for="price-' + itemId + '">Unit price</label>' +
-                                '<input id="price-' + itemId + '" name="UnitPrice" type="number" step="0.01" min="0" class="form-control form-control-sm" style="width:96px" value="' + priceVal + '" required />' +
-                                '<button type="submit" class="btn btn-sm btn-success">Save</button>' +
-                                '<button type="button" class="btn btn-sm btn-outline-secondary monthly-supply-cancel-edit">Cancel</button>' +
-                                '</form>';
-                            tr.querySelector('.monthly-supply-cancel-edit').addEventListener('click', function () {
+                            if (btn.disabled) return;
+                            const productUid = btn.getAttribute('data-product-uid');
+                            const defQty = btn.getAttribute('data-qty') || '1';
+                            const defPrice = btn.getAttribute('data-price') || '0';
+                            const qty = prompt('Quantity for ' + day + ' (standing stays unchanged):', defQty);
+                            if (qty == null) return;
+                            const n = parseFloat(qty);
+                            if (isNaN(n) || n < 0) {
+                                alert('Enter a valid quantity (0 to skip).');
+                                return;
+                            }
+                            saveOverride(productUid, n, defPrice);
+                        });
+                    });
+
+                    host.querySelectorAll('.monthly-supply-skip-btn').forEach(function (btn) {
+                        btn.addEventListener('click', function () {
+                            if (btn.disabled) return;
+                            if (!confirm('Skip this product on ' + day + '?')) return;
+                            saveOverride(btn.getAttribute('data-product-uid'), 0, btn.getAttribute('data-price') || 0);
+                        });
+                    });
+
+                    host.querySelectorAll('.monthly-supply-clear-override').forEach(function (btn) {
+                        btn.addEventListener('click', function () {
+                            postForm(deleteOverrideUrl, {
+                                id: btn.getAttribute('data-override-id'),
+                                customerUid: customerUid
+                            }).then(function (result) {
+                                if (!result.ok || !result.data.success) {
+                                    alert((result.data && result.data.message) || 'Could not clear override.');
+                                    return;
+                                }
                                 loadItems(customerUid, detailRowFor(customerUid), true);
                             });
                         });
                     });
+
+                    const productSelect = host.querySelector('.monthly-supply-override-product');
+                    const qtyInput = host.querySelector('.monthly-supply-override-qty');
+                    const priceInput = host.querySelector('.monthly-supply-override-price');
+                    if (productSelect && priceInput) {
+                        productSelect.addEventListener('change', function () {
+                            const opt = productSelect.selectedOptions[0];
+                            if (opt && opt.dataset.price) priceInput.value = opt.dataset.price;
+                        });
+                    }
+                    const saveBtn = host.querySelector('.monthly-supply-save-override');
+                    if (saveBtn) {
+                        saveBtn.addEventListener('click', function () {
+                            const productUid = productSelect && productSelect.value;
+                            if (!productUid) {
+                                alert('Select a product.');
+                                return;
+                            }
+                            const qty = parseFloat(qtyInput.value);
+                            if (isNaN(qty) || qty < 0) {
+                                alert('Enter a valid quantity (0 = skip).');
+                                return;
+                            }
+                            saveOverride(productUid, qty, priceInput.value || 0);
+                        });
+                    }
                 }
 
                 function loadItems(customerUid, detailRow, force) {
                     const host = detailRow.querySelector('.monthly-supply-items-host');
                     const loading = detailRow.querySelector('.monthly-supply-items-loading');
-                    if (!force && loadedCustomers.has(customerUid)) {
+                    const day = getSupplyDateValue();
+                    const cacheKey = customerUid + '|' + day;
+                    if (!force && loadedCustomers.has(cacheKey)) {
                         loading.classList.add('d-none');
                         host.classList.remove('d-none');
                         return Promise.resolve();
@@ -299,21 +526,30 @@
 
                     loading.classList.remove('d-none');
                     host.classList.add('d-none');
-                    loading.textContent = 'Loading items…';
+                    loading.textContent = 'Loading supply…';
 
-                    return fetch(itemsUrl + '?customerUid=' + encodeURIComponent(customerUid), {
+                    return fetch(forDateUrl + '?customerUid=' + encodeURIComponent(customerUid) + '&supplyDate=' + encodeURIComponent(day), {
                         headers: { 'Accept': 'application/json' }
                     }).then(function (res) {
-                        if (!res.ok) throw new Error('Failed to load items');
+                        if (!res.ok) throw new Error('Failed to load supply');
                         return res.json();
-                    }).then(function (items) {
-                        loadedCustomers.add(customerUid);
-                        renderItems(host, customerUid, items);
+                    }).then(function (payload) {
+                        loadedCustomers.add(cacheKey);
+                        renderItems(host, customerUid, payload);
                         loading.classList.add('d-none');
                         host.classList.remove('d-none');
                     }).catch(function () {
-                        loading.textContent = 'Could not load items. Try again.';
+                        loading.textContent = 'Could not load supply. Try again.';
                         host.classList.add('d-none');
+                    });
+                }
+
+                if (supplyDateInput) {
+                    supplyDateInput.addEventListener('change', function () {
+                        loadedCustomers.clear();
+                        if (activeCustomerUid) {
+                            loadItems(activeCustomerUid, detailRowFor(activeCustomerUid), true);
+                        }
                     });
                 }
 

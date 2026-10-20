@@ -98,7 +98,9 @@ public sealed class AuthService : IAuthService
             UserId = user.Uid.ToString(),
             UserName = user.UserName,
             DisplayName = string.IsNullOrWhiteSpace(user.FullName) ? user.UserName : user.FullName,
-            Role = user.RoleName
+            Role = user.RoleName,
+            TerminalName = string.IsNullOrWhiteSpace(user.TerminalName) ? null : user.TerminalName.Trim(),
+            Branch = string.IsNullOrWhiteSpace(user.Branch) ? null : user.Branch.Trim()
         });
     }
 }

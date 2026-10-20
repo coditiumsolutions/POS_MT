@@ -1,5 +1,11 @@
 ﻿@model CustomerPaymentFormViewModel
 <div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
+@if (Model.CustomerUid > 0)
+{
+    <div class="alert alert-info py-2 mb-3">
+        Current advance credit for selected customer: <strong>@Model.CurrentAdvanceBalance.ToString("N2")</strong>
+    </div>
+}
 <div class="invoice-meta-grid invoice-meta-form">
     <div class="invoice-meta-row">
         <label asp-for="PaymentNo" class="invoice-meta-title"></label>
@@ -13,37 +19,47 @@
         </div>
     </div>
     <div class="invoice-meta-row">
+        <label asp-for="CustomerUid" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <select asp-for="CustomerUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Customers" id="CustomerUid">
+                <option value="">-- Select --</option>
+            </select>
+            <span asp-validation-for="CustomerUid" class="text-danger"></span>
+        </div>
         <label asp-for="Amount" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
             <input asp-for="Amount" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-        <label asp-for="CustomerUid" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <select asp-for="CustomerUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Customers"></select>
-            <span asp-validation-for="CustomerUid" class="text-danger"></span>
+            <span asp-validation-for="Amount" class="text-danger"></span>
         </div>
     </div>
     <div class="invoice-meta-row">
-        <label asp-for="SalesInvoiceUid" class="invoice-meta-title"></label>
+        <label asp-for="PaymentType" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <select asp-for="SalesInvoiceUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Invoices">
-                <option value="">-- Optional --</option>
+            <select asp-for="PaymentType" class="form-select form-select-sm invoice-meta-input" id="PaymentType">
+                <option value="Advance">Advance (prepaid credit)</option>
+                <option value="AgainstInvoice">Against Invoice</option>
             </select>
         </div>
+        <label asp-for="SalesInvoiceUid" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <select asp-for="SalesInvoiceUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Invoices" id="SalesInvoiceUid">
+                <option value="">-- Select invoice --</option>
+            </select>
+            <span asp-validation-for="SalesInvoiceUid" class="text-danger"></span>
+            <div class="form-text">Against Invoice: pays the bill; any excess stays as advance.</div>
+        </div>
+    </div>
+    <div class="invoice-meta-row">
         <label asp-for="PaymentMethodUid" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
             <select asp-for="PaymentMethodUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.PaymentMethods">
                 <option value="">-- Select --</option>
             </select>
         </div>
-    </div>
-    <div class="invoice-meta-row">
         <label asp-for="ReferenceNo" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
             <input asp-for="ReferenceNo" class="form-control form-control-sm invoice-meta-input" />
         </div>
-        <div class="invoice-meta-title"></div>
-        <div class="invoice-meta-field"></div>
     </div>
     <div class="invoice-meta-row">
         <label asp-for="Remarks" class="invoice-meta-title"></label>
@@ -52,3 +68,29 @@
         </div>
     </div>
 </div>
+<script>
+(function () {
+    var type = document.getElementById('PaymentType');
+    var invoice = document.getElementById('SalesInvoiceUid');
+    var customer = document.getElementById('CustomerUid');
+    function syncInvoice() {
+        if (!type || !invoice) return;
+        var against = type.value === 'AgainstInvoice';
+        invoice.disabled = !against;
+        if (!against) invoice.value = '';
+    }
+    if (type) type.addEventListener('change', syncInvoice);
+    syncInvoice();
+    if (customer) {
+        customer.addEventListener('change', function () {
+            var uid = customer.value;
+            if (!uid) return;
+            var url = new URL(window.location.href);
+            url.searchParams.set('customerUid', uid);
+            // Keep create path only
+            if (url.pathname.toLowerCase().indexOf('/edit') >= 0) return;
+            window.location = url.pathname + '?customerUid=' + encodeURIComponent(uid);
+        });
+    }
+})();
+</script>

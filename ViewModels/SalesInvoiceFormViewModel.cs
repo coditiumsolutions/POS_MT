@@ -4,7 +4,9 @@ public sealed class SalesInvoiceFormViewModel {
   public int Uid { get; set; }
   [Required, StringLength(50), Display(Name="Invoice No")] public string InvoiceNo { get; set; } = string.Empty;
   [Display(Name="Invoice Date")] public DateTime InvoiceDate { get; set; } = DateTime.Now;
-  [Display(Name="Branch")] public int? BranchUid { get; set; }
+  [Display(Name="Branch UID")] public int? BranchUid { get; set; }
+  [StringLength(150), Display(Name="Branch")] public string? Branch { get; set; }
+  [StringLength(100), Display(Name="Terminal")] public string? Terminal { get; set; }
   [Display(Name="Customer")] public int? CustomerUid { get; set; }
   [Display(Name="Payment Method")] public int? PaymentMethodUid { get; set; }
   [Display(Name="Sub Total")] public decimal SubTotal { get; set; }

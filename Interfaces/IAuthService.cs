@@ -35,4 +35,8 @@ public sealed class SignedInUser
     public required string DisplayName { get; init; }
 
     public required string Role { get; init; }
+
+    public string? TerminalName { get; init; }
+
+    public string? Branch { get; init; }
 }

@@ -4,6 +4,7 @@
     ViewData["Title"] = "Monthly Supply Items";
     var priceMap = ViewBag.ProductPrices as Dictionary<string, decimal> ?? new Dictionary<string, decimal>();
     var priceJson = JsonSerializer.Serialize(priceMap);
+    var fromCustomers = string.Equals(Model.ReturnTo, "Customers", StringComparison.OrdinalIgnoreCase);
 }
 
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -13,8 +14,17 @@
             Adding items for <strong class="text-body">@Model.ActiveCustomerCode — @Model.ActiveCustomerName</strong>
         </span>
     </div>
-    <a class="btn btn-outline-secondary btn-sm"
-       asp-action="MonthlySupply">Back to customers</a>
+    @if (fromCustomers)
+    {
+        <a class="btn btn-outline-secondary btn-sm"
+           asp-controller="Customers"
+           asp-action="Index">Back to customers</a>
+    }
+    else
+    {
+        <a class="btn btn-outline-secondary btn-sm"
+           asp-action="MonthlySupply">Back to customers</a>
+    }
 </div>
 
 @if (TempData["Error"] != null)
@@ -37,7 +47,8 @@
                     <a class="list-group-item list-group-item-action @(active ? "active" : "")"
                        asp-action="MonthlySupplyItems"
                        asp-route-customerUids="@Model.CustomerUidsQuery"
-                       asp-route-activeCustomerUid="@c.Uid">
+                       asp-route-activeCustomerUid="@c.Uid"
+                       asp-route-returnTo="@Model.ReturnTo">
                         <div class="fw-semibold">@c.CustomerName</div>
                         <div class="small @(active ? "" : "text-muted")">@c.CustomerCode</div>
                     </a>
@@ -51,7 +62,11 @@
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="CustomerUid" value="@Model.ActiveCustomerUid" />
                 <input type="hidden" name="CustomerUids" value="@Model.CustomerUidsQuery" />
-                <div class="col-md-5">
+                @if (fromCustomers)
+                {
+                    <input type="hidden" name="ReturnTo" value="Customers" />
+                }
+                <div class="col-md-4">
                     <label class="form-label" for="ProductUid">Product</label>
                     <select name="ProductUid" id="ProductUid" class="form-select" asp-items="Model.Products" required>
                         <option value="">Select product…</option>
@@ -65,7 +80,11 @@
                     <label class="form-label" for="UnitPrice">Unit Price</label>
                     <input type="number" step="0.01" min="0" name="UnitPrice" id="UnitPrice" class="form-control" value="0" required />
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
+                    <label class="form-label" for="DeliveryCharges">Delivery Charges</label>
+                    <input type="number" step="0.01" min="0" name="DeliveryCharges" id="DeliveryCharges" class="form-control" value="0" required />
+                </div>
+                <div class="col-md-2">
                     <button type="submit" class="btn btn-primary w-100">Add Item</button>
                 </div>
             </form>
@@ -80,6 +99,7 @@
                         <th>Brand</th>
                         <th class="text-end">Qty</th>
                         <th class="text-end">Unit Price</th>
+                        <th class="text-end">Delivery Charges</th>
                         <th class="text-end">Line Total</th>
                         <th style="width:90px"></th>
                     </tr>
@@ -88,7 +108,7 @@
                 @if (Model.Items.Count == 0)
                 {
                     <tr>
-                        <td colspan="7" class="text-muted text-center py-4">No items yet for this customer.</td>
+                        <td colspan="8" class="text-muted text-center py-4">No items yet for this customer.</td>
                     </tr>
                 }
                 else
@@ -101,6 +121,7 @@
                             <td>@(string.IsNullOrWhiteSpace(item.BrandName) ? "—" : item.BrandName)</td>
                             <td class="text-end">@item.Quantity.ToString("N1")</td>
                             <td class="text-end">@item.UnitPrice.ToString("N2")</td>
+                            <td class="text-end">@item.DeliveryCharges.ToString("N2")</td>
                             <td class="text-end">@item.LineTotal.ToString("N2")</td>
                             <td>
                                 <form asp-action="DeleteMonthlySupplyItem" method="post" class="d-inline">
@@ -108,6 +129,10 @@
                                     <input type="hidden" name="id" value="@item.Uid" />
                                     <input type="hidden" name="customerUids" value="@Model.CustomerUidsQuery" />
                                     <input type="hidden" name="activeCustomerUid" value="@Model.ActiveCustomerUid" />
+                                    @if (fromCustomers)
+                                    {
+                                        <input type="hidden" name="returnTo" value="Customers" />
+                                    }
                                     <button type="submit"
                                             class="btn btn-sm btn-outline-danger"
                                             onclick="return confirm('Delete this item?');">Delete</button>

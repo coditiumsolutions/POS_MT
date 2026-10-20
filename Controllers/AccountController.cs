@@ -10,6 +10,10 @@ namespace POS_MT.Controllers;
 
 public class AccountController : Controller
 {
+    public const string SessionUserNameKey = "UserName";
+    public const string SessionTerminalNameKey = "TerminalName";
+    public const string SessionBranchKey = "Branch";
+
     private readonly IAuthService _authService;
 
     public AccountController(IAuthService authService)
@@ -57,6 +61,11 @@ public class AccountController : Controller
             new("UserName", result.User.UserName)
         };
 
+        if (!string.IsNullOrWhiteSpace(result.User.TerminalName))
+            claims.Add(new Claim("TerminalName", result.User.TerminalName));
+        if (!string.IsNullOrWhiteSpace(result.User.Branch))
+            claims.Add(new Claim("Branch", result.User.Branch));
+
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
         var properties = new AuthenticationProperties
         {
@@ -71,6 +80,10 @@ public class AccountController : Controller
             new ClaimsPrincipal(identity),
             properties);
 
+        HttpContext.Session.SetString(SessionUserNameKey, result.User.UserName ?? string.Empty);
+        HttpContext.Session.SetString(SessionTerminalNameKey, result.User.TerminalName ?? string.Empty);
+        HttpContext.Session.SetString(SessionBranchKey, result.User.Branch ?? string.Empty);
+
         if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
         {
             return Redirect(returnUrl);
@@ -83,6 +96,9 @@ public class AccountController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Logout()
     {
+        HttpContext.Session.Remove(SessionUserNameKey);
+        HttpContext.Session.Remove(SessionTerminalNameKey);
+        HttpContext.Session.Remove(SessionBranchKey);
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         return RedirectToAction(nameof(Login));
     }

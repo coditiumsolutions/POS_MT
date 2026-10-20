@@ -212,6 +212,33 @@ body {
   color: #e2e8f0;
 }
 
+.pos-session-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.7rem;
+  max-width: min(42rem, 58vw);
+  justify-content: flex-end;
+}
+
+.pos-session-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  color: #e2e8f0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pos-session-label {
+  color: #94a3b8;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .hub-status-badge {
   display: inline-flex;
   align-items: center;
@@ -403,7 +430,7 @@ button.pos-top-dropdown-item.active,
 
 .pos-nav-label {
   margin: 0.35rem 0.5rem 0.55rem;
-  font-size: 1.45rem;
+  font-size: 1.15rem;
   font-weight: 700;
   text-transform: none;
   letter-spacing: 0.01em;
@@ -414,17 +441,19 @@ button.pos-top-dropdown-item.active,
   display: flex;
   align-items: center;
   gap: 0.55rem;
-  padding: 0.55rem 0.75rem;
+  padding: 0.45rem 0.7rem;
   border-radius: 0;
-  color: var(--pos-sidebar-text);
+  color: #fff;
   text-decoration: none;
   border-bottom: 1px solid #ea580c;
+  font-size: 0.84rem;
+  font-weight: 400;
 }
 
 .pos-nav-link i {
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   line-height: 1;
-  width: 1.25rem;
+  width: 1.15rem;
   text-align: center;
   color: #ea580c;
   flex: 0 0 auto;
@@ -443,6 +472,25 @@ button.pos-top-dropdown-item.active,
   gap: 0.2rem;
 }
 
+.pos-nav-permanent .pos-nav-link {
+  color: #fff;
+  font-weight: 400;
+}
+
+.pos-nav-permanent .pos-nav-link:hover,
+.pos-nav-permanent .pos-nav-link.active {
+  color: #fff;
+}
+
+.pos-nav-permanent .pos-nav-link.pos-nav-accent {
+  color: #ea580c;
+}
+
+.pos-nav-permanent .pos-nav-link.pos-nav-accent:hover,
+.pos-nav-permanent .pos-nav-link.pos-nav-accent.active {
+  color: #fb923c;
+}
+
 a.pos-nav-link:hover {
   background: rgba(255, 255, 255, 0.06);
   color: #fff;
@@ -456,6 +504,60 @@ a.pos-nav-link:hover {
 .pos-nav-link.disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+.pos-nav-group {
+  display: grid;
+  gap: 0;
+}
+
+.pos-nav-group-toggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-size: 0.84rem;
+  color: #fff;
+  font-weight: 400;
+}
+
+.pos-nav-group-toggle:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.pos-nav-group-toggle .pos-nav-group-caret {
+  margin-left: auto;
+  width: auto;
+  font-size: 0.7rem;
+  color: #ea580c;
+  transition: transform 0.15s ease;
+}
+
+.pos-nav-group.open .pos-nav-group-toggle .pos-nav-group-caret {
+  transform: rotate(90deg);
+}
+
+.pos-nav-group.active > .pos-nav-group-toggle {
+  color: #fff;
+}
+
+.pos-nav-group-menu {
+  display: none;
+  padding-left: 0.55rem;
+}
+
+.pos-nav-group.open > .pos-nav-group-menu {
+  display: grid;
+  gap: 0;
+}
+
+.pos-nav-sublink {
+  font-size: 0.84rem;
+  font-weight: 400;
+  padding-left: 1.15rem;
 }
 
 .module-search-wrap {
@@ -1474,6 +1576,49 @@ a.pos-nav-link:hover {
   border-color: #0d5f58;
 }
 
+.crud-form-actions {
+  align-items: stretch;
+}
+
+.crud-form-actions .crud-form-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25;
+  background-color: var(--pos-sidebar);
+  border-color: var(--pos-sidebar);
+  color: #fff;
+}
+
+.crud-form-actions .crud-form-btn:hover,
+.crud-form-actions .crud-form-btn:focus {
+  background-color: #1e293b;
+  border-color: #1e293b;
+  color: #fff;
+}
+
+.btn.btn-primary.daily-report-filter-btn,
+a.btn.btn-primary.daily-report-filter-btn {
+  min-width: 5.5rem;
+  height: 31px;
+  padding: 0.15rem 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.2;
+  background-color: #0d6efd !important;
+  border-color: #0d6efd !important;
+  color: #fff !important;
+}
+
+.btn.btn-primary.daily-report-filter-btn:hover,
+.btn.btn-primary.daily-report-filter-btn:focus,
+a.btn.btn-primary.daily-report-filter-btn:hover,
+a.btn.btn-primary.daily-report-filter-btn:focus {
+  background-color: #0b5ed7 !important;
+  border-color: #0a58ca !important;
+  color: #fff !important;
+}
+
 @media (max-width: 991.98px) {
   .pos-body {
     flex-direction: column;
@@ -1564,6 +1709,18 @@ a.pos-nav-link:hover {
 .monthly-supply-detail-panel {
   background: #f8fafb;
   border-top: 2px solid #0d5f58;
+}
+
+.monthly-supply-item-row {
+  cursor: pointer;
+}
+
+.monthly-supply-item-row.monthly-supply-item-row-open {
+  background-color: rgba(13, 95, 88, 0.08);
+}
+
+.monthly-supply-item-record {
+  border-left: 3px solid #0d5f58;
 }
 
 .monthly-supply-items-heading {

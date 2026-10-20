@@ -1,11 +1,29 @@
 @model CustomerFormViewModel
 @{
     ViewData["Title"] = "Edit Customer";
+    var isSystemCustomer = string.Equals(Model.CustomerCode, "C001", StringComparison.OrdinalIgnoreCase)
+        || (!string.IsNullOrWhiteSpace(Model.CustomerName)
+            && (Model.CustomerName.Contains("Walk-in", StringComparison.OrdinalIgnoreCase)
+                || Model.CustomerName.Contains("Walk In", StringComparison.OrdinalIgnoreCase)));
 }
 <h1 class="page-heading invoice-details-heading mb-3">Edit Customer</h1>
-<form asp-action="Edit" method="post" class="bg-white border rounded p-3">
-    @Html.AntiForgeryToken()
-    <input type="hidden" asp-for="Uid" />
-    <partial name="_CustomerForm" />
-    <partial name="_CrudFormActions" />
-</form>
+<div class="bg-white border rounded p-3">
+    <form asp-action="Edit" method="post" id="customerEditForm">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="Uid" />
+        <partial name="_CustomerForm" />
+    </form>
+    <div class="d-flex gap-2 mt-3 flex-wrap align-items-center">
+        <button type="submit" form="customerEditForm" class="btn btn-primary">Save</button>
+        <a class="btn btn-outline-secondary" asp-action="Index">Back to list</a>
+        @if (!isSystemCustomer)
+        {
+            <form asp-action="Delete" asp-route-id="@Model.Uid" method="post" class="ms-auto">
+                @Html.AntiForgeryToken()
+                <button type="submit"
+                        class="btn btn-outline-danger"
+                        onclick="return confirm('Delete this customer and related sales, payments, and monthly supply records?');">Delete</button>
+            </form>
+        }
+    </div>
+</div>

@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -18,17 +18,23 @@ public class POSController : Controller
     private readonly POSDbContext _db;
     private readonly IAuditService _audit;
     private readonly ISyncOutboxService _syncOutbox;
+    private readonly IInventoryLedgerService _inventory;
+    private readonly ICustomerAdvanceService _advance;
 
     public POSController(
         INavContextService navContext,
         POSDbContext db,
         IAuditService audit,
-        ISyncOutboxService syncOutbox)
+        ISyncOutboxService syncOutbox,
+        IInventoryLedgerService inventory,
+        ICustomerAdvanceService advance)
     {
         _navContext = navContext;
         _db = db;
         _audit = audit;
         _syncOutbox = syncOutbox;
+        _inventory = inventory;
+        _advance = advance;
     }
 
     [HttpGet]
@@ -81,7 +87,7 @@ public class POSController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> CustomerMonthlyItems(int customerUid, CancellationToken ct)
+    public async Task<IActionResult> CustomerMonthlySupplyItems(int customerUid, CancellationToken ct)
     {
         if (customerUid <= 0)
         {
@@ -95,7 +101,7 @@ public class POSController : Controller
             return NotFound(new { error = "Customer was not found." });
         }
 
-        var items = await _db.CustomerMonthlyItems.AsNoTracking()
+        var items = await _db.CustomerMonthlySupplies.AsNoTracking()
             .Where(x => x.CustomerUid == customerUid)
             .OrderByDescending(x => x.Uid)
             .Select(x => new MonthlySupplyItemRowViewModel
@@ -107,11 +113,215 @@ public class POSController : Controller
                 ProductName = x.ProductName,
                 BrandName = x.BrandName,
                 Quantity = x.Quantity,
-                UnitPrice = x.UnitPrice
+                UnitPrice = x.UnitPrice,
+                DeliveryCharges = x.DeliveryCharges ?? 0m
             })
             .ToListAsync(ct);
 
         return Json(items);
+    }
+
+    /// <summary>
+    /// Standing template + day overrides + effective lines for a supply date.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> CustomerMonthlySupplyForDate(int customerUid, DateTime supplyDate, CancellationToken ct)
+    {
+        if (customerUid <= 0)
+        {
+            return BadRequest(new { error = "Invalid customer." });
+        }
+
+        var customer = await _db.Customers.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Uid == customerUid && x.IsActive, ct);
+        if (customer is null)
+        {
+            return NotFound(new { error = "Customer was not found." });
+        }
+
+        var day = supplyDate.Date;
+        var templateRows = await _db.CustomerMonthlySupplies.AsNoTracking()
+            .Where(x => x.CustomerUid == customerUid)
+            .OrderBy(x => x.ProductName)
+            .ToListAsync(ct);
+        var overrideRows = await _db.CustomerMonthlySupplyOverrides.AsNoTracking()
+            .Where(x => x.CustomerUid == customerUid && x.SupplyDate == day)
+            .OrderBy(x => x.ProductName)
+            .ToListAsync(ct);
+        var effective = BuildEffectiveMonthlySupplyLines(templateRows, overrideRows);
+
+        var products = await _db.Products.AsNoTracking()
+            .Where(x => x.IsActive)
+            .OrderBy(x => x.ProductName)
+            .Select(x => new
+            {
+                uid = x.Uid,
+                code = x.ProductCode,
+                name = x.ProductName,
+                brand = x.BrandName,
+                salePrice = x.SalePrice
+            })
+            .Take(500)
+            .ToListAsync(ct);
+
+        return Json(new
+        {
+            supplyDate = day.ToString("yyyy-MM-dd"),
+            template = templateRows.Select(x => new
+            {
+                x.Uid,
+                productUid = x.ProductUid ?? 0,
+                x.ProductCode,
+                x.ProductName,
+                x.BrandName,
+                x.Quantity,
+                x.UnitPrice,
+                deliveryCharges = x.DeliveryCharges ?? 0m
+            }),
+            overrides = overrideRows.Select(x => new
+            {
+                x.Uid,
+                productUid = x.ProductUid,
+                x.ProductCode,
+                x.ProductName,
+                x.BrandName,
+                x.Quantity,
+                x.UnitPrice,
+                x.Remarks
+            }),
+            effective = effective.Select(x => new
+            {
+                x.ProductUid,
+                x.ProductCode,
+                x.ProductName,
+                x.BrandName,
+                x.Quantity,
+                x.UnitPrice,
+                x.IsOverride,
+                x.IsSkipped
+            }),
+            products
+        });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpsertMonthlySupplyOverride(
+        [FromForm] int customerUid,
+        [FromForm] int productUid,
+        [FromForm] DateTime supplyDate,
+        [FromForm] decimal quantity,
+        [FromForm] decimal unitPrice,
+        [FromForm] string? remarks,
+        CancellationToken ct)
+    {
+        _navContext.SetArea("POS");
+        if (customerUid <= 0 || productUid <= 0)
+        {
+            return BadRequest(new { success = false, message = "Customer and product are required." });
+        }
+
+        var day = supplyDate.Date;
+        var customer = await _db.Customers.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Uid == customerUid && x.IsActive, ct);
+        if (customer is null)
+        {
+            return NotFound(new { success = false, message = "Customer was not found." });
+        }
+
+        var product = await _db.Products.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Uid == productUid && x.IsActive, ct);
+        if (product is null)
+        {
+            return NotFound(new { success = false, message = "Product was not found." });
+        }
+
+        if (quantity < 0)
+        {
+            quantity = 0;
+        }
+
+        var templatePrice = await _db.CustomerMonthlySupplies.AsNoTracking()
+            .Where(x => x.CustomerUid == customerUid && x.ProductUid == productUid)
+            .Select(x => (decimal?)x.UnitPrice)
+            .FirstOrDefaultAsync(ct);
+
+        var price = unitPrice > 0
+            ? unitPrice
+            : (templatePrice is > 0 ? templatePrice.Value : product.SalePrice);
+
+        var row = await _db.CustomerMonthlySupplyOverrides
+            .FirstOrDefaultAsync(x => x.CustomerUid == customerUid
+                                      && x.ProductUid == productUid
+                                      && x.SupplyDate == day, ct);
+
+        if (row is null)
+        {
+            row = new CustomerMonthlySupplyOverride
+            {
+                CustomerUid = customer.Uid,
+                CustomerCode = customer.CustomerCode,
+                ProductUid = product.Uid,
+                ProductCode = product.ProductCode,
+                ProductName = product.ProductName,
+                BrandName = product.BrandName,
+                SupplyDate = day,
+                Quantity = quantity,
+                UnitPrice = price,
+                Remarks = string.IsNullOrWhiteSpace(remarks) ? null : remarks.Trim(),
+                CreatedDate = DateTime.Now
+            };
+            _db.CustomerMonthlySupplyOverrides.Add(row);
+        }
+        else
+        {
+            row.Quantity = quantity;
+            row.UnitPrice = price;
+            row.ProductCode = product.ProductCode;
+            row.ProductName = product.ProductName;
+            row.BrandName = product.BrandName;
+            row.Remarks = string.IsNullOrWhiteSpace(remarks) ? null : remarks.Trim();
+            row.UpdatedDate = DateTime.Now;
+        }
+
+        await _db.SaveChangesAsync(ct);
+        await _audit.WriteAsync("Upsert", "CustomerMonthlySupplyOverrides", row.Uid.ToString(),
+            $"Override {product.ProductCode} qty={quantity} for {customer.CustomerCode} on {day:yyyy-MM-dd}", ct);
+
+        return Json(new
+        {
+            success = true,
+            message = quantity <= 0
+                ? $"Skip set for {product.ProductName} on {day:yyyy-MM-dd}."
+                : $"Override saved for {product.ProductName} on {day:yyyy-MM-dd}."
+        });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteMonthlySupplyOverride(
+        [FromForm] int id,
+        [FromForm] int? customerUid,
+        CancellationToken ct)
+    {
+        _navContext.SetArea("POS");
+        var row = await _db.CustomerMonthlySupplyOverrides.FirstOrDefaultAsync(x => x.Uid == id, ct);
+        if (row is null)
+        {
+            return NotFound(new { success = false, message = "Override was not found." });
+        }
+
+        if (customerUid.HasValue && row.CustomerUid != customerUid.Value)
+        {
+            return BadRequest(new { success = false, message = "Override does not belong to this customer." });
+        }
+
+        _db.CustomerMonthlySupplyOverrides.Remove(row);
+        await _db.SaveChangesAsync(ct);
+        await _audit.WriteAsync("Delete", "CustomerMonthlySupplyOverrides", id.ToString(),
+            $"Removed override {row.ProductCode} for {row.CustomerCode} on {row.SupplyDate:yyyy-MM-dd}", ct);
+
+        return Json(new { success = true, message = "Override removed — standing supply applies again." });
     }
 
     [HttpPost]
@@ -182,143 +392,213 @@ public class POSController : Controller
         var skipped = new List<string>();
         var monthStart = new DateTime(supplyDay.Year, supplyDay.Month, 1);
         var monthEnd = monthStart.AddMonths(1);
+        var entryRemark = $"{MonthlyEntryDatePrefix}{supplyDay:yyyy-MM-dd}";
 
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
-
-        foreach (var customer in customers)
+        try
         {
-            if (IsWalkInCustomer(customer.CustomerCode, customer.CustomerName))
+            await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
+            foreach (var customer in customers)
             {
-                skipped.Add($"{customer.CustomerName} (walk-in)");
-                continue;
-            }
+                if (IsWalkInCustomer(customer.CustomerCode, customer.CustomerName))
+                {
+                    skipped.Add($"{customer.CustomerName} (walk-in)");
+                    continue;
+                }
 
-            var monthlyItems = await _db.CustomerMonthlyItems.AsNoTracking()
-                .Where(x => x.CustomerUid == customer.Uid)
-                .OrderBy(x => x.ProductName)
-                .ToListAsync(ct);
+                var monthlyItems = await _db.CustomerMonthlySupplies.AsNoTracking()
+                    .Where(x => x.CustomerUid == customer.Uid)
+                    .OrderBy(x => x.ProductName)
+                    .ToListAsync(ct);
 
-            if (monthlyItems.Count == 0)
-            {
-                skipped.Add($"{customer.CustomerName} (no monthly items)");
-                continue;
-            }
+                var dayOverrides = await _db.CustomerMonthlySupplyOverrides.AsNoTracking()
+                    .Where(x => x.CustomerUid == customer.Uid && x.SupplyDate == supplyDay)
+                    .ToListAsync(ct);
 
-            var productUids = monthlyItems
-                .Select(x => x.ProductUid)
-                .Where(x => x is > 0)
-                .Select(x => x!.Value)
-                .Distinct()
-                .ToList();
+                var effectiveLines = BuildEffectiveMonthlySupplyLines(monthlyItems, dayOverrides)
+                    .Where(x => !x.IsSkipped && x.Quantity > 0 && x.ProductUid > 0)
+                    .ToList();
+                if (effectiveLines.Count == 0)
+                {
+                    skipped.Add($"{customer.CustomerName} (no supply lines for {supplyDay:yyyy-MM-dd} — add standing items or clear skip overrides)");
+                    continue;
+                }
 
-            var products = productUids.Count == 0
-                ? new Dictionary<int, Product>()
-                : await _db.Products.AsNoTracking()
+                var productUids = effectiveLines
+                    .Select(x => x.ProductUid)
+                    .Distinct()
+                    .ToList();
+
+                var products = await _db.Products.AsNoTracking()
                     .Where(x => productUids.Contains(x.Uid))
                     .ToDictionaryAsync(x => x.Uid, ct);
 
-            // One Monthly Supply invoice per customer per calendar month.
-            var invoice = await _db.SalesInvoices
-                .Where(x => x.CustomerUid == customer.Uid
-                            && x.InvoiceStatus != "Cancelled"
-                            && x.Remarks != null
-                            && x.Remarks.StartsWith(MonthlySupplyRemarkPrefix)
-                            && x.InvoiceDate >= monthStart
-                            && x.InvoiceDate < monthEnd)
-                .OrderBy(x => x.Uid)
-                .FirstOrDefaultAsync(ct);
+                // One Monthly Supply invoice per customer per calendar month.
+                var invoice = await _db.SalesInvoices
+                    .Where(x => x.CustomerUid == customer.Uid
+                                && x.InvoiceStatus != "Cancelled"
+                                && x.Remarks != null
+                                && x.Remarks.StartsWith(MonthlySupplyRemarkPrefix)
+                                && x.InvoiceDate >= monthStart
+                                && x.InvoiceDate < monthEnd)
+                    .OrderBy(x => x.Uid)
+                    .FirstOrDefaultAsync(ct);
 
-            var createdNew = false;
-            if (invoice is null)
-            {
-                var invoiceNo = $"POS-MS-{supplyDay:yyyyMM}-{customer.CustomerCode}";
-                while (await _db.SalesInvoices.AnyAsync(x => x.InvoiceNo == invoiceNo, ct))
+                var createdNew = false;
+                if (invoice is null)
                 {
-                    invoiceNo = $"POS-MS-{supplyDay:yyyyMM}-{customer.CustomerCode}-{Random.Shared.Next(10, 99)}";
+                    var invoiceNo = $"POS-MS-{supplyDay:yyyyMM}-{customer.CustomerCode}";
+                    while (await _db.SalesInvoices.AnyAsync(x => x.InvoiceNo == invoiceNo, ct))
+                    {
+                        invoiceNo = $"POS-MS-{supplyDay:yyyyMM}-{customer.CustomerCode}-{Random.Shared.Next(10, 99)}";
+                    }
+
+                    invoice = new SalesInvoice
+                    {
+                        ClientTransactionId = Guid.NewGuid(),
+                        InvoiceNo = invoiceNo,
+                        InvoiceDate = monthStart,
+                        BranchUid = branchUid,
+                        CustomerUid = customer.Uid,
+                        UserUid = userUid,
+                        PaymentMethodUid = paymentMethodUid,
+                        SubTotal = 0,
+                        DiscountAmount = 0,
+                        TaxAmount = 0,
+                        OtherCharges = 0,
+                        NetAmount = 0,
+                        PaidAmount = 0,
+                        BalanceAmount = 0,
+                        PaymentStatus = "Unpaid",
+                        InvoiceStatus = "Completed",
+                        Remarks = $"{MonthlySupplyRemarkPrefix} - {customer.CustomerCode} - {customer.CustomerName} - {supplyDay:yyyy-MM}",
+                        CreatedDate = DateTime.Now
+                    };
+
+                    _db.SalesInvoices.Add(invoice);
+                    await _db.SaveChangesAsync(ct);
+                    createdNew = true;
+                }
+                else if (invoice.ClientTransactionId is null)
+                {
+                    invoice.ClientTransactionId = Guid.NewGuid();
                 }
 
-                invoice = new SalesInvoice
-                {
-                    ClientTransactionId = Guid.NewGuid(),
-                    InvoiceNo = invoiceNo,
-                    InvoiceDate = monthStart,
-                    BranchUid = branchUid,
-                    CustomerUid = customer.Uid,
-                    UserUid = userUid,
-                    PaymentMethodUid = paymentMethodUid,
-                    SubTotal = 0,
-                    DiscountAmount = 0,
-                    TaxAmount = 0,
-                    OtherCharges = 0,
-                    NetAmount = 0,
-                    PaidAmount = 0,
-                    BalanceAmount = 0,
-                    PaymentStatus = "Unpaid",
-                    InvoiceStatus = "Completed",
-                    Remarks = $"{MonthlySupplyRemarkPrefix} — {customer.CustomerCode} — {customer.CustomerName} — {supplyDay:yyyy-MM}",
-                    CreatedDate = DateTime.Now
-                };
+                var existingDayLines = await _db.SalesInvoiceDetails
+                    .Where(x => x.SalesInvoiceUid == invoice.Uid
+                                && x.Remarks != null
+                                && x.Remarks == entryRemark)
+                    .ToListAsync(ct);
+                var existingByProduct = existingDayLines
+                    .GroupBy(x => x.ProductUid)
+                    .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Uid).First());
 
-                _db.SalesInvoices.Add(invoice);
+                var added = 0;
+                var updated = 0;
+                var stockResult = new InventoryApplyResult();
+                foreach (var line in effectiveLines)
+                {
+                    products.TryGetValue(line.ProductUid, out var product);
+                    var quantity = line.Quantity < 0.1m ? 0.1m : line.Quantity;
+                    var unitPrice = line.UnitPrice;
+                    var lineTotal = Math.Round(unitPrice * quantity, 2);
+                    var previousQty = 0m;
+
+                    if (existingByProduct.TryGetValue(line.ProductUid, out var detail))
+                    {
+                        previousQty = detail.Quantity;
+                        detail.ProductCode = line.ProductCode;
+                        detail.ProductName = line.ProductName;
+                        detail.Quantity = quantity;
+                        detail.UnitPrice = unitPrice;
+                        detail.LineTotal = lineTotal;
+                        detail.TaxPercent = product?.TaxPercent ?? detail.TaxPercent;
+                        detail.CostPrice = product?.PurchasePrice ?? detail.CostPrice;
+                        detail.Remarks = entryRemark;
+                        updated++;
+                    }
+                    else
+                    {
+                        _db.SalesInvoiceDetails.Add(new SalesInvoiceDetail
+                        {
+                            SalesInvoiceUid = invoice.Uid,
+                            ProductUid = line.ProductUid,
+                            ProductCode = line.ProductCode,
+                            ProductName = line.ProductName,
+                            Quantity = quantity,
+                            UnitPrice = unitPrice,
+                            DiscountPercent = 0,
+                            DiscountAmount = 0,
+                            TaxPercent = product?.TaxPercent ?? 0,
+                            TaxAmount = 0,
+                            LineTotal = lineTotal,
+                            CostPrice = product?.PurchasePrice ?? 0,
+                            Remarks = entryRemark
+                        });
+                        added++;
+                    }
+
+                    var delta = quantity - previousQty;
+                    if (delta != 0)
+                    {
+                        var deltaResult = await _inventory.ApplySaleQuantityDeltaAsync(
+                            invoice.Uid,
+                            invoice.InvoiceNo,
+                            new InventoryLineMovement
+                            {
+                                ProductUid = line.ProductUid,
+                                ProductName = line.ProductName,
+                                Quantity = delta,
+                                UnitCost = unitPrice
+                            },
+                            warehouseUid: null,
+                            branchUid,
+                            userUid,
+                            terminalUid: null,
+                            ct);
+                        stockResult.ShortageNotes.AddRange(deltaResult.ShortageNotes);
+                    }
+                }
+
                 await _db.SaveChangesAsync(ct);
-                createdNew = true;
-            }
-            else if (invoice.ClientTransactionId is null)
-            {
-                invoice.ClientTransactionId = Guid.NewGuid();
-            }
+                await RecalculateMonthlyDraftTotalsAsync(invoice, ct);
+                await ApplyMonthlySupplyDeliveryChargesAsync(invoice, customer.Uid, ct);
+                await SyncInvoicePaidFromCustomerPaymentsAsync(invoice, ct);
+                var advanceApplied = await _advance.AutoApplyAdvanceToInvoiceAsync(invoice, userUid, terminalUid: null, ct);
+                await SyncInvoicePaidFromCustomerPaymentsAsync(invoice, ct);
+                if (stockResult.HasShortages)
+                    invoice.Remarks = _inventory.MergeShortageRemarks(invoice.Remarks, stockResult);
+                invoice.UpdatedDate = DateTime.Now;
+                invoice.UserUid ??= userUid;
+                await _db.SaveChangesAsync(ct);
 
-            foreach (var line in monthlyItems)
-            {
-                products.TryGetValue(line.ProductUid ?? 0, out var product);
-                var quantity = line.Quantity < 0.1m ? 0.1m : line.Quantity;
-                var unitPrice = line.UnitPrice;
-                var lineTotal = Math.Round(unitPrice * quantity, 2);
-
-                _db.SalesInvoiceDetails.Add(new SalesInvoiceDetail
+                var advanceNote = advanceApplied > 0 ? $", advance applied {advanceApplied:N2}" : "";
+                if (createdNew)
                 {
-                    SalesInvoiceUid = invoice.Uid,
-                    ProductUid = line.ProductUid ?? product?.Uid ?? 0,
-                    ProductCode = line.ProductCode,
-                    ProductName = line.ProductName,
-                    Quantity = quantity,
-                    UnitPrice = unitPrice,
-                    DiscountPercent = 0,
-                    DiscountAmount = 0,
-                    TaxPercent = product?.TaxPercent ?? 0,
-                    TaxAmount = 0,
-                    LineTotal = lineTotal,
-                    CostPrice = product?.PurchasePrice ?? 0,
-                    Remarks = $"{MonthlyEntryDatePrefix}{supplyDay:yyyy-MM-dd}"
-                });
+                    await _audit.WriteAsync("Create", "SalesInvoices", invoice.Uid.ToString(),
+                        $"Monthly supply invoice {invoice.InvoiceNo} for {customer.CustomerCode} ({supplyDay:yyyy-MM}) with {added} detail line(s); OtherCharges={invoice.OtherCharges:N2}{advanceNote}.", ct);
+                    processed.Add($"{customer.CustomerCode}: created {invoice.InvoiceNo} (+{added} lines for {supplyDay:yyyy-MM-dd}, delivery {invoice.OtherCharges:N2}{advanceNote})");
+                }
+                else
+                {
+                    await _audit.WriteAsync("Update", "SalesInvoices", invoice.Uid.ToString(),
+                        $"Monthly supply {invoice.InvoiceNo} for {customer.CustomerCode} on {supplyDay:yyyy-MM-dd}: +{added} / ~{updated} line(s); OtherCharges={invoice.OtherCharges:N2}{advanceNote}.", ct);
+                    processed.Add($"{customer.CustomerCode}: {invoice.InvoiceNo} (+{added}/~{updated} lines for {supplyDay:yyyy-MM-dd}, delivery {invoice.OtherCharges:N2}{advanceNote})");
+                }
+
+                if (invoice.ClientTransactionId is Guid supplyTx)
+                {
+                    await _syncOutbox.EnqueueSalesInvoiceAsync(invoice.Uid, supplyTx, ct);
+                }
             }
 
-            await _db.SaveChangesAsync(ct);
-            await RecalculateMonthlyDraftTotalsAsync(invoice, ct);
-            invoice.UpdatedDate = DateTime.Now;
-            invoice.UserUid ??= userUid;
-            await _db.SaveChangesAsync(ct);
-
-            if (createdNew)
-            {
-                await _audit.WriteAsync("Create", "SalesInvoices", invoice.Uid.ToString(),
-                    $"Monthly supply invoice {invoice.InvoiceNo} for {customer.CustomerCode} ({supplyDay:yyyy-MM}) with {monthlyItems.Count} detail line(s).", ct);
-                processed.Add($"{customer.CustomerCode}: created {invoice.InvoiceNo} (+{monthlyItems.Count} lines)");
-            }
-            else
-            {
-                await _audit.WriteAsync("Update", "SalesInvoices", invoice.Uid.ToString(),
-                    $"Added {monthlyItems.Count} monthly supply detail line(s) to {invoice.InvoiceNo} for {customer.CustomerCode} on {supplyDay:yyyy-MM-dd}.", ct);
-                processed.Add($"{customer.CustomerCode}: updated {invoice.InvoiceNo} (+{monthlyItems.Count} lines)");
-            }
-
-            if (invoice.ClientTransactionId is Guid supplyTx)
-            {
-                await _syncOutbox.EnqueueSalesInvoiceAsync(invoice.Uid, supplyTx, ct);
-            }
+            await tx.CommitAsync(ct);
         }
-
-        await tx.CommitAsync(ct);
+        catch (Exception ex)
+        {
+            TempData["Error"] = "Add Supplied failed: " + (ex.InnerException?.Message ?? ex.Message);
+            return RedirectToAction(nameof(MonthlySupply));
+        }
 
         if (processed.Count == 0)
         {
@@ -339,16 +619,22 @@ public class POSController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> MonthlySupplyItems(string? customerUids, int? activeCustomerUid, CancellationToken ct)
+    public async Task<IActionResult> MonthlySupplyItems(string? customerUids, int? activeCustomerUid, string? returnTo, CancellationToken ct)
     {
-        _navContext.SetArea("POS");
+        var fromCustomers = IsCustomersReturn(returnTo);
+        if (fromCustomers)
+            _navContext.SetArea("Customers");
+        else
+            _navContext.SetArea("POS");
         ViewData["Title"] = "Monthly Supply Items";
 
         var uidList = ParseCustomerUids(customerUids);
         if (uidList.Count == 0)
         {
             TempData["Error"] = "Select at least one customer.";
-            return RedirectToAction(nameof(MonthlySupply));
+            return fromCustomers
+                ? RedirectToAction("Index", "Customers")
+                : RedirectToAction(nameof(MonthlySupply));
         }
 
         var selectedCustomers = await _db.Customers.AsNoTracking()
@@ -368,7 +654,9 @@ public class POSController : Controller
         if (selectedCustomers.Count == 0)
         {
             TempData["Error"] = "Selected customers were not found.";
-            return RedirectToAction(nameof(MonthlySupply));
+            return fromCustomers
+                ? RedirectToAction("Index", "Customers")
+                : RedirectToAction(nameof(MonthlySupply));
         }
 
         var active = selectedCustomers.FirstOrDefault(x => x.Uid == activeCustomerUid)
@@ -390,12 +678,10 @@ public class POSController : Controller
         var productOptions = products.Select(p => new SelectListItem
         {
             Value = p.Uid.ToString(),
-            Text = string.IsNullOrWhiteSpace(p.BrandName)
-                ? $"{p.ProductCode} — {p.ProductName}"
-                : $"{p.ProductCode} — {p.ProductName} ({p.BrandName})"
+            Text = p.ProductName
         }).ToList();
 
-        var items = await _db.CustomerMonthlyItems.AsNoTracking()
+        var items = await _db.CustomerMonthlySupplies.AsNoTracking()
             .Where(x => x.CustomerUid == active.Uid)
             .OrderByDescending(x => x.Uid)
             .Select(x => new MonthlySupplyItemRowViewModel
@@ -407,7 +693,8 @@ public class POSController : Controller
                 ProductName = x.ProductName,
                 BrandName = x.BrandName,
                 Quantity = x.Quantity,
-                UnitPrice = x.UnitPrice
+                UnitPrice = x.UnitPrice,
+                DeliveryCharges = x.DeliveryCharges ?? 0m
             })
             .ToListAsync(ct);
 
@@ -421,7 +708,8 @@ public class POSController : Controller
             ActiveCustomerName = active.CustomerName,
             CustomerUidsQuery = string.Join(",", selectedCustomers.Select(x => x.Uid)),
             Products = productOptions,
-            Items = items
+            Items = items,
+            ReturnTo = fromCustomers ? "Customers" : null
         });
     }
 
@@ -429,13 +717,18 @@ public class POSController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AddMonthlySupplyItem(MonthlySupplyAddItemRequest request, CancellationToken ct)
     {
-        _navContext.SetArea("POS");
+        var fromCustomers = IsCustomersReturn(request.ReturnTo);
+        if (fromCustomers)
+            _navContext.SetArea("Customers");
+        else
+            _navContext.SetArea("POS");
         var redirectUids = request.CustomerUids;
+        var returnTo = fromCustomers ? "Customers" : null;
 
         if (!ModelState.IsValid || request.CustomerUid <= 0 || request.ProductUid <= 0)
         {
             TempData["Error"] = "Select a customer and product, then enter quantity and price.";
-            return RedirectToAction(nameof(MonthlySupplyItems), new { customerUids = redirectUids, activeCustomerUid = request.CustomerUid });
+            return RedirectToAction(nameof(MonthlySupplyItems), new { customerUids = redirectUids, activeCustomerUid = request.CustomerUid, returnTo });
         }
 
         var customer = await _db.Customers.AsNoTracking()
@@ -443,7 +736,9 @@ public class POSController : Controller
         if (customer is null)
         {
             TempData["Error"] = "Customer was not found.";
-            return RedirectToAction(nameof(MonthlySupply));
+            return fromCustomers
+                ? RedirectToAction("Index", "Customers")
+                : RedirectToAction(nameof(MonthlySupply));
         }
 
         var product = await _db.Products.AsNoTracking()
@@ -451,13 +746,15 @@ public class POSController : Controller
         if (product is null)
         {
             TempData["Error"] = "Product was not found.";
-            return RedirectToAction(nameof(MonthlySupplyItems), new { customerUids = redirectUids, activeCustomerUid = request.CustomerUid });
+            return RedirectToAction(nameof(MonthlySupplyItems), new { customerUids = redirectUids, activeCustomerUid = request.CustomerUid, returnTo });
         }
 
         var unitPrice = request.UnitPrice > 0 ? request.UnitPrice : product.SalePrice;
         var quantity = request.Quantity < 0.1m ? 0.1m : request.Quantity;
 
-        _db.CustomerMonthlyItems.Add(new CustomerMonthlyItem
+        var deliveryCharges = request.DeliveryCharges < 0 ? 0 : request.DeliveryCharges;
+
+        _db.CustomerMonthlySupplies.Add(new CustomerMonthlySupply
         {
             CustomerUid = customer.Uid,
             CustomerCode = customer.CustomerCode,
@@ -468,14 +765,15 @@ public class POSController : Controller
             BrandName = product.BrandName,
             Quantity = quantity,
             UnitPrice = unitPrice,
+            DeliveryCharges = deliveryCharges,
             CreatedDate = DateTime.Now
         });
         await _db.SaveChangesAsync(ct);
-        await _audit.WriteAsync("Create", "CustomerMonthlyItems", customer.Uid.ToString(),
+        await _audit.WriteAsync("Create", "CustomerMonthlySupply", customer.Uid.ToString(),
             $"Added monthly supply item {product.ProductCode} for {customer.CustomerCode}", ct);
 
         TempData["Success"] = $"Added {product.ProductName} for {customer.CustomerName}.";
-        return RedirectToAction(nameof(MonthlySupplyItems), new { customerUids = redirectUids, activeCustomerUid = customer.Uid });
+        return RedirectToAction(nameof(MonthlySupplyItems), new { customerUids = redirectUids, activeCustomerUid = customer.Uid, returnTo });
     }
 
     [HttpPost]
@@ -485,11 +783,11 @@ public class POSController : Controller
         _navContext.SetArea("POS");
         if (!ModelState.IsValid || request.Id <= 0 || request.CustomerUid <= 0)
         {
-            TempData["Error"] = "Enter valid quantity and unit price.";
+            TempData["Error"] = "Enter valid quantity, unit price, and delivery charges.";
             return RedirectToAction(nameof(MonthlySupply), new { openCustomer = request.CustomerUid });
         }
 
-        var row = await _db.CustomerMonthlyItems.FirstOrDefaultAsync(x => x.Uid == request.Id, ct);
+        var row = await _db.CustomerMonthlySupplies.FirstOrDefaultAsync(x => x.Uid == request.Id, ct);
         if (row is null || row.CustomerUid != request.CustomerUid)
         {
             TempData["Error"] = "Item was not found for this customer.";
@@ -499,9 +797,10 @@ public class POSController : Controller
         var quantity = request.Quantity < 0.1m ? 0.1m : request.Quantity;
         row.Quantity = quantity;
         row.UnitPrice = request.UnitPrice < 0 ? 0 : request.UnitPrice;
+        row.DeliveryCharges = request.DeliveryCharges < 0 ? 0 : request.DeliveryCharges;
         row.UpdatedDate = DateTime.Now;
         await _db.SaveChangesAsync(ct);
-        await _audit.WriteAsync("Update", "CustomerMonthlyItems", row.Uid.ToString(),
+        await _audit.WriteAsync("Update", "CustomerMonthlySupply", row.Uid.ToString(),
             $"Updated monthly supply item {row.ProductCode} for {row.CustomerCode}", ct);
 
         TempData["Success"] = "Item updated.";
@@ -516,10 +815,16 @@ public class POSController : Controller
         int? activeCustomerUid,
         bool fromMonthlySupply = false,
         int? customerUid = null,
+        string? returnTo = null,
         CancellationToken ct = default)
     {
-        _navContext.SetArea("POS");
-        var row = await _db.CustomerMonthlyItems.FirstOrDefaultAsync(x => x.Uid == id, ct);
+        var fromCustomers = IsCustomersReturn(returnTo);
+        if (fromCustomers)
+            _navContext.SetArea("Customers");
+        else
+            _navContext.SetArea("POS");
+        var returnToValue = fromCustomers ? "Customers" : null;
+        var row = await _db.CustomerMonthlySupplies.FirstOrDefaultAsync(x => x.Uid == id, ct);
         if (row is null)
         {
             TempData["Error"] = "Item was not found.";
@@ -528,7 +833,7 @@ public class POSController : Controller
                 return RedirectToAction(nameof(MonthlySupply), new { openCustomer = customerUid });
             }
 
-            return RedirectToAction(nameof(MonthlySupplyItems), new { customerUids, activeCustomerUid });
+            return RedirectToAction(nameof(MonthlySupplyItems), new { customerUids, activeCustomerUid, returnTo = returnToValue });
         }
 
         if (fromMonthlySupply && customerUid.HasValue && row.CustomerUid != customerUid)
@@ -538,9 +843,20 @@ public class POSController : Controller
         }
 
         var ownerCustomerUid = row.CustomerUid;
-        _db.CustomerMonthlyItems.Remove(row);
+        if (ownerCustomerUid is int ownerId && row.ProductUid is int productId)
+        {
+            var overrides = await _db.CustomerMonthlySupplyOverrides
+                .Where(x => x.CustomerUid == ownerId && x.ProductUid == productId)
+                .ToListAsync(ct);
+            if (overrides.Count > 0)
+            {
+                _db.CustomerMonthlySupplyOverrides.RemoveRange(overrides);
+            }
+        }
+
+        _db.CustomerMonthlySupplies.Remove(row);
         await _db.SaveChangesAsync(ct);
-        await _audit.WriteAsync("Delete", "CustomerMonthlyItems", id.ToString(),
+        await _audit.WriteAsync("Delete", "CustomerMonthlySupply", id.ToString(),
             $"Deleted monthly supply item {row.ProductCode} for {row.CustomerCode}", ct);
 
         TempData["Success"] = "Item deleted.";
@@ -549,8 +865,11 @@ public class POSController : Controller
             return RedirectToAction(nameof(MonthlySupply), new { openCustomer = customerUid ?? ownerCustomerUid });
         }
 
-        return RedirectToAction(nameof(MonthlySupplyItems), new { customerUids, activeCustomerUid = activeCustomerUid ?? ownerCustomerUid });
+        return RedirectToAction(nameof(MonthlySupplyItems), new { customerUids, activeCustomerUid = activeCustomerUid ?? ownerCustomerUid, returnTo = returnToValue });
     }
+
+    private static bool IsCustomersReturn(string? returnTo) =>
+        string.Equals(returnTo, "Customers", StringComparison.OrdinalIgnoreCase);
 
     private static List<int> ParseCustomerUids(string? customerUids)
     {
@@ -565,6 +884,111 @@ public class POSController : Controller
             .Where(x => x > 0)
             .Distinct()
             .ToList();
+    }
+
+    private sealed class EffectiveMonthlySupplyLine
+    {
+        public int ProductUid { get; set; }
+        public string ProductCode { get; set; } = "";
+        public string ProductName { get; set; } = "";
+        public string? BrandName { get; set; }
+        public decimal Quantity { get; set; }
+        public decimal UnitPrice { get; set; }
+        public bool IsOverride { get; set; }
+        public bool IsSkipped { get; set; }
+    }
+
+    /// <summary>
+    /// Template + day overrides. Qty 0 override skips the product. Extra override products become one-off lines.
+    /// </summary>
+    private static List<EffectiveMonthlySupplyLine> BuildEffectiveMonthlySupplyLines(
+        List<CustomerMonthlySupply> template,
+        List<CustomerMonthlySupplyOverride> overrides)
+    {
+        var overrideByProduct = overrides
+            .Where(x => x.ProductUid > 0)
+            .GroupBy(x => x.ProductUid)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.Uid).First());
+
+        var result = new List<EffectiveMonthlySupplyLine>();
+        var usedProducts = new HashSet<int>();
+
+        foreach (var line in template)
+        {
+            var productUid = line.ProductUid ?? 0;
+            if (productUid > 0)
+            {
+                usedProducts.Add(productUid);
+            }
+
+            if (productUid > 0 && overrideByProduct.TryGetValue(productUid, out var ov))
+            {
+                if (ov.Quantity <= 0)
+                {
+                    result.Add(new EffectiveMonthlySupplyLine
+                    {
+                        ProductUid = productUid,
+                        ProductCode = ov.ProductCode,
+                        ProductName = ov.ProductName,
+                        BrandName = ov.BrandName,
+                        Quantity = 0,
+                        UnitPrice = ov.UnitPrice > 0 ? ov.UnitPrice : line.UnitPrice,
+                        IsOverride = true,
+                        IsSkipped = true
+                    });
+                    continue;
+                }
+
+                result.Add(new EffectiveMonthlySupplyLine
+                {
+                    ProductUid = productUid,
+                    ProductCode = string.IsNullOrWhiteSpace(ov.ProductCode) ? line.ProductCode : ov.ProductCode,
+                    ProductName = string.IsNullOrWhiteSpace(ov.ProductName) ? line.ProductName : ov.ProductName,
+                    BrandName = ov.BrandName ?? line.BrandName,
+                    Quantity = ov.Quantity,
+                    UnitPrice = ov.UnitPrice > 0 ? ov.UnitPrice : line.UnitPrice,
+                    IsOverride = true
+                });
+                continue;
+            }
+
+            if (line.Quantity <= 0)
+            {
+                continue;
+            }
+
+            result.Add(new EffectiveMonthlySupplyLine
+            {
+                ProductUid = productUid,
+                ProductCode = line.ProductCode,
+                ProductName = line.ProductName,
+                BrandName = line.BrandName,
+                Quantity = line.Quantity,
+                UnitPrice = line.UnitPrice,
+                IsOverride = false
+            });
+        }
+
+        foreach (var ov in overrides.Where(x => x.ProductUid > 0 && !usedProducts.Contains(x.ProductUid)))
+        {
+            if (ov.Quantity <= 0)
+            {
+                continue;
+            }
+
+            result.Add(new EffectiveMonthlySupplyLine
+            {
+                ProductUid = ov.ProductUid,
+                ProductCode = ov.ProductCode,
+                ProductName = ov.ProductName,
+                BrandName = ov.BrandName,
+                Quantity = ov.Quantity,
+                UnitPrice = ov.UnitPrice,
+                IsOverride = true
+            });
+        }
+
+        return result;
     }
 
     [HttpGet]
@@ -619,7 +1043,7 @@ public class POSController : Controller
             from inv in _db.SalesInvoices.AsNoTracking()
             join d in _db.SalesInvoiceDetails.AsNoTracking() on inv.Uid equals d.SalesInvoiceUid
             where inv.CustomerUid == customerUid
-                  && inv.Remarks == MonthlyRemark
+                  && inv.Remarks != null && inv.Remarks.StartsWith(MonthlyRemark)
                   && inv.InvoiceStatus != "Cancelled"
             orderby d.Uid descending
             select new
@@ -716,6 +1140,8 @@ public class POSController : Controller
         SalesInvoice invoice;
         SalesInvoiceDetail detail;
 
+        var stockResult = new InventoryApplyResult();
+
         if (request.DetailUid is > 0)
         {
             detail = await _db.SalesInvoiceDetails.FirstOrDefaultAsync(x => x.Uid == request.DetailUid, ct);
@@ -727,12 +1153,17 @@ public class POSController : Controller
             invoice = await _db.SalesInvoices.FirstOrDefaultAsync(x =>
                 x.Uid == detail.SalesInvoiceUid
                 && x.CustomerUid == request.CustomerUid
-                && x.Remarks == MonthlyRemark
+                && x.Remarks != null && x.Remarks.StartsWith(MonthlyRemark)
                 && x.InvoiceStatus != "Cancelled", ct);
             if (invoice is null)
             {
                 return NotFound(new MonthlyEntryApiResult { Success = false, Message = "Draft invoice not found." });
             }
+
+            var oldProductUid = detail.ProductUid;
+            var oldProductName = detail.ProductName ?? product.ProductName;
+            var oldQty = detail.Quantity;
+            var oldPrice = detail.UnitPrice;
 
             detail.ProductUid = product.Uid;
             detail.ProductCode = product.ProductCode;
@@ -744,7 +1175,57 @@ public class POSController : Controller
             detail.TaxPercent = product.TaxPercent;
             detail.Remarks = $"{MonthlyEntryDatePrefix}{entryDate:yyyy-MM-dd}";
 
+            if (oldProductUid != product.Uid)
+            {
+                if (oldQty > 0)
+                {
+                    var restore = await _inventory.ApplySaleQuantityDeltaAsync(
+                        invoice.Uid, invoice.InvoiceNo,
+                        new InventoryLineMovement
+                        {
+                            ProductUid = oldProductUid,
+                            ProductName = oldProductName,
+                            Quantity = -oldQty,
+                            UnitCost = oldPrice
+                        },
+                        null, branchUid, userUid, null, ct);
+                    stockResult.ShortageNotes.AddRange(restore.ShortageNotes);
+                }
+
+                var deduct = await _inventory.ApplySaleQuantityDeltaAsync(
+                    invoice.Uid, invoice.InvoiceNo,
+                    new InventoryLineMovement
+                    {
+                        ProductUid = product.Uid,
+                        ProductName = product.ProductName,
+                        Quantity = request.Quantity,
+                        UnitCost = request.UnitPrice
+                    },
+                    null, branchUid, userUid, null, ct);
+                stockResult.ShortageNotes.AddRange(deduct.ShortageNotes);
+            }
+            else
+            {
+                var delta = request.Quantity - oldQty;
+                if (delta != 0)
+                {
+                    var deltaResult = await _inventory.ApplySaleQuantityDeltaAsync(
+                        invoice.Uid, invoice.InvoiceNo,
+                        new InventoryLineMovement
+                        {
+                            ProductUid = product.Uid,
+                            ProductName = product.ProductName,
+                            Quantity = delta,
+                            UnitCost = request.UnitPrice
+                        },
+                        null, branchUid, userUid, null, ct);
+                    stockResult.ShortageNotes.AddRange(deltaResult.ShortageNotes);
+                }
+            }
+
             await RecalculateMonthlyDraftTotalsAsync(invoice, ct);
+            if (stockResult.HasShortages)
+                invoice.Remarks = _inventory.MergeShortageRemarks(invoice.Remarks, stockResult);
             invoice.UpdatedDate = DateTime.Now;
             await _db.SaveChangesAsync(ct);
             await _audit.WriteAsync("Update", "SalesInvoiceDetails", detail.Uid.ToString(),
@@ -754,7 +1235,7 @@ public class POSController : Controller
         {
             invoice = await _db.SalesInvoices.FirstOrDefaultAsync(x =>
                 x.CustomerUid == customer.Uid
-                && x.Remarks == MonthlyRemark
+                && x.Remarks != null && x.Remarks.StartsWith(MonthlyRemark)
                 && x.InvoiceStatus != "Cancelled", ct);
 
             if (invoice is null)
@@ -812,7 +1293,21 @@ public class POSController : Controller
             _db.SalesInvoiceDetails.Add(detail);
             await _db.SaveChangesAsync(ct);
 
+            var deductNew = await _inventory.ApplySaleQuantityDeltaAsync(
+                invoice.Uid, invoice.InvoiceNo,
+                new InventoryLineMovement
+                {
+                    ProductUid = product.Uid,
+                    ProductName = product.ProductName,
+                    Quantity = request.Quantity,
+                    UnitCost = request.UnitPrice
+                },
+                null, branchUid, userUid, null, ct);
+            stockResult.ShortageNotes.AddRange(deductNew.ShortageNotes);
+
             await RecalculateMonthlyDraftTotalsAsync(invoice, ct);
+            if (stockResult.HasShortages)
+                invoice.Remarks = _inventory.MergeShortageRemarks(invoice.Remarks, stockResult);
             invoice.UpdatedDate = DateTime.Now;
             await _db.SaveChangesAsync(ct);
             await _audit.WriteAsync("Create", "SalesInvoiceDetails", detail.Uid.ToString(),
@@ -857,11 +1352,30 @@ public class POSController : Controller
 
         var invoice = await _db.SalesInvoices.FirstOrDefaultAsync(x =>
             x.Uid == detail.SalesInvoiceUid
-            && x.Remarks == MonthlyRemark
+            && x.Remarks != null && x.Remarks.StartsWith(MonthlyRemark)
             && x.InvoiceStatus != "Cancelled", ct);
         if (invoice is null)
         {
             return NotFound(new MonthlyEntryApiResult { Success = false, Message = "Draft invoice not found." });
+        }
+
+        if (detail.Quantity > 0)
+        {
+            await _inventory.ApplySaleQuantityDeltaAsync(
+                invoice.Uid,
+                invoice.InvoiceNo,
+                new InventoryLineMovement
+                {
+                    ProductUid = detail.ProductUid,
+                    ProductName = detail.ProductName ?? detail.ProductUid.ToString(),
+                    Quantity = -detail.Quantity,
+                    UnitCost = detail.UnitPrice
+                },
+                null,
+                invoice.BranchUid,
+                invoice.UserUid,
+                null,
+                ct);
         }
 
         _db.SalesInvoiceDetails.Remove(detail);
@@ -904,7 +1418,7 @@ public class POSController : Controller
 
         var draftInvoices = await _db.SalesInvoices
             .Where(x => x.CustomerUid == customerUid
-                        && x.Remarks == MonthlyRemark
+                        && x.Remarks != null && x.Remarks.StartsWith(MonthlyRemark)
                         && x.InvoiceStatus != "Cancelled")
             .OrderBy(x => x.Uid)
             .ToListAsync(ct);
@@ -949,7 +1463,7 @@ public class POSController : Controller
 
         await RecalculateMonthlyDraftTotalsAsync(primary, ct);
         primary.CustomerUid = customer.Uid;
-        primary.Remarks = $"Monthly POS — {customer.CustomerName}";
+        primary.Remarks = $"Monthly POS â€” {customer.CustomerName}";
         primary.PaymentStatus = "Unpaid";
         primary.InvoiceStatus = "Completed";
         primary.UpdatedDate = DateTime.Now;
@@ -985,12 +1499,92 @@ public class POSController : Controller
 
         invoice.SubTotal = total;
         invoice.NetAmount = total;
-        invoice.PaidAmount = 0;
-        invoice.BalanceAmount = total;
-        invoice.PaymentStatus = "Unpaid";
         invoice.DiscountAmount = 0;
         invoice.TaxAmount = 0;
         invoice.OtherCharges = 0;
+        // Keep existing PaidAmount (advance / customer payments). Only refresh balance/status.
+        await SyncInvoicePaidFromCustomerPaymentsAsync(invoice, ct);
+    }
+
+    /// <summary>
+    /// Aligns invoice PaidAmount with linked CustomerPayments so monthly recalculation
+    /// cannot wipe advances that were already applied.
+    /// </summary>
+    private async Task SyncInvoicePaidFromCustomerPaymentsAsync(SalesInvoice invoice, CancellationToken ct)
+    {
+        if (invoice.Uid <= 0)
+        {
+            invoice.BalanceAmount = Math.Max(0, invoice.NetAmount - invoice.PaidAmount);
+            invoice.PaymentStatus = invoice.PaidAmount <= 0
+                ? "Unpaid"
+                : invoice.PaidAmount >= invoice.NetAmount ? "Paid" : "Partial";
+            return;
+        }
+
+        var paidFromPayments = await _db.CustomerPayments.AsNoTracking()
+            .Where(x => x.SalesInvoiceUid == invoice.Uid)
+            .SumAsync(x => (decimal?)x.AppliedToInvoiceAmount, ct) ?? 0m;
+
+        // Prefer ledger total; never drop below what payments already recorded.
+        invoice.PaidAmount = Math.Max(invoice.PaidAmount, paidFromPayments);
+        if (invoice.NetAmount > 0 && invoice.PaidAmount > invoice.NetAmount)
+            invoice.PaidAmount = invoice.NetAmount;
+
+        invoice.BalanceAmount = Math.Max(0, invoice.NetAmount - invoice.PaidAmount);
+        invoice.PaymentStatus = invoice.PaidAmount <= 0
+            ? "Unpaid"
+            : invoice.PaidAmount >= invoice.NetAmount ? "Paid" : "Partial";
+    }
+
+    /// <summary>
+    /// Sets SalesInvoice.OtherCharges from CustomerMonthlySupply.DeliveryCharges (null → 0)
+    /// once per detail line (each supply-day product line).
+    /// </summary>
+    private async Task ApplyMonthlySupplyDeliveryChargesAsync(SalesInvoice invoice, int customerUid, CancellationToken ct)
+    {
+        var detailProductUids = await _db.SalesInvoiceDetails.AsNoTracking()
+            .Where(x => x.SalesInvoiceUid == invoice.Uid)
+            .Select(x => x.ProductUid)
+            .ToListAsync(ct);
+
+        if (detailProductUids.Count == 0)
+        {
+            invoice.OtherCharges = 0;
+            invoice.NetAmount = invoice.SubTotal;
+            invoice.BalanceAmount = invoice.NetAmount - invoice.PaidAmount;
+            return;
+        }
+
+        var distinctProductUids = detailProductUids.Distinct().ToList();
+        var chargeRows = await _db.CustomerMonthlySupplies.AsNoTracking()
+            .Where(x => x.CustomerUid == customerUid
+                        && x.ProductUid != null
+                        && distinctProductUids.Contains(x.ProductUid.Value))
+            .Select(x => new { ProductUid = x.ProductUid!.Value, x.DeliveryCharges })
+            .ToListAsync(ct);
+
+        var chargeByProduct = chargeRows
+            .GroupBy(x => x.ProductUid)
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                {
+                    var raw = g.First().DeliveryCharges;
+                    return raw is null || raw < 0 ? 0m : raw.Value;
+                });
+
+        var otherCharges = 0m;
+        foreach (var productUid in detailProductUids)
+        {
+            if (chargeByProduct.TryGetValue(productUid, out var charge))
+            {
+                otherCharges += charge;
+            }
+        }
+
+        invoice.OtherCharges = otherCharges;
+        invoice.NetAmount = invoice.SubTotal + otherCharges;
+        invoice.BalanceAmount = invoice.NetAmount - invoice.PaidAmount;
     }
 
     private static DateTime ParseEntryDate(string? remarks, DateTime fallback)
@@ -1112,15 +1706,24 @@ public class POSController : Controller
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
+        var sessionBranch = HttpContext.Session.GetString(AccountController.SessionBranchKey);
+        var sessionTerminal = HttpContext.Session.GetString(AccountController.SessionTerminalNameKey);
+        if (string.IsNullOrWhiteSpace(sessionBranch))
+            sessionBranch = User.FindFirstValue("Branch");
+        if (string.IsNullOrWhiteSpace(sessionTerminal))
+            sessionTerminal = User.FindFirstValue("TerminalName");
+
         var invoice = new SalesInvoice
         {
             ClientTransactionId = clientTxId,
             InvoiceNo = invoiceNo,
             InvoiceDate = DateTime.Now,
             BranchUid = branchUid,
+            Branch = string.IsNullOrWhiteSpace(sessionBranch) ? null : sessionBranch.Trim(),
             CustomerUid = customerUid,
             UserUid = userUid,
             PaymentMethodUid = paymentMethodUid,
+            Terminal = string.IsNullOrWhiteSpace(sessionTerminal) ? null : sessionTerminal.Trim(),
             SubTotal = subTotal,
             DiscountAmount = 0,
             TaxAmount = 0,
@@ -1137,6 +1740,7 @@ public class POSController : Controller
         _db.SalesInvoices.Add(invoice);
         await _db.SaveChangesAsync(ct);
 
+        var stockLines = new List<InventoryLineMovement>();
         foreach (var item in request.Items)
         {
             var product = products[item.ProductUid];
@@ -1156,9 +1760,37 @@ public class POSController : Controller
                 LineTotal = lineTotal,
                 CostPrice = product.PurchasePrice
             });
+            stockLines.Add(new InventoryLineMovement
+            {
+                ProductUid = product.Uid,
+                ProductName = product.ProductName,
+                Quantity = item.Quantity,
+                UnitCost = item.UnitPrice
+            });
         }
 
         await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            var stockResult = await _inventory.ApplySaleAsync(
+                invoice.Uid, invoice.InvoiceNo, stockLines, warehouseUid: null, branchUid, userUid, terminalUid: null, ct);
+            if (stockResult.HasShortages)
+            {
+                invoice.Remarks = _inventory.MergeShortageRemarks(invoice.Remarks, stockResult);
+                await _db.SaveChangesAsync(ct);
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            await tx.RollbackAsync(ct);
+            return BadRequest(new PosCheckoutResultViewModel
+            {
+                Success = false,
+                Message = ex.Message
+            });
+        }
+
         await _audit.WriteAsync("Create", "SalesInvoices", invoice.Uid.ToString(),
             $"POS {mode} sale {invoice.InvoiceNo} amount {invoice.NetAmount:N2}", ct);
         await tx.CommitAsync(ct);

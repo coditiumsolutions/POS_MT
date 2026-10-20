@@ -6,6 +6,7 @@ public class TotalSaleReportViewModel
 {
     public int Month { get; set; }
     public int Year { get; set; }
+    public DateTime? Date { get; set; }
     public string SaleType { get; set; } = "Monthly";
 
     public IEnumerable<SelectListItem> Months { get; set; } = [];

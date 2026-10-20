@@ -53,4 +53,19 @@ public sealed class PurchaseInvoiceFormViewModel
 
     [StringLength(500)]
     public string? Remarks { get; set; }
+
+    /// <summary>Optional receive lines — each increases warehouse inventory on create.</summary>
+    public List<PurchaseInvoiceLineFormViewModel> Lines { get; set; } = [];
+}
+
+public sealed class PurchaseInvoiceLineFormViewModel
+{
+    [Display(Name = "Product")]
+    public int? ProductUid { get; set; }
+
+    [Display(Name = "Quantity")]
+    public decimal Quantity { get; set; }
+
+    [Display(Name = "Unit Cost")]
+    public decimal UnitCost { get; set; }
 }
