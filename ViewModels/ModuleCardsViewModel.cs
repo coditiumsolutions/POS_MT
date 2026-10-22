@@ -9,4 +9,7 @@ public sealed class ModuleCardsViewModel
     public string PageSubtitle { get; set; } = string.Empty;
 
     public List<ModuleCardItem> Modules { get; set; } = [];
+
+    /// <summary>Cash POS item layout: Grid or Card.</summary>
+    public string PosItemLayout { get; set; } = "Grid";
 }

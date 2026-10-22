@@ -3,9 +3,11 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using POS_MT.Data;
 using POS_MT.Interfaces;
 using POS_MT.Models;
+using POS_MT.Options;
 using POS_MT.Services;
 using POS_MT.ViewModels;
 
@@ -20,6 +22,7 @@ public class POSController : Controller
     private readonly ISyncOutboxService _syncOutbox;
     private readonly IInventoryLedgerService _inventory;
     private readonly ICustomerAdvanceService _advance;
+    private readonly string _shopName;
 
     public POSController(
         INavContextService navContext,
@@ -27,7 +30,8 @@ public class POSController : Controller
         IAuditService audit,
         ISyncOutboxService syncOutbox,
         IInventoryLedgerService inventory,
-        ICustomerAdvanceService advance)
+        ICustomerAdvanceService advance,
+        IOptions<PosHubOptions> hubOptions)
     {
         _navContext = navContext;
         _db = db;
@@ -35,6 +39,9 @@ public class POSController : Controller
         _syncOutbox = syncOutbox;
         _inventory = inventory;
         _advance = advance;
+        _shopName = string.IsNullOrWhiteSpace(hubOptions.Value.ShopName)
+            ? "Shop"
+            : hubOptions.Value.ShopName.Trim();
     }
 
     [HttpGet]
@@ -84,6 +91,112 @@ public class POSController : Controller
             Customers = customers,
             OpenCustomerUid = openCustomer
         });
+    }
+
+    /// <summary>
+    /// Paper handover for the delivery run: names, locations, and items for the supply date.
+    /// Selected customers are used when any are checked; otherwise every customer with items that day.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> PrintMonthlyDeliveryList(DateTime supplyDate, int[]? selectedCustomerUids, CancellationToken ct)
+    {
+        _navContext.SetArea("POS");
+        var day = supplyDate == default ? DateTime.Today : supplyDate.Date;
+        var selected = selectedCustomerUids?.Where(x => x > 0).Distinct().ToList() ?? [];
+
+        var query = _db.Customers.AsNoTracking()
+            .Where(x => x.IsActive
+                        && x.CustomerCode != "C001"
+                        && !x.CustomerName.Contains("Walk-in")
+                        && !x.CustomerName.Contains("Walk-In")
+                        && !x.CustomerName.Contains("Walk In"));
+        if (selected.Count > 0)
+        {
+            query = query.Where(x => selected.Contains(x.Uid));
+        }
+
+        var customers = await query
+            .OrderBy(x => x.Area == null || x.Area == "")
+            .ThenBy(x => x.Area)
+            .ThenBy(x => x.CustomerName)
+            .ToListAsync(ct);
+
+        var ids = customers.Select(x => x.Uid).ToList();
+        var templates = ids.Count == 0
+            ? []
+            : await _db.CustomerMonthlySupplies.AsNoTracking()
+                .Where(x => x.CustomerUid != null && ids.Contains(x.CustomerUid.Value))
+                .ToListAsync(ct);
+        var overrides = ids.Count == 0
+            ? []
+            : await _db.CustomerMonthlySupplyOverrides.AsNoTracking()
+                .Where(x => ids.Contains(x.CustomerUid) && x.SupplyDate == day)
+                .ToListAsync(ct);
+
+        var rows = new List<DeliveryHandoverRowViewModel>();
+        foreach (var customer in customers)
+        {
+            var lines = BuildEffectiveMonthlySupplyLines(
+                templates.Where(x => x.CustomerUid == customer.Uid).OrderBy(x => x.ProductName).ToList(),
+                overrides.Where(x => x.CustomerUid == customer.Uid).OrderBy(x => x.ProductName).ToList());
+            var items = lines
+                .Where(x => !x.IsSkipped && x.Quantity > 0)
+                .Select(x => new DeliveryHandoverItemViewModel
+                {
+                    ProductCode = x.ProductCode,
+                    ProductName = x.ProductName,
+                    Quantity = x.Quantity
+                })
+                .ToList();
+            if (items.Count == 0)
+            {
+                continue;
+            }
+
+            var phone = !string.IsNullOrWhiteSpace(customer.MobileNo)
+                ? customer.MobileNo.Trim()
+                : customer.PhoneNo?.Trim();
+            rows.Add(new DeliveryHandoverRowViewModel
+            {
+                CustomerCode = customer.CustomerCode,
+                CustomerName = customer.CustomerName,
+                Location = FormatDeliveryLocation(customer),
+                Phone = string.IsNullOrWhiteSpace(phone) ? null : phone,
+                Items = items
+            });
+        }
+
+        return View(new DeliveryHandoverPageViewModel
+        {
+            ShopName = _shopName,
+            SupplyDate = day,
+            PrintedAt = DateTime.Now,
+            SelectedOnly = selected.Count > 0,
+            Customers = rows
+        });
+    }
+
+    private static string FormatDeliveryLocation(Customer customer)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(customer.Area))
+        {
+            parts.Add(customer.Area.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(customer.City)
+            && !parts.Contains(customer.City.Trim(), StringComparer.OrdinalIgnoreCase))
+        {
+            parts.Add(customer.City.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(customer.Address))
+        {
+            parts.Add(customer.Address.Trim());
+        }
+
+        return parts.Count == 0 ? "—" : string.Join(", ", parts);
     }
 
     [HttpGet]
@@ -1823,7 +1936,8 @@ public class POSController : Controller
                 ProductName = x.ProductName,
                 Barcode = x.Barcode,
                 SalePrice = x.SalePrice,
-                CategoryUid = x.CategoryUid
+                CategoryUid = x.CategoryUid,
+                ImagePath = x.ImagePath
             })
             .ToListAsync(ct);
 
@@ -1837,9 +1951,25 @@ public class POSController : Controller
             })
             .ToListAsync(ct);
 
+        var categoryNames = categories.ToDictionary(x => x.Uid, x => x.CategoryName);
+        foreach (var product in products)
+        {
+            if (product.CategoryUid is int categoryUid
+                && categoryNames.TryGetValue(categoryUid, out var categoryName))
+            {
+                product.CategoryName = categoryName;
+            }
+        }
+
+        var layout = await _db.Configurations.AsNoTracking()
+            .Where(x => x.ConfigKey == SetupController.PosItemLayoutKey)
+            .Select(x => x.ConfigValue)
+            .FirstOrDefaultAsync(ct);
+
         return View("Sale", new PosSaleViewModel
         {
             Mode = mode,
+            UseCardLayout = SetupController.IsCardLayout(layout),
             Products = products,
             Categories = categories
         });

@@ -4,8 +4,30 @@
     <div class="invoice-meta-row">
         <label asp-for="CustomerCode" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <input asp-for="CustomerCode" class="form-control form-control-sm invoice-meta-input" />
+            @if (Model.GenerateCode)
+            {
+                <input type="hidden" asp-for="GenerateCode" />
+                <div class="customer-code-generate">
+                    <input asp-for="CodePrefix"
+                           class="form-control form-control-sm invoice-meta-input customer-code-prefix"
+                           maxlength="8"
+                           placeholder="Prefix"
+                           autocomplete="off"
+                           title="Optional. Letters or numbers added in front of the generated code." />
+                    <input asp-for="CustomerCode"
+                           class="form-control form-control-sm invoice-meta-input"
+                           readonly
+                           data-number="@Model.CodeNumber"
+                           title="Generated automatically" />
+                </div>
+                <span class="customer-code-hint">Generated automatically. Add a prefix only when this customer needs one.</span>
+            }
+            else
+            {
+                <input asp-for="CustomerCode" class="form-control form-control-sm invoice-meta-input" />
+            }
             <span asp-validation-for="CustomerCode" class="text-danger"></span>
+            <span asp-validation-for="CodePrefix" class="text-danger"></span>
         </div>
         <label asp-for="CustomerName" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">

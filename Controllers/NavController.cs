@@ -64,7 +64,7 @@ public class NavController : Controller
     [HttpGet]
     public IActionResult Clear()
     {
-        _navContext.SetArea("Dashboard");
-        return RedirectToAction("Index", "Dashboard", new { itemMonth = 6 });
+        _navContext.SetArea("POS");
+        return RedirectToAction("Cash", "POS");
     }
 }

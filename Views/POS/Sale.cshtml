@@ -1,57 +1,122 @@
 @model PosSaleViewModel
 @{
     ViewData["Title"] = $"{Model.Mode} POS";
+    string ItemGlyph(string? name)
+    {
+        var n = (name ?? "").ToLowerInvariant();
+        if (n.Contains("pizza")) return "🍕";
+        if (n.Contains("burger")) return "🍔";
+        if (n.Contains("fries") || n.Contains("fry")) return "🍟";
+        if (n.Contains("broast") || n.Contains("chicken")) return "🍗";
+        if (n.Contains("bbq") || n.Contains("b.b.q") || n.Contains("barbe")) return "🍖";
+        if (n.Contains("sandwich")) return "🥪";
+        if (n.Contains("lasagna") || n.Contains("pasta")) return "🍝";
+        if (n.Contains("roll")) return "🌯";
+        if (n.Contains("deal")) return "🎁";
+        if (n.Contains("deliver")) return "🚗";
+        if (n.Contains("extra")) return "🧂";
+        if (n.Contains("topping") || n.Contains("cheese")) return "🧀";
+        if (n.Contains("crispy")) return "🍽️";
+        if (n.Contains("calzone")) return "🥟";
+        if (n.Contains("drink") || n.Contains("juice") || n.Contains("beverage")) return "🥤";
+        return "🍽️";
+    }
+
+    string CardPrice(decimal price)
+        => price == decimal.Truncate(price) ? $"Rs. {price:0}" : $"Rs. {price:N2}";
+
+    string[] iconColors = ["#7c6bf2", "#3b82f6", "#f97316", "#10b981", "#ec4899", "#0ea5e9"];
 }
 @Html.AntiForgeryToken()
 <div id="posAlert" class="alert d-none mb-2" role="alert"></div>
 
-<div class="pos-sale-layout">
+<div class="pos-sale-layout @(Model.UseCardLayout ? "pos-sale-layout--cards" : "")">
     <section class="pos-sale-panel">
         <div class="pos-sale-panel-header pos-sale-panel-header--search">
             <input type="search" id="productSearch" class="form-control form-control-sm" placeholder="Search items..." />
         </div>
-        <div class="pos-category-toolbar" id="posCategoryToolbar" role="group" aria-label="Product categories">
+        <div class="pos-category-toolbar @(Model.UseCardLayout ? "pos-category-pills" : "")" id="posCategoryToolbar" role="group" aria-label="Product categories">
             <button type="button"
                     class="btn btn-sm btn-outline-secondary pos-category-btn active"
                     data-category-uid="">
-                All
+                @if (Model.UseCardLayout)
+                {
+                    <span class="pos-category-glyph" aria-hidden="true">⭐</span>
+                }
+                @(Model.UseCardLayout ? "All Items" : "All")
             </button>
             @foreach (var cat in Model.Categories)
             {
                 <button type="button"
                         class="btn btn-sm btn-outline-secondary pos-category-btn"
                         data-category-uid="@cat.Uid">
+                    @if (Model.UseCardLayout)
+                    {
+                        <span class="pos-category-glyph" aria-hidden="true">@ItemGlyph(cat.CategoryName)</span>
+                    }
                     @cat.CategoryName
                 </button>
             }
         </div>
-        <div class="table-responsive pos-sale-table-wrap">
-            <table class="table table-hover table-sm align-middle mb-0" id="productsTable">
-                <thead>
-                    <tr>
-                        <th>Code</th>
-                        <th>Name</th>
-                        <th class="text-end">Price</th>
-                    </tr>
-                </thead>
-                <tbody>
+        @if (Model.UseCardLayout)
+        {
+            <div class="pos-product-cards" id="productsTable">
                 @foreach (var item in Model.Products)
                 {
-                    <tr class="pos-product-row"
-                        data-uid="@item.Uid"
-                        data-code="@item.ProductCode"
-                        data-name="@item.ProductName"
-                        data-category-uid="@(item.CategoryUid?.ToString() ?? "")"
-                        data-price="@item.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)"
-                        tabindex="0">
-                        <td>@item.ProductCode</td>
-                        <td>@item.ProductName</td>
-                        <td class="text-end">@item.SalePrice.ToString("N2")</td>
-                    </tr>
+                    var glyphSource = string.IsNullOrWhiteSpace(item.CategoryName) ? item.ProductName : item.CategoryName + " " + item.ProductName;
+                    var color = iconColors[(item.ProductName.GetHashCode() & 0x7fffffff) % iconColors.Length];
+                    <button type="button"
+                            class="pos-item-card pos-product-row"
+                            data-uid="@item.Uid"
+                            data-code="@item.ProductCode"
+                            data-name="@item.ProductName"
+                            data-category-uid="@(item.CategoryUid?.ToString() ?? "")"
+                            data-price="@item.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                            title="@item.ProductCode">
+                        @if (!string.IsNullOrWhiteSpace(item.ImagePath))
+                        {
+                            <img class="pos-item-card-photo" src="@item.ImagePath" alt="" />
+                        }
+                        else
+                        {
+                            <span class="pos-item-card-icon" style="background: linear-gradient(180deg, @color, color-mix(in srgb, @color 70%, #1e1b4b));">@ItemGlyph(glyphSource)</span>
+                        }
+                        <span class="pos-item-card-name">@item.ProductName</span>
+                        <span class="pos-item-card-price">@CardPrice(item.SalePrice)</span>
+                    </button>
                 }
-                </tbody>
-            </table>
-        </div>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive pos-sale-table-wrap">
+                <table class="table table-hover table-sm align-middle mb-0" id="productsTable">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th class="text-end">Price</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var item in Model.Products)
+                    {
+                        <tr class="pos-product-row"
+                            data-uid="@item.Uid"
+                            data-code="@item.ProductCode"
+                            data-name="@item.ProductName"
+                            data-category-uid="@(item.CategoryUid?.ToString() ?? "")"
+                            data-price="@item.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                            tabindex="0">
+                            <td>@item.ProductCode</td>
+                            <td>@item.ProductName</td>
+                            <td class="text-end">@item.SalePrice.ToString("N2")</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
         @if (Model.Products.Count == 0)
         {
             <div class="p-3 text-muted">No active products found.</div>
@@ -110,6 +175,7 @@
     let lastReceipt = null;
 
     const productsTable = document.getElementById('productsTable');
+    const cardLayout = productsTable?.classList.contains('pos-product-cards') === true;
     const basketBody = document.getElementById('basketBody');
     const basketEmptyRow = document.getElementById('basketEmptyRow');
     const basketTotalEl = document.getElementById('basketTotal');
@@ -165,14 +231,17 @@
         const row = e.target.closest('.pos-product-row');
         if (!row) return;
         selectRow(row);
+        if (cardLayout) addSelected();
     });
 
-    productsTable.addEventListener('dblclick', function (e) {
-        const row = e.target.closest('.pos-product-row');
-        if (!row) return;
-        selectRow(row);
-        addSelected();
-    });
+    if (!cardLayout) {
+        productsTable.addEventListener('dblclick', function (e) {
+            const row = e.target.closest('.pos-product-row');
+            if (!row) return;
+            selectRow(row);
+            addSelected();
+        });
+    }
 
     function addSelected() {
         const row = getSelectedRow();

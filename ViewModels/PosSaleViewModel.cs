@@ -8,6 +8,8 @@ public sealed class PosProductItemViewModel
     public string? Barcode { get; set; }
     public decimal SalePrice { get; set; }
     public int? CategoryUid { get; set; }
+    public string? CategoryName { get; set; }
+    public string? ImagePath { get; set; }
 }
 
 public sealed class PosCategoryItemViewModel
@@ -19,6 +21,7 @@ public sealed class PosCategoryItemViewModel
 public sealed class PosSaleViewModel
 {
     public string Mode { get; set; } = "Cash";
+    public bool UseCardLayout { get; set; }
     public List<PosProductItemViewModel> Products { get; set; } = [];
     public List<PosCategoryItemViewModel> Categories { get; set; } = [];
 }

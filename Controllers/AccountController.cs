@@ -27,7 +27,7 @@ public class AccountController : Controller
     {
         if (User.Identity?.IsAuthenticated == true)
         {
-            return RedirectToAction("Index", "Dashboard");
+            return RedirectToAction("Cash", "POS");
         }
 
         ViewData["ReturnUrl"] = returnUrl;
@@ -89,7 +89,7 @@ public class AccountController : Controller
             return Redirect(returnUrl);
         }
 
-        return RedirectToAction("Index", "Dashboard");
+        return RedirectToAction("Cash", "POS");
     }
 
     [HttpPost]

@@ -8,3 +8,20 @@
     <partial name="_CustomerForm" />
     <partial name="_CrudFormActions" />
 </form>
+
+@section Scripts {
+    <script>
+        (function () {
+            const prefix = document.getElementById('CodePrefix');
+            const code = document.getElementById('CustomerCode');
+            if (!prefix || !code) return;
+            const number = code.getAttribute('data-number') || '';
+            function applyPrefix() {
+                const cleaned = (prefix.value || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 8);
+                if (prefix.value !== cleaned) prefix.value = cleaned;
+                code.value = cleaned + number;
+            }
+            prefix.addEventListener('input', applyPrefix);
+        })();
+    </script>
+}

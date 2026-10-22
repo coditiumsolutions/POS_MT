@@ -33,6 +33,31 @@ public sealed class MonthlySupplyItemsPageViewModel
     public string? ReturnTo { get; set; }
 }
 
+public sealed class DeliveryHandoverPageViewModel
+{
+    public string ShopName { get; set; } = "Shop";
+    public DateTime SupplyDate { get; set; }
+    public DateTime PrintedAt { get; set; }
+    public bool SelectedOnly { get; set; }
+    public List<DeliveryHandoverRowViewModel> Customers { get; set; } = [];
+}
+
+public sealed class DeliveryHandoverRowViewModel
+{
+    public string CustomerCode { get; set; } = string.Empty;
+    public string CustomerName { get; set; } = string.Empty;
+    public string Location { get; set; } = "—";
+    public string? Phone { get; set; }
+    public List<DeliveryHandoverItemViewModel> Items { get; set; } = [];
+}
+
+public sealed class DeliveryHandoverItemViewModel
+{
+    public string ProductCode { get; set; } = string.Empty;
+    public string ProductName { get; set; } = string.Empty;
+    public decimal Quantity { get; set; }
+}
+
 public sealed class MonthlySupplyItemRowViewModel
 {
     public int Uid { get; set; }

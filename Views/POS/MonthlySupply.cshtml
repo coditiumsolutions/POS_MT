@@ -46,6 +46,14 @@
         <button type="submit" class="btn btn-primary" id="monthlySupplyContinueBtn" disabled>
             Open Items for Selected Customers
         </button>
+        <button type="submit"
+                class="btn btn-outline-dark"
+                id="monthlySupplyPrintBtn"
+                formaction="@Url.Action("PrintMonthlyDeliveryList", "POS")"
+                formtarget="_blank"
+                title="Print names, locations, and items for the person delivering. Uses checked customers, or everyone with items for this date.">
+            <i class="bi bi-printer" aria-hidden="true"></i> Print delivery list
+        </button>
         <a class="btn btn-outline-secondary" asp-action="Index">Back</a>
         <div class="ms-auto" style="min-width: 220px;">
             <label class="form-label small text-muted mb-1 visually-hidden" for="monthlySupplyFilter">Filter</label>
@@ -324,25 +332,30 @@
                             '</tr></thead><tbody>' + rows + '</tbody></table></div>';
                     }
 
-                    let effectiveRows = '';
+                    function supplyChip(code, name, qtyText, price, kind, extraHtml) {
+                        const tag = kind === 'skip' ? 'skip' : (kind === 'override' ? 'override' : '');
+                        return '<span class="monthly-supply-chip monthly-supply-chip-' + kind + '">' +
+                            '<span class="monthly-supply-chip-code">' + escapeHtml(code) + '</span>' +
+                            '<span class="monthly-supply-chip-name">' + escapeHtml(name) + '</span>' +
+                            '<span class="monthly-supply-chip-qty">' + qtyText + '</span>' +
+                            '<span class="monthly-supply-chip-price">' + formatMoney(price) + '</span>' +
+                            (tag ? '<span class="monthly-supply-chip-tag">' + tag + '</span>' : '') +
+                            (extraHtml || '') +
+                            '</span>';
+                    }
+
+                    let deliverChips = '';
                     effective.forEach(function (line) {
-                        const tag = line.isSkipped ? '<span class="badge text-bg-secondary">Skip</span>'
-                            : (line.isOverride ? '<span class="badge text-bg-warning">Override</span>' : '<span class="badge text-bg-success">Template</span>');
-                        effectiveRows += '<tr class="' + (line.isSkipped ? 'table-secondary' : '') + '">' +
-                            '<td>' + escapeHtml(line.productCode) + '</td>' +
-                            '<td>' + escapeHtml(line.productName) + ' ' + tag + '</td>' +
-                            '<td class="text-end">' + (line.isSkipped ? '0' : formatMoney(line.quantity)) + '</td>' +
-                            '<td class="text-end">' + formatMoney(line.unitPrice) + '</td></tr>';
+                        const kind = line.isSkipped ? 'skip' : (line.isOverride ? 'override' : 'template');
+                        const qtyText = line.isSkipped ? '0' : formatMoney(line.quantity);
+                        deliverChips += supplyChip(line.productCode, line.productName, qtyText, line.unitPrice, kind);
                     });
 
-                    let overrideRowsHtml = '';
+                    let overrideChips = '';
                     overrides.forEach(function (ov) {
-                        overrideRowsHtml += '<tr>' +
-                            '<td>' + escapeHtml(ov.productCode) + '</td>' +
-                            '<td>' + escapeHtml(ov.productName) + '</td>' +
-                            '<td class="text-end">' + formatMoney(ov.quantity) + (ov.quantity <= 0 ? ' (skip)' : '') + '</td>' +
-                            '<td class="text-end">' + formatMoney(ov.unitPrice) + '</td>' +
-                            '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger monthly-supply-clear-override" data-override-id="' + ov.uid + '">Clear</button></td></tr>';
+                        const skipped = ov.quantity <= 0;
+                        const clearBtn = '<button type="button" class="btn btn-link monthly-supply-clear-override" data-override-id="' + ov.uid + '">Clear</button>';
+                        overrideChips += supplyChip(ov.productCode, ov.productName, formatMoney(ov.quantity), ov.unitPrice, skipped ? 'skip' : 'override', clearBtn);
                     });
 
                     let productOptions = '<option value="">Select product…</option>';
@@ -352,28 +365,31 @@
                     });
 
                     host.innerHTML = standingHtml +
-                        '<h6 class="mb-1">Will deliver on <span class="text-primary">' + escapeHtml(day) + '</span> (Add Supplied)</h6>' +
-                        '<p class="text-muted small mb-2">Overrides apply only to this supply date. Standing supply stays unchanged.</p>' +
-                        '<div class="table-responsive border rounded bg-white mb-3">' +
-                        '<table class="table table-sm align-middle mb-0"><thead class="table-light"><tr>' +
-                        '<th>Code</th><th>Product</th><th class="text-end">Qty</th><th class="text-end">Price</th></tr></thead>' +
-                        '<tbody>' + (effectiveRows || '<tr><td colspan="4" class="text-muted">Nothing to deliver for this date.</td></tr>') +
-                        '</tbody></table></div>' +
-                        '<h6 class="mb-2">Day overrides' + (overrides.length ? '' : ' <span class="text-muted fw-normal">(none)</span>') + '</h6>' +
-                        (overrides.length
-                            ? '<div class="table-responsive border rounded bg-white mb-3"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Code</th><th>Product</th><th class="text-end">Qty</th><th class="text-end">Price</th><th></th></tr></thead><tbody>' + overrideRowsHtml + '</tbody></table></div>'
-                            : '') +
-                        '<div class="border rounded bg-white p-3 mb-1">' +
-                        '<div class="fw-semibold mb-2">Add / change override for ' + escapeHtml(day) + '</div>' +
-                        '<div class="row g-2 align-items-end">' +
-                        '<div class="col-md-5"><label class="form-label small mb-0">Product</label>' +
+                        '<div class="monthly-supply-day-box">' +
+                        '<div class="monthly-supply-day-strip monthly-supply-day-strip-deliver">' +
+                        '<div class="monthly-supply-day-strip-label">Will deliver' +
+                        '<span class="monthly-supply-day-strip-meta">' + escapeHtml(day) + ' · Add Supplied</span></div>' +
+                        '<div class="monthly-supply-day-chips">' +
+                        (deliverChips || '<span class="monthly-supply-day-empty">Nothing to deliver for this date.</span>') +
+                        '</div></div>' +
+                        '<div class="monthly-supply-day-strip monthly-supply-day-strip-override">' +
+                        '<div class="monthly-supply-day-strip-label">Day overrides' +
+                        '<span class="monthly-supply-day-strip-meta">this date only</span></div>' +
+                        '<div class="monthly-supply-day-chips">' +
+                        (overrideChips || '<span class="monthly-supply-day-empty">No changes for this date.</span>') +
+                        '</div></div>' +
+                        '<p class="monthly-supply-day-box-note">Overrides apply only to this supply date. Standing supply stays unchanged.</p>' +
+                        '<details class="monthly-supply-day-form">' +
+                        '<summary class="monthly-supply-day-form-title">Add / change override for ' + escapeHtml(day) + '</summary>' +
+                        '<div class="monthly-supply-day-form-body row g-2 align-items-end">' +
+                        '<div class="col-md-5"><label class="form-label mb-0">Product</label>' +
                         '<select class="form-select form-select-sm monthly-supply-override-product">' + productOptions + '</select></div>' +
-                        '<div class="col-md-2"><label class="form-label small mb-0">Qty (0 = skip)</label>' +
+                        '<div class="col-md-2"><label class="form-label mb-0">Qty (0 = skip)</label>' +
                         '<input type="number" step="0.001" min="0" class="form-control form-control-sm monthly-supply-override-qty" value="1" /></div>' +
-                        '<div class="col-md-2"><label class="form-label small mb-0">Unit price</label>' +
+                        '<div class="col-md-2"><label class="form-label mb-0">Unit price</label>' +
                         '<input type="number" step="0.01" min="0" class="form-control form-control-sm monthly-supply-override-price" value="0" /></div>' +
                         '<div class="col-md-3"><button type="button" class="btn btn-sm btn-warning monthly-supply-save-override">Save day override</button></div>' +
-                        '</div></div>';
+                        '</div></details></div>';
 
                     function closeAllItemRecords() {
                         host.querySelectorAll('.monthly-supply-item-detail-row').forEach(function (row) {

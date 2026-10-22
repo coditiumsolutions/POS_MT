@@ -55,7 +55,8 @@ public class CustomersController : Controller
     public async Task<IActionResult> Create(CancellationToken ct)
     {
         EnsureCustomersNav();
-        var model = new CustomerFormViewModel { IsActive = true };
+        var model = new CustomerFormViewModel { IsActive = true, GenerateCode = true };
+        await ApplyGeneratedCodeAsync(model, ct);
         await PopulateCityAreaOptionsAsync(model, ct);
         return View(model);
     }
@@ -65,6 +66,8 @@ public class CustomersController : Controller
     public async Task<IActionResult> Create(CustomerFormViewModel model, CancellationToken ct)
     {
         EnsureCustomersNav();
+        model.GenerateCode = true;
+        await ApplyGeneratedCodeAsync(model, ct);
         if (!ModelState.IsValid)
         {
             await PopulateCityAreaOptionsAsync(model, ct);
@@ -73,9 +76,13 @@ public class CustomersController : Controller
 
         if (await _db.Customers.AnyAsync(x => x.CustomerCode == model.CustomerCode, ct))
         {
-            ModelState.AddModelError(nameof(model.CustomerCode), "Customer code already exists.");
-            await PopulateCityAreaOptionsAsync(model, ct);
-            return View(model);
+            await ApplyGeneratedCodeAsync(model, ct);
+            if (await _db.Customers.AnyAsync(x => x.CustomerCode == model.CustomerCode, ct))
+            {
+                ModelState.AddModelError(nameof(model.CustomerCode), "Customer code already exists.");
+                await PopulateCityAreaOptionsAsync(model, ct);
+                return View(model);
+            }
         }
 
         var entity = MapToEntity(model);
@@ -323,6 +330,112 @@ public class CustomersController : Controller
         e.CreditLimit = m.CreditLimit;
         e.DiscountPercent = m.DiscountPercent;
         e.IsActive = m.IsActive;
+    }
+
+    private async Task ApplyGeneratedCodeAsync(CustomerFormViewModel model, CancellationToken ct)
+    {
+        model.CodePrefix = NormalizeCodePrefix(model.CodePrefix);
+        ModelState.Remove(nameof(model.CodePrefix));
+        var generated = await NextCustomerCodeAsync(model.CodePrefix, ct);
+        model.CodeNumber = generated.Number;
+        model.CustomerCode = generated.Code;
+        ModelState.Remove(nameof(model.CustomerCode));
+    }
+
+    private static string NormalizeCodePrefix(string? prefix)
+    {
+        if (string.IsNullOrWhiteSpace(prefix))
+        {
+            return string.Empty;
+        }
+
+        var cleaned = new string(prefix.Trim().Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+        return cleaned.Length <= 8 ? cleaned : cleaned[..8];
+    }
+
+    /// <summary>
+    /// Next code continues the highest trailing number already in use (1003 → 1004).
+    /// An optional prefix is placed in front (D + 1004 → D1004). Walk-in C001 is ignored.
+    /// </summary>
+    private async Task<(string Number, string Code)> NextCustomerCodeAsync(string prefix, CancellationToken ct)
+    {
+        var codes = await _db.Customers.AsNoTracking()
+            .Select(x => x.CustomerCode)
+            .ToListAsync(ct);
+
+        var max = 0;
+        var width = 4;
+        var any = false;
+        foreach (var raw in codes)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                continue;
+            }
+
+            var code = raw.Trim();
+            if (string.Equals(code, "C001", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!TryTrailingNumber(code, out var number, out var digitWidth) || number <= max)
+            {
+                continue;
+            }
+
+            any = true;
+            max = number;
+            width = Math.Max(4, digitWidth);
+        }
+
+        var next = any ? max + 1 : 1000;
+        var existing = new HashSet<string>(
+            codes.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+
+        string numberText;
+        string candidate;
+        do
+        {
+            numberText = next.ToString().PadLeft(width, '0');
+            candidate = prefix + numberText;
+            next++;
+        }
+        while (existing.Contains(candidate) && next < max + 100000);
+
+        if (candidate.Length > 50)
+        {
+            candidate = candidate[..50];
+        }
+
+        return (numberText, candidate);
+    }
+
+    private static bool TryTrailingNumber(string code, out int number, out int width)
+    {
+        number = 0;
+        width = 0;
+        var end = code.Length;
+        var start = end;
+        while (start > 0 && char.IsDigit(code[start - 1]))
+        {
+            start--;
+        }
+
+        if (start == end)
+        {
+            return false;
+        }
+
+        var digits = code[start..];
+        if (!int.TryParse(digits, out number))
+        {
+            return false;
+        }
+
+        width = digits.Length;
+        return true;
     }
 
     private async Task PopulateCityAreaOptionsAsync(CustomerFormViewModel model, CancellationToken ct)

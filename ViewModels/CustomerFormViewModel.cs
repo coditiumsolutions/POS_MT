@@ -10,6 +10,15 @@ public sealed class CustomerFormViewModel
     [Required, StringLength(50), Display(Name = "Customer Code")]
     public string CustomerCode { get; set; } = string.Empty;
 
+    /// <summary>Create only. When set, the code is assigned on the server.</summary>
+    public bool GenerateCode { get; set; }
+
+    [StringLength(8), Display(Name = "Prefix")]
+    public string? CodePrefix { get; set; }
+
+    /// <summary>Numeric part shown with an optional prefix. Not stored.</summary>
+    public string CodeNumber { get; set; } = string.Empty;
+
     [Required, StringLength(200), Display(Name = "Customer Name")]
     public string CustomerName { get; set; } = string.Empty;
 

@@ -1043,6 +1043,26 @@ a.pos-nav-link:hover {
   box-shadow: 0 0 0 0.15rem rgba(37, 99, 235, 0.15);
 }
 
+.customer-code-generate {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.customer-code-prefix {
+  width: 5.25rem;
+  flex: 0 0 5.25rem;
+  text-transform: uppercase;
+}
+
+.customer-code-hint {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: #64748b;
+}
+
 .invoice-meta-form .invoice-meta-input[readonly],
 .invoice-meta-form .invoice-meta-input:disabled {
   background-color: #f8fafc;
@@ -1115,6 +1135,10 @@ a.pos-nav-link:hover {
   margin-top: 0;
 }
 
+.pos-sale-layout--cards {
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.8fr);
+}
+
 .pos-sale-panel {
   display: flex;
   flex-direction: column;
@@ -1183,6 +1207,173 @@ a.pos-nav-link:hover {
   background-color: #0d5f58;
   border-color: #0d5f58;
   color: #fff;
+}
+
+.pos-category-pills {
+  display: flex;
+  flex-wrap: wrap;
+  grid-template-columns: none;
+  gap: 0.45rem;
+  background: #f8fafc;
+}
+
+.pos-category-pills .pos-category-btn {
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.15rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 0.7rem;
+  border-color: #dbe3f0;
+  background: #fff;
+  color: #334155;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.pos-category-pills .pos-category-btn.active {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #fff;
+}
+
+.pos-category-glyph {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.pos-product-cards {
+  flex: 1;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 0.75rem;
+  align-content: start;
+  padding: 0.85rem;
+  background: #f8fafc;
+}
+
+.pos-item-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.85rem 0.55rem 0.7rem;
+  border: 1px solid #e6edf7;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  cursor: pointer;
+  text-align: center;
+}
+
+.pos-item-card:hover {
+  border-color: #c7d2fe;
+}
+
+.pos-product-cards .pos-product-row.selected,
+.pos-product-cards .pos-product-row.selected:hover {
+  background: #fff !important;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.28);
+}
+
+.pos-item-card-icon,
+.pos-item-card-photo {
+  width: 64px;
+  height: 64px;
+  border-radius: 1rem;
+}
+
+.pos-item-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.pos-item-card-photo {
+  object-fit: cover;
+  background: #eef2ff;
+}
+
+.pos-item-card-name {
+  color: #1e293b;
+  font-size: 0.92rem;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.pos-item-card-price {
+  color: #4f46e5;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.setup-page {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.setup-pos-panel {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.85rem;
+  padding: 0.9rem;
+}
+
+.setup-pos-title {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.setup-pos-note {
+  margin: 0 0 0.75rem;
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.setup-pos-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.setup-pos-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.55rem;
+  cursor: pointer;
+}
+
+.setup-pos-choice.active {
+  border-color: #4f46e5;
+  background: #eef2ff;
+}
+
+.setup-pos-choice span {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.setup-pos-choice small {
+  color: #64748b;
+}
+
+@media (max-width: 900px) {
+  .setup-page {
+    grid-template-columns: 1fr;
+  }
 }
 
 .pos-sale-table-wrap {
@@ -1267,6 +1458,7 @@ a.pos-nav-link:hover {
 
 @media (max-width: 992px) {
   .pos-sale-layout,
+  .pos-sale-layout--cards,
   .monthly-entry-layout {
     grid-template-columns: 1fr;
     min-height: 0;
@@ -1709,6 +1901,191 @@ a.btn.btn-primary.daily-report-filter-btn:focus {
 .monthly-supply-detail-panel {
   background: #f8fafb;
   border-top: 2px solid #0d5f58;
+}
+
+.table-striped > tbody > tr.monthly-supply-detail-row > *,
+.table-hover > tbody > tr.monthly-supply-detail-row:hover > * {
+  --bs-table-accent-bg: transparent;
+  background-color: #f8fafb;
+  box-shadow: none;
+  color: inherit;
+}
+
+.monthly-supply-day-box {
+  margin: 0.7rem 0.15rem 0.2rem 0.85rem;
+  padding: 0.3rem 0.45rem 0.35rem;
+  background: #fffdf6;
+  border: 1px dashed #e8c56a;
+  border-left: 3px solid #d97706;
+  border-radius: 0.3rem;
+  font-size: 0.72rem;
+}
+
+.monthly-supply-day-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 0.18rem 0;
+}
+
+.monthly-supply-day-strip + .monthly-supply-day-strip {
+  margin-top: 0.1rem;
+  padding-top: 0.28rem;
+  border-top: 1px solid #f3e4c0;
+}
+
+.monthly-supply-day-strip-label {
+  flex: 0 0 8.4rem;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  line-height: 1.25;
+  padding-top: 0.16rem;
+}
+
+.monthly-supply-day-strip-deliver .monthly-supply-day-strip-label {
+  color: #065f46;
+}
+
+.monthly-supply-day-strip-override .monthly-supply-day-strip-label {
+  color: #9a3412;
+}
+
+.monthly-supply-day-strip-meta {
+  display: block;
+  margin-top: 0.08rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #78716c;
+}
+
+.monthly-supply-day-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.22rem;
+  flex: 1;
+  min-width: 0;
+  max-height: 4.4rem;
+  overflow: auto;
+}
+
+.monthly-supply-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.28rem;
+  max-width: 100%;
+  padding: 0.04rem 0.38rem;
+  border: 1px solid #e7e5e4;
+  border-radius: 999px;
+  background: #fff;
+  color: #44403c;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.monthly-supply-chip-template {
+  color: #57534e;
+}
+
+.monthly-supply-chip-override {
+  background: #fffbeb;
+  border-color: #f6d37a;
+}
+
+.monthly-supply-chip-skip {
+  background: #f5f5f4;
+  border-color: #d6d3d1;
+  color: #78716c;
+}
+
+.monthly-supply-chip-skip .monthly-supply-chip-name {
+  text-decoration: line-through;
+}
+
+.monthly-supply-chip-code {
+  font-weight: 700;
+}
+
+.monthly-supply-chip-price {
+  color: #78716c;
+}
+
+.monthly-supply-chip-tag {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.monthly-supply-chip-override .monthly-supply-chip-tag {
+  color: #b45309;
+}
+
+.monthly-supply-chip-skip .monthly-supply-chip-tag {
+  color: #57534e;
+}
+
+.monthly-supply-day-box-note {
+  margin: 0.2rem 0 0;
+  color: #78716c;
+  font-size: 0.65rem;
+}
+
+.monthly-supply-day-empty {
+  padding: 0.12rem 0;
+  color: #78716c;
+}
+
+.monthly-supply-chip .monthly-supply-clear-override {
+  padding: 0 0 0 0.1rem;
+  min-height: 0;
+  font-size: 0.65rem;
+  line-height: 1;
+  vertical-align: baseline;
+  text-decoration: none;
+  color: #b91c1c;
+}
+
+.monthly-supply-clear-override:hover {
+  color: #991b1b;
+  text-decoration: underline;
+}
+
+.monthly-supply-day-form {
+  margin-top: 0.28rem;
+  padding-top: 0.22rem;
+  border-top: 1px dashed #f3e4c0;
+}
+
+.monthly-supply-day-form-title {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #78350f;
+  cursor: pointer;
+}
+
+.monthly-supply-day-form-body {
+  margin-top: 0.35rem;
+}
+
+.monthly-supply-day-form .form-label {
+  font-size: 0.68rem;
+  color: #78716c;
+}
+
+@media (max-width: 700px) {
+  .monthly-supply-day-strip {
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .monthly-supply-day-strip-label {
+    flex-basis: auto;
+  }
 }
 
 .monthly-supply-item-row {

@@ -1,0 +1,229 @@
+@model DeliveryHandoverPageViewModel
+@{
+    Layout = null;
+    ViewData["Title"] = $"Delivery list {Model.SupplyDate:dd-MMM-yyyy}";
+    var itemCount = Model.Customers.Sum(x => x.Items.Count);
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"]</title>
+    <style>
+        :root {
+            --ink: #0f172a;
+            --muted: #64748b;
+            --line: #cbd5e1;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            color: var(--ink);
+            margin: 0;
+            background: #e2e8f0;
+        }
+
+        .toolbar {
+            width: 210mm;
+            margin: 12px auto 0;
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+        }
+
+        .toolbar button {
+            border: 1px solid #94a3b8;
+            background: #0f172a;
+            color: #fff;
+            border-radius: 4px;
+            padding: 0.4rem 0.9rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+
+        .toolbar button.secondary {
+            background: #fff;
+            color: #0f172a;
+        }
+
+        .sheet {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 12px auto;
+            padding: 12mm 12mm 14mm;
+            background: #fff;
+            box-shadow: 0 1px 8px rgba(15, 23, 42, 0.12);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.35rem;
+        }
+
+        .sub {
+            margin-top: 0.2rem;
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            border-bottom: 2px solid var(--ink);
+            padding-bottom: 0.6rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .meta {
+            text-align: right;
+            font-size: 0.85rem;
+        }
+
+        .meta strong { display: block; font-size: 1rem; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.86rem;
+        }
+
+        th, td {
+            border: 1px solid var(--line);
+            padding: 0.35rem 0.45rem;
+            vertical-align: top;
+            text-align: left;
+        }
+
+        th {
+            background: #f8fafc;
+            font-size: 0.75rem;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+        }
+
+        .tick {
+            width: 28px;
+            text-align: center;
+        }
+
+        .box {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 1.5px solid var(--ink);
+        }
+
+        .name { font-weight: 700; }
+
+        .muted {
+            color: var(--muted);
+            font-size: 0.78rem;
+        }
+
+        .items { margin: 0; padding-left: 1rem; }
+        .items li { margin: 0.05rem 0; }
+
+        .signoff {
+            margin-top: 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            gap: 2rem;
+            font-size: 0.85rem;
+        }
+
+        .signoff span {
+            flex: 1;
+            border-top: 1px solid var(--ink);
+            padding-top: 0.35rem;
+        }
+
+        .empty {
+            padding: 1rem 0;
+            color: var(--muted);
+        }
+
+        @@page { size: A4 portrait; margin: 10mm; }
+
+        @@media print {
+            body { background: #fff; }
+            .toolbar { display: none !important; }
+            .sheet {
+                width: auto;
+                min-height: auto;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+            }
+            tr { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button type="button" class="secondary" onclick="window.close()">Close</button>
+        <button type="button" onclick="window.print()">Print</button>
+    </div>
+    <div class="sheet">
+        <div class="header">
+            <div>
+                <h1>Delivery list</h1>
+                <div class="sub">@Model.ShopName · hand this sheet to the person delivering</div>
+            </div>
+            <div class="meta">
+                <strong>@Model.SupplyDate.ToString("dd-MMM-yyyy")</strong>
+                <div>@(Model.SelectedOnly ? "Selected customers" : "All customers with items")</div>
+                <div class="muted">Printed @Model.PrintedAt.ToString("dd-MMM-yyyy HH:mm")</div>
+            </div>
+        </div>
+
+        @if (Model.Customers.Count == 0)
+        {
+            <p class="empty">Nothing to deliver for this date.</p>
+        }
+        else
+        {
+            <table>
+                <thead>
+                    <tr>
+                        <th class="tick">Done</th>
+                        <th style="width:28%">Customer</th>
+                        <th style="width:32%">Location</th>
+                        <th>Items to deliver</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var customer in Model.Customers)
+                {
+                    <tr>
+                        <td class="tick"><span class="box"></span></td>
+                        <td>
+                            <div class="name">@customer.CustomerName</div>
+                            <div class="muted">@customer.CustomerCode@(string.IsNullOrWhiteSpace(customer.Phone) ? "" : " · " + customer.Phone)</div>
+                        </td>
+                        <td>@customer.Location</td>
+                        <td>
+                            <ul class="items">
+                            @foreach (var item in customer.Items)
+                            {
+                                <li>@item.ProductName <span class="muted">@item.ProductCode</span> · @item.Quantity.ToString("0.###")</li>
+                            }
+                            </ul>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            <p class="muted" style="margin-top:0.6rem">@Model.Customers.Count customer@(Model.Customers.Count == 1 ? "" : "s") · @itemCount item line@(itemCount == 1 ? "" : "s"). Skipped products are left off this list.</p>
+        }
+
+        <div class="signoff">
+            <span>Handed to</span>
+            <span>Received by</span>
+        </div>
+    </div>
+</body>
+</html>
