@@ -1,7 +1,7 @@
-﻿using Microsoft.AspNetCore.Authorization; using Microsoft.AspNetCore.Mvc; using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization; using Microsoft.AspNetCore.Mvc; using Microsoft.EntityFrameworkCore;
 using POS_MT.Data;
 namespace POS_MT.Controllers;
-[Authorize]
+[Authorize(Policy = "AdminOnly")]
 public class AuditLogsController : Controller {
   private readonly POSDbContext _db;
   public AuditLogsController(POSDbContext db){ _db=db; }

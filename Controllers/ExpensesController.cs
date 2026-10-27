@@ -1,7 +1,7 @@
-﻿using Microsoft.AspNetCore.Authorization; using Microsoft.AspNetCore.Mvc; using Microsoft.AspNetCore.Mvc.Rendering; using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization; using Microsoft.AspNetCore.Mvc; using Microsoft.AspNetCore.Mvc.Rendering; using Microsoft.EntityFrameworkCore;
 using POS_MT.Data; using POS_MT.Interfaces; using POS_MT.Models; using POS_MT.ViewModels;
 namespace POS_MT.Controllers;
-[Authorize]
+[Authorize(Policy = "ManagerOrAdmin")]
 public class ExpensesController : Controller {
   private readonly POSDbContext _db; private readonly IAuditService _audit;
   public ExpensesController(POSDbContext db, IAuditService audit){ _db=db; _audit=audit; }
@@ -10,7 +10,23 @@ public class ExpensesController : Controller {
     ViewBag.Categories=new SelectList(await _db.ExpenseCategories.AsNoTracking().Where(x=>x.IsActive).OrderBy(x=>x.CategoryName).ToListAsync(ct),"Uid","CategoryName");
     ViewBag.PaymentMethods=new SelectList(await _db.PaymentMethods.AsNoTracking().Where(x=>x.IsActive).OrderBy(x=>x.PaymentName).ToListAsync(ct),"Uid","PaymentName");
   }
-  public async Task<IActionResult> Index(CancellationToken ct)=>View(await _db.Expenses.AsNoTracking().OrderByDescending(x=>x.ExpenseDate).ToListAsync(ct));
+  public async Task<IActionResult> Index(DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
+  {
+    ViewData["Title"] = "Expenses";
+    var fromDay = dateFrom?.Date;
+    var toExclusive = dateTo?.Date.AddDays(1);
+
+    var query = _db.Expenses.AsNoTracking().AsQueryable();
+    if (fromDay.HasValue)
+      query = query.Where(x => x.ExpenseDate >= fromDay.Value);
+    if (toExclusive.HasValue)
+      query = query.Where(x => x.ExpenseDate < toExclusive.Value);
+
+    ViewBag.DateFrom = fromDay;
+    ViewBag.DateTo = dateTo?.Date;
+
+    return View(await query.OrderByDescending(x => x.ExpenseDate).ThenByDescending(x => x.Uid).ToListAsync(ct));
+  }
   public async Task<IActionResult> Create(CancellationToken ct){ await LoadLookups(ct); return View(new ExpenseFormViewModel{ExpenseDate=DateTime.Now, ExpenseNo=$"EX-{DateTime.Now:yyyyMMddHHmmss}"}); }
   [HttpPost, ValidateAntiForgeryToken]
   public async Task<IActionResult> Create(ExpenseFormViewModel model, CancellationToken ct){

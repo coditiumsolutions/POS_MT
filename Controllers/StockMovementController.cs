@@ -4,7 +4,7 @@ using POS_MT.Interfaces;
 
 namespace POS_MT.Controllers;
 
-[Authorize]
+[Authorize(Policy = "ManagerOrAdmin")]
 public class StockMovementController : Controller
 {
     private readonly IStockMovementService _stockMovementService;

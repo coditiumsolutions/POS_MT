@@ -1,0 +1,89 @@
+@model OfflineSyncTablesPageViewModel
+@{
+    ViewData["Title"] = "Sync Tables";
+}
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-2 mb-3">
+    <div>
+        <h1 class="page-heading mb-1">Sync Tables</h1>
+        <p class="text-muted mb-0">
+            Checking a box only marks the table. Data is copied when you click <strong>Pull now</strong> while still Online.
+            Going Offline does not sync by itself and there is no wait timer.
+        </p>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm" asp-controller="Setup" asp-action="Index">Back to Setup</a>
+</div>
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success">@TempData["Success"]</div>
+}
+
+<div class="alert alert-info py-2">
+    <ol class="mb-0 ps-3">
+        <li>Stay <strong>Online</strong>.</li>
+        <li>Check <strong>Pull from online</strong> for the tables you need (e.g. Sales Invoices + Details).</li>
+        <li>Click <strong>Save</strong>, then <strong>Pull now</strong>.</li>
+        <li>After pull succeeds, switch to Offline — those records are then available locally.</li>
+    </ol>
+</div>
+
+<form asp-action="Save" method="post">
+    @Html.AntiForgeryToken()
+    <div class="table-responsive bg-white border rounded p-2">
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Table</th>
+                    <th>Mode</th>
+                    <th class="text-center">Pull from online</th>
+                    <th class="text-center">Push to online</th>
+                    <th class="text-center">Active</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+            @for (var i = 0; i < Model.Rows.Count; i++)
+            {
+                <tr>
+                    <td>
+                        <input type="hidden" asp-for="Rows[i].Uid" />
+                        <div class="fw-semibold">@Model.Rows[i].DisplayName</div>
+                        <div class="small text-muted">@Model.Rows[i].TableName</div>
+                    </td>
+                    <td>
+                        <span class="badge text-bg-light border">@Model.Rows[i].SyncMode</span>
+                    </td>
+                    <td class="text-center">
+                        <input type="checkbox" asp-for="Rows[i].PullFromOnline" class="form-check-input" />
+                    </td>
+                    <td class="text-center">
+                        <input type="checkbox" asp-for="Rows[i].PushToOnline" class="form-check-input" />
+                    </td>
+                    <td class="text-center">
+                        <input type="checkbox" asp-for="Rows[i].IsActive" class="form-check-input" />
+                    </td>
+                    <td class="small text-muted">@(string.IsNullOrWhiteSpace(Model.Rows[i].Notes) ? "—" : Model.Rows[i].Notes)</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+    <div class="mt-3 d-flex flex-wrap gap-2">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a class="btn btn-outline-secondary" asp-action="Index">Reset</a>
+    </div>
+</form>
+
+<form asp-action="PullNow" method="post" class="mt-2">
+    @Html.AntiForgeryToken()
+    <button type="submit" class="btn btn-success"
+            onclick="return confirm('Pull checked tables from Online SQL into local SQLite now? Stay Online until this finishes.');">
+        Pull now (Online → Offline SQLite)
+    </button>
+    <span class="text-muted small ms-2">CLI alternative: <code>dotnet run -- offline pull</code></span>
+</form>

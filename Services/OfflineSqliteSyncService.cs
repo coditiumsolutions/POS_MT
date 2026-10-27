@@ -56,43 +56,100 @@ public sealed class OfflineSqliteSyncService : IOfflineSqliteSyncService
 
         await using var local = CreateSqlite(sqliteCs);
         await local.Database.EnsureCreatedAsync(ct);
+        await EnsureLocalSqliteColumnsAsync(local, ct);
+        await OfflineSyncCatalogService.EnsureOnAsync(central, ct);
+        await OfflineSyncCatalogService.EnsureOnAsync(local, ct);
 
-        // Catalog / lookup data used by POS. Sales + outbox on SQLite are preserved.
-        var products = await central.Products.AsNoTracking().ToListAsync(ct);
-        var inventories = await central.Inventories.AsNoTracking().ToListAsync(ct);
-        var categories = await central.ProductCategories.AsNoTracking().ToListAsync(ct);
-        var units = await central.ProductUnits.AsNoTracking().ToListAsync(ct);
-        var customers = await central.Customers.AsNoTracking().ToListAsync(ct);
-        var users = await central.Users.AsNoTracking().ToListAsync(ct);
-        var branches = await central.Branches.AsNoTracking().ToListAsync(ct);
-        var terminals = await central.Terminals.AsNoTracking().ToListAsync(ct);
-        var paymentMethods = await central.PaymentMethods.AsNoTracking().ToListAsync(ct);
-        var warehouses = await central.Warehouses.AsNoTracking().ToListAsync(ct);
-        var vendors = await central.Vendors.AsNoTracking().ToListAsync(ct);
-        var configs = await central.Configurations.AsNoTracking().ToListAsync(ct);
-        var expenseCategories = await central.ExpenseCategories.AsNoTracking().ToListAsync(ct);
+        var pullNames = await OfflineSyncCatalogService.GetPullNamesOnAsync(central, ct);
+        if (pullNames.Count == 0)
+        {
+            return "No tables marked PullFromOnline in OfflineSyncTables. Open Setup → Sync Tables to enable pull.";
+        }
 
+        // Catalog / lookup data used by POS. Sales + outbox on SQLite are preserved unless pulled.
+        var pulled = new List<string>();
         await using var tx = await local.Database.BeginTransactionAsync(ct);
 
-        await ReplaceTableAsync(local, inventories, ct);
-        await ReplaceTableAsync(local, products, ct);
-        await ReplaceTableAsync(local, categories, ct);
-        await ReplaceTableAsync(local, units, ct);
-        await ReplaceTableAsync(local, customers, ct);
-        await ReplaceTableAsync(local, users, ct);
-        await ReplaceTableAsync(local, branches, ct);
-        await ReplaceTableAsync(local, terminals, ct);
-        await ReplaceTableAsync(local, paymentMethods, ct);
-        await ReplaceTableAsync(local, warehouses, ct);
-        await ReplaceTableAsync(local, vendors, ct);
-        await ReplaceTableAsync(local, configs, ct);
-        await ReplaceTableAsync(local, expenseCategories, ct);
+        async Task PullIfEnabledAsync<T>(string tableName, IQueryable<T> query) where T : class
+        {
+            if (!pullNames.Contains(tableName))
+            {
+                return;
+            }
+
+            try
+            {
+                var rows = await query.AsNoTracking().ToListAsync(ct);
+                await ReplaceTableAsync(local, rows, ct);
+                pulled.Add($"{tableName}={rows.Count}");
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Pull failed on table '{tableName}': {FlattenDbError(ex)}", ex);
+            }
+        }
+
+        // Lookups first (parents before dependents where possible).
+        await PullIfEnabledAsync("OfflineSyncTables", central.OfflineSyncTables);
+        await PullIfEnabledAsync("Branches", central.Branches);
+        await PullIfEnabledAsync("Warehouses", central.Warehouses);
+        await PullIfEnabledAsync("Terminals", central.Terminals);
+        await PullIfEnabledAsync("PaymentMethods", central.PaymentMethods);
+        await PullIfEnabledAsync("ProductCategories", central.ProductCategories);
+        await PullIfEnabledAsync("ProductUnits", central.ProductUnits);
+        await PullIfEnabledAsync("Products", central.Products);
+        await PullIfEnabledAsync("Inventories", central.Inventories);
+        await PullIfEnabledAsync("Customers", central.Customers);
+        await PullIfEnabledAsync("Users", central.Users);
+        await PullIfEnabledAsync("Vendors", central.Vendors);
+        await PullIfEnabledAsync("Configurations", central.Configurations);
+        await PullIfEnabledAsync("ExpenseCategories", central.ExpenseCategories);
+        await PullIfEnabledAsync("CustomerMonthlySupplies", central.CustomerMonthlySupplies);
+        await PullIfEnabledAsync("CustomerMonthlySupplyOverrides", central.CustomerMonthlySupplyOverrides);
+
+        // Sales: only when flagged. Skipped if local SyncOutbox still has pending/failed sales
+        // so unsynced offline invoices are not wiped by a full replace.
+        if (pullNames.Contains("SalesInvoices") || pullNames.Contains("SalesInvoiceDetails"))
+        {
+            var hasPendingSales = await local.SyncOutboxes.AsNoTracking().AnyAsync(
+                x => (x.Status == SyncOutbox.StatusPending || x.Status == SyncOutbox.StatusFailed)
+                     && x.EntityType == "SalesInvoice",
+                ct);
+            if (hasPendingSales)
+            {
+                pulled.Add("SalesInvoices=skipped(pending outbox)");
+            }
+            else
+            {
+                try
+                {
+                    await local.SalesInvoiceDetails.ExecuteDeleteAsync(ct);
+                    await local.SalesInvoices.ExecuteDeleteAsync(ct);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        $"Pull failed clearing local sales: {FlattenDbError(ex)}", ex);
+                }
+
+                // Parent invoices are required when details are pulled.
+                var pullSales = pullNames.Contains("SalesInvoices") || pullNames.Contains("SalesInvoiceDetails");
+                if (pullSales)
+                {
+                    pullNames.Add("SalesInvoices");
+                }
+
+                await PullIfEnabledAsync("SalesInvoices", central.SalesInvoices);
+                await PullIfEnabledAsync("SalesInvoiceDetails", central.SalesInvoiceDetails);
+            }
+        }
 
         await tx.CommitAsync(ct);
 
         var msg =
             $"Pulled to SQLite ({_paths.ResolveFilePath()}): " +
-            $"{products.Count} products, {inventories.Count} inventory rows, {customers.Count} customers, {users.Count} users.";
+            (pulled.Count == 0 ? "nothing matched the pull list." : string.Join(", ", pulled));
         _logger.LogInformation("{Message}", msg);
         return msg;
     }
@@ -207,13 +264,140 @@ public sealed class OfflineSqliteSyncService : IOfflineSqliteSyncService
     private static async Task ReplaceTableAsync<T>(POSDbContext db, List<T> rows, CancellationToken ct) where T : class
     {
         await db.Set<T>().ExecuteDeleteAsync(ct);
-        if (rows.Count > 0)
+        db.ChangeTracker.Clear();
+        if (rows.Count == 0)
         {
-            await db.Set<T>().AddRangeAsync(rows, ct);
+            return;
+        }
+
+        // Keep explicit primary keys from online so FKs (e.g. SalesInvoiceDetails → SalesInvoices) stay valid.
+        await db.Set<T>().AddRangeAsync(rows, ct);
+        foreach (var entry in db.ChangeTracker.Entries<T>())
+        {
+            entry.State = EntityState.Added;
+            foreach (var prop in entry.Properties)
+            {
+                if (prop.Metadata.IsPrimaryKey() && prop.CurrentValue is not null)
+                {
+                    prop.IsTemporary = false;
+                }
+            }
         }
 
         await db.SaveChangesAsync(ct);
         db.ChangeTracker.Clear();
+    }
+
+    /// <summary>
+    /// EnsureCreated does not alter existing SQLite files. Add any model columns that are missing.
+    /// </summary>
+    private static async Task EnsureLocalSqliteColumnsAsync(POSDbContext db, CancellationToken ct)
+    {
+        await db.Database.OpenConnectionAsync(ct);
+        foreach (var entityType in db.Model.GetEntityTypes())
+        {
+            var tableName = entityType.GetTableName();
+            if (string.IsNullOrWhiteSpace(tableName) || entityType.IsOwned())
+            {
+                continue;
+            }
+
+            var existing = await GetSqliteColumnsAsync(db, tableName, ct);
+            if (existing.Count == 0)
+            {
+                // Table not present yet; EnsureCreated / EnsureOnAsync handles create.
+                continue;
+            }
+
+            foreach (var property in entityType.GetProperties())
+            {
+                if (property.IsPrimaryKey() || property.IsShadowProperty())
+                {
+                    continue;
+                }
+
+                var columnName = property.GetColumnName(
+                    Microsoft.EntityFrameworkCore.Metadata.StoreObjectIdentifier.Table(tableName, entityType.GetSchema()));
+                if (string.IsNullOrWhiteSpace(columnName)
+                    || existing.Contains(columnName))
+                {
+                    continue;
+                }
+
+                var sqliteType = MapClrToSqliteType(property.ClrType);
+                var nullable = property.IsNullable || Nullable.GetUnderlyingType(property.ClrType) is not null;
+                var defaultClause = nullable
+                    ? "NULL"
+                    : sqliteType switch
+                    {
+                        "INTEGER" => "NOT NULL DEFAULT 0",
+                        "REAL" => "NOT NULL DEFAULT 0",
+                        "TEXT" => "NOT NULL DEFAULT ''",
+                        _ => "NULL"
+                    };
+
+                var sql = $"ALTER TABLE \"{tableName}\" ADD COLUMN \"{columnName}\" {sqliteType} {defaultClause}";
+                await db.Database.ExecuteSqlRawAsync(sql, ct);
+                existing.Add(columnName);
+            }
+        }
+    }
+
+    private static async Task<HashSet<string>> GetSqliteColumnsAsync(
+        POSDbContext db,
+        string table,
+        CancellationToken ct)
+    {
+        var cols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var conn = db.Database.GetDbConnection();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"PRAGMA table_info('{table}')";
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var name = reader["name"]?.ToString();
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                cols.Add(name);
+            }
+        }
+
+        return cols;
+    }
+
+    private static string MapClrToSqliteType(Type clrType)
+    {
+        var t = Nullable.GetUnderlyingType(clrType) ?? clrType;
+        if (t == typeof(string) || t == typeof(Guid) || t == typeof(DateTime) || t == typeof(DateTimeOffset) || t == typeof(byte[]))
+        {
+            return "TEXT";
+        }
+
+        if (t == typeof(bool) || t == typeof(byte) || t == typeof(short) || t == typeof(int) || t == typeof(long))
+        {
+            return "INTEGER";
+        }
+
+        if (t == typeof(float) || t == typeof(double) || t == typeof(decimal))
+        {
+            return "REAL";
+        }
+
+        return "TEXT";
+    }
+
+    private static string FlattenDbError(Exception ex)
+    {
+        var parts = new List<string>();
+        for (var e = ex; e is not null; e = e.InnerException)
+        {
+            if (!string.IsNullOrWhiteSpace(e.Message))
+            {
+                parts.Add(e.Message.Trim());
+            }
+        }
+
+        return string.Join(" → ", parts.Distinct(StringComparer.Ordinal));
     }
 
     private static POSDbContext CreateSqlite(string cs)
@@ -278,6 +462,8 @@ public sealed class OfflineSqliteSyncService : IOfflineSqliteSyncService
                 OtherCharges = localInvoice.OtherCharges,
                 NetAmount = localInvoice.NetAmount,
                 PaidAmount = localInvoice.PaidAmount,
+                CustomerGivenAmount = localInvoice.CustomerGivenAmount,
+                ChangeGivenAmount = localInvoice.ChangeGivenAmount,
                 BalanceAmount = localInvoice.BalanceAmount,
                 PaymentStatus = localInvoice.PaymentStatus,
                 InvoiceStatus = localInvoice.InvoiceStatus,
@@ -296,6 +482,8 @@ public sealed class OfflineSqliteSyncService : IOfflineSqliteSyncService
             centralInvoice.OtherCharges = localInvoice.OtherCharges;
             centralInvoice.NetAmount = localInvoice.NetAmount;
             centralInvoice.PaidAmount = localInvoice.PaidAmount;
+            centralInvoice.CustomerGivenAmount = localInvoice.CustomerGivenAmount;
+            centralInvoice.ChangeGivenAmount = localInvoice.ChangeGivenAmount;
             centralInvoice.BalanceAmount = localInvoice.BalanceAmount;
             centralInvoice.PaymentStatus = localInvoice.PaymentStatus;
             centralInvoice.InvoiceStatus = localInvoice.InvoiceStatus;

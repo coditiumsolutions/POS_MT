@@ -78,7 +78,10 @@ public static class OfflineCli
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine("ERROR: " + ex.Message);
+            for (var e = ex; e is not null; e = e.InnerException)
+            {
+                Console.Error.WriteLine("ERROR: " + e.Message);
+            }
             return 1;
         }
     }

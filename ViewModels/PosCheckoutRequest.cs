@@ -22,6 +22,13 @@ public sealed class PosCheckoutRequest
     /// <summary>Optional client-generated GUID for idempotent offline/local-hub checkout.</summary>
     public Guid? ClientTransactionId { get; set; }
 
+    [Range(0, 999999999)]
+    public decimal DiscountAmount { get; set; }
+
+    /// <summary>Cash note/amount the customer handed over. Optional; when set must be ≥ net.</summary>
+    [Range(0, 999999999)]
+    public decimal? CustomerGivenAmount { get; set; }
+
     [MinLength(1)]
     public List<PosCheckoutItemRequest> Items { get; set; } = [];
 }

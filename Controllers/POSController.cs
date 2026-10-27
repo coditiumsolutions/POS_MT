@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -13,7 +13,7 @@ using POS_MT.ViewModels;
 
 namespace POS_MT.Controllers;
 
-[Authorize]
+[Authorize(Policy = "Staff")]
 public class POSController : Controller
 {
     private readonly INavContextService _navContext;
@@ -58,9 +58,13 @@ public class POSController : Controller
         return await SalePage("Cash", ct);
     }
 
-    private const string MonthlyRemark = "Monthly POS";
+    /// <summary>Open Credit POS draft lines. Finalized invoices use <see cref="MonthlyFinalRemarkPrefix"/>.</summary>
+    private const string MonthlyRemark = "Monthly POS Draft";
+    private const string MonthlyFinalRemarkPrefix = "Monthly POS Invoice";
     private const string MonthlySupplyRemarkPrefix = "Monthly Supply";
     private const string MonthlyEntryDatePrefix = "EntryDate:";
+    /// <summary>Legacy drafts created before the Draft suffix was added.</summary>
+    private const string MonthlyRemarkLegacy = "Monthly POS";
 
     [HttpGet]
     public async Task<IActionResult> MonthlySupply(int? openCustomer, CancellationToken ct)
@@ -196,7 +200,7 @@ public class POSController : Controller
             parts.Add(customer.Address.Trim());
         }
 
-        return parts.Count == 0 ? "—" : string.Join(", ", parts);
+        return parts.Count == 0 ? "�" : string.Join(", ", parts);
     }
 
     [HttpGet]
@@ -434,7 +438,7 @@ public class POSController : Controller
         await _audit.WriteAsync("Delete", "CustomerMonthlySupplyOverrides", id.ToString(),
             $"Removed override {row.ProductCode} for {row.CustomerCode} on {row.SupplyDate:yyyy-MM-dd}", ct);
 
-        return Json(new { success = true, message = "Override removed — standing supply applies again." });
+        return Json(new { success = true, message = "Override removed � standing supply applies again." });
     }
 
     [HttpPost]
@@ -533,7 +537,7 @@ public class POSController : Controller
                     .ToList();
                 if (effectiveLines.Count == 0)
                 {
-                    skipped.Add($"{customer.CustomerName} (no supply lines for {supplyDay:yyyy-MM-dd} — add standing items or clear skip overrides)");
+                    skipped.Add($"{customer.CustomerName} (no supply lines for {supplyDay:yyyy-MM-dd} � add standing items or clear skip overrides)");
                     continue;
                 }
 
@@ -726,6 +730,170 @@ public class POSController : Controller
         {
             message += " Skipped: " + string.Join("; ", skipped) + ".";
         }
+
+        TempData["Success"] = message;
+        return RedirectToAction(nameof(MonthlySupply));
+    }
+
+    /// <summary>
+    /// Cancels Add Supplied for the selected customers on the supply date:
+    /// removes that day's invoice lines and restores inventory (same restock path as qty reduce / returns).
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CancelMonthlySupplied(DateTime supplyDate, int[]? selectedCustomerUids, CancellationToken ct)
+    {
+        _navContext.SetArea("POS");
+        var customerIds = selectedCustomerUids?.Distinct().Where(x => x > 0).ToList() ?? [];
+        if (customerIds.Count == 0)
+        {
+            TempData["Error"] = "Select at least one customer.";
+            return RedirectToAction(nameof(MonthlySupply));
+        }
+
+        var supplyDay = supplyDate.Date;
+        if (supplyDay == default)
+        {
+            TempData["Error"] = "Select a supply date.";
+            return RedirectToAction(nameof(MonthlySupply));
+        }
+
+        var customers = await _db.Customers.AsNoTracking()
+            .Where(x => customerIds.Contains(x.Uid) && x.IsActive)
+            .OrderBy(x => x.CustomerName)
+            .ToListAsync(ct);
+
+        if (customers.Count == 0)
+        {
+            TempData["Error"] = "Selected customers were not found.";
+            return RedirectToAction(nameof(MonthlySupply));
+        }
+
+        int? userUid = null;
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (int.TryParse(userIdClaim, out var parsedUserId))
+            userUid = parsedUserId;
+
+        var processed = new List<string>();
+        var skipped = new List<string>();
+        var monthStart = new DateTime(supplyDay.Year, supplyDay.Month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+        var entryRemark = $"{MonthlyEntryDatePrefix}{supplyDay:yyyy-MM-dd}";
+
+        try
+        {
+            await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
+            foreach (var customer in customers)
+            {
+                if (IsWalkInCustomer(customer.CustomerCode, customer.CustomerName))
+                {
+                    skipped.Add($"{customer.CustomerName} (walk-in)");
+                    continue;
+                }
+
+                var invoice = await _db.SalesInvoices
+                    .Where(x => x.CustomerUid == customer.Uid
+                                && x.InvoiceStatus != "Cancelled"
+                                && x.Remarks != null
+                                && x.Remarks.StartsWith(MonthlySupplyRemarkPrefix)
+                                && x.InvoiceDate >= monthStart
+                                && x.InvoiceDate < monthEnd)
+                    .OrderBy(x => x.Uid)
+                    .FirstOrDefaultAsync(ct);
+
+                if (invoice is null)
+                {
+                    skipped.Add($"{customer.CustomerName} (no monthly supply invoice for {supplyDay:yyyy-MM})");
+                    continue;
+                }
+
+                var dayLines = await _db.SalesInvoiceDetails
+                    .Where(x => x.SalesInvoiceUid == invoice.Uid
+                                && x.Remarks != null
+                                && x.Remarks == entryRemark)
+                    .ToListAsync(ct);
+
+                if (dayLines.Count == 0)
+                {
+                    skipped.Add($"{customer.CustomerName} (nothing supplied on {supplyDay:yyyy-MM-dd})");
+                    continue;
+                }
+
+                foreach (var detail in dayLines)
+                {
+                    if (detail.Quantity > 0 && detail.ProductUid > 0)
+                    {
+                        await _inventory.ApplySaleQuantityDeltaAsync(
+                            invoice.Uid,
+                            invoice.InvoiceNo,
+                            new InventoryLineMovement
+                            {
+                                ProductUid = detail.ProductUid,
+                                ProductName = detail.ProductName ?? detail.ProductUid.ToString(),
+                                Quantity = -detail.Quantity,
+                                UnitCost = detail.UnitPrice
+                            },
+                            warehouseUid: null,
+                            invoice.BranchUid,
+                            userUid ?? invoice.UserUid,
+                            terminalUid: null,
+                            ct);
+                    }
+                }
+
+                _db.SalesInvoiceDetails.RemoveRange(dayLines);
+                await _db.SaveChangesAsync(ct);
+
+                var remaining = await _db.SalesInvoiceDetails.CountAsync(x => x.SalesInvoiceUid == invoice.Uid, ct);
+                if (remaining == 0)
+                {
+                    invoice.InvoiceStatus = "Cancelled";
+                    invoice.PaymentStatus = "Cancelled";
+                    invoice.SubTotal = 0;
+                    invoice.NetAmount = 0;
+                    invoice.BalanceAmount = 0;
+                    invoice.OtherCharges = 0;
+                    invoice.UpdatedDate = DateTime.Now;
+                    await _db.SaveChangesAsync(ct);
+                }
+                else
+                {
+                    await RecalculateMonthlyDraftTotalsAsync(invoice, ct);
+                    await ApplyMonthlySupplyDeliveryChargesAsync(invoice, customer.Uid, ct);
+                    await SyncInvoicePaidFromCustomerPaymentsAsync(invoice, ct);
+                    invoice.UpdatedDate = DateTime.Now;
+                    await _db.SaveChangesAsync(ct);
+                }
+
+                await _audit.WriteAsync("Cancel", "SalesInvoices", invoice.Uid.ToString(),
+                    $"Cancelled monthly supply for {customer.CustomerCode} on {supplyDay:yyyy-MM-dd}: removed {dayLines.Count} line(s), stock restored.", ct);
+
+                if (invoice.ClientTransactionId is Guid supplyTx)
+                    await _syncOutbox.EnqueueSalesInvoiceAsync(invoice.Uid, supplyTx, ct);
+
+                processed.Add($"{customer.CustomerCode}: cancelled {dayLines.Count} line(s) for {supplyDay:yyyy-MM-dd} (stock restored)");
+            }
+
+            await tx.CommitAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = "Cancel Order failed: " + (ex.InnerException?.Message ?? ex.Message);
+            return RedirectToAction(nameof(MonthlySupply));
+        }
+
+        if (processed.Count == 0)
+        {
+            TempData["Error"] = skipped.Count > 0
+                ? "No orders cancelled. " + string.Join("; ", skipped)
+                : "No orders were cancelled.";
+            return RedirectToAction(nameof(MonthlySupply));
+        }
+
+        var message = $"Order cancelled: {string.Join("; ", processed)}.";
+        if (skipped.Count > 0)
+            message += " Skipped: " + string.Join("; ", skipped) + ".";
 
         TempData["Success"] = message;
         return RedirectToAction(nameof(MonthlySupply));
@@ -1108,7 +1276,7 @@ public class POSController : Controller
     public async Task<IActionResult> Credit(CancellationToken ct)
     {
         _navContext.SetArea("POS");
-        ViewData["Title"] = "Monthly Customer Entry";
+        ViewData["Title"] = "Credit POS";
 
         var customers = await _db.Customers.AsNoTracking()
             .Where(x => x.IsActive
@@ -1133,14 +1301,43 @@ public class POSController : Controller
                 Uid = x.Uid,
                 ProductCode = x.ProductCode,
                 ProductName = x.ProductName,
-                SalePrice = x.SalePrice
+                SalePrice = x.SalePrice,
+                CategoryUid = x.CategoryUid,
+                ImagePath = x.ImagePath
             })
             .ToListAsync(ct);
 
+        var categories = await _db.ProductCategories.AsNoTracking()
+            .Where(x => x.IsActive)
+            .OrderBy(x => x.CategoryName)
+            .Select(x => new PosCategoryItemViewModel
+            {
+                Uid = x.Uid,
+                CategoryName = x.CategoryName
+            })
+            .ToListAsync(ct);
+
+        var categoryNames = categories.ToDictionary(x => x.Uid, x => x.CategoryName);
+        foreach (var product in products)
+        {
+            if (product.CategoryUid is int categoryUid
+                && categoryNames.TryGetValue(categoryUid, out var categoryName))
+            {
+                product.CategoryName = categoryName;
+            }
+        }
+
+        var layout = await _db.Configurations.AsNoTracking()
+            .Where(x => x.ConfigKey == SetupController.PosItemLayoutKey)
+            .Select(x => x.ConfigValue)
+            .FirstOrDefaultAsync(ct);
+
         return View("MonthlyEntry", new MonthlyEntryPageViewModel
         {
+            UseCardLayout = SetupController.IsCardLayout(layout),
             Customers = customers,
-            Products = products
+            Products = products,
+            Categories = categories
         });
     }
 
@@ -1156,7 +1353,7 @@ public class POSController : Controller
             from inv in _db.SalesInvoices.AsNoTracking()
             join d in _db.SalesInvoiceDetails.AsNoTracking() on inv.Uid equals d.SalesInvoiceUid
             where inv.CustomerUid == customerUid
-                  && inv.Remarks != null && inv.Remarks.StartsWith(MonthlyRemark)
+                  && inv.Remarks != null && (inv.Remarks.StartsWith(MonthlyRemark) || inv.Remarks == MonthlyRemarkLegacy)
                   && inv.InvoiceStatus != "Cancelled"
             orderby d.Uid descending
             select new
@@ -1214,9 +1411,9 @@ public class POSController : Controller
             return BadRequest(new MonthlyEntryApiResult { Success = false, Message = "Quantity must be at least 0.1." });
         }
 
-        if (request.UnitPrice < 0)
+        if (request.UnitPrice <= 0)
         {
-            return BadRequest(new MonthlyEntryApiResult { Success = false, Message = "Price cannot be negative." });
+            return BadRequest(new MonthlyEntryApiResult { Success = false, Message = "Unit price must be greater than zero." });
         }
 
         var customer = await _db.Customers.AsNoTracking()
@@ -1224,6 +1421,22 @@ public class POSController : Controller
         if (customer is null || IsWalkInCustomer(customer.CustomerCode, customer.CustomerName))
         {
             return BadRequest(new MonthlyEntryApiResult { Success = false, Message = "Monthly customer was not found." });
+        }
+
+        if (customer.CreditLimit > 0)
+        {
+            var outstanding = await _db.SalesInvoices.AsNoTracking()
+                .Where(x => x.CustomerUid == customer.Uid && x.InvoiceStatus != "Cancelled")
+                .SumAsync(x => (decimal?)x.BalanceAmount, ct) ?? 0m;
+            var proposed = Math.Round(request.UnitPrice * request.Quantity, 2);
+            if (outstanding + proposed > customer.CreditLimit)
+            {
+                return BadRequest(new MonthlyEntryApiResult
+                {
+                    Success = false,
+                    Message = $"Credit limit exceeded. Limit {customer.CreditLimit:N2}, outstanding {outstanding:N2}."
+                });
+            }
         }
 
         var product = await _db.Products.AsNoTracking()
@@ -1266,7 +1479,7 @@ public class POSController : Controller
             invoice = await _db.SalesInvoices.FirstOrDefaultAsync(x =>
                 x.Uid == detail.SalesInvoiceUid
                 && x.CustomerUid == request.CustomerUid
-                && x.Remarks != null && x.Remarks.StartsWith(MonthlyRemark)
+                && x.Remarks != null && (x.Remarks.StartsWith(MonthlyRemark) || x.Remarks == MonthlyRemarkLegacy)
                 && x.InvoiceStatus != "Cancelled", ct);
             if (invoice is null)
             {
@@ -1348,7 +1561,7 @@ public class POSController : Controller
         {
             invoice = await _db.SalesInvoices.FirstOrDefaultAsync(x =>
                 x.CustomerUid == customer.Uid
-                && x.Remarks != null && x.Remarks.StartsWith(MonthlyRemark)
+                && x.Remarks != null && (x.Remarks.StartsWith(MonthlyRemark) || x.Remarks == MonthlyRemarkLegacy)
                 && x.InvoiceStatus != "Cancelled", ct);
 
             if (invoice is null)
@@ -1465,7 +1678,7 @@ public class POSController : Controller
 
         var invoice = await _db.SalesInvoices.FirstOrDefaultAsync(x =>
             x.Uid == detail.SalesInvoiceUid
-            && x.Remarks != null && x.Remarks.StartsWith(MonthlyRemark)
+            && x.Remarks != null && (x.Remarks.StartsWith(MonthlyRemark) || x.Remarks == MonthlyRemarkLegacy)
             && x.InvoiceStatus != "Cancelled", ct);
         if (invoice is null)
         {
@@ -1531,7 +1744,7 @@ public class POSController : Controller
 
         var draftInvoices = await _db.SalesInvoices
             .Where(x => x.CustomerUid == customerUid
-                        && x.Remarks != null && x.Remarks.StartsWith(MonthlyRemark)
+                        && x.Remarks != null && (x.Remarks.StartsWith(MonthlyRemark) || x.Remarks == MonthlyRemarkLegacy)
                         && x.InvoiceStatus != "Cancelled")
             .OrderBy(x => x.Uid)
             .ToListAsync(ct);
@@ -1576,8 +1789,8 @@ public class POSController : Controller
 
         await RecalculateMonthlyDraftTotalsAsync(primary, ct);
         primary.CustomerUid = customer.Uid;
-        primary.Remarks = $"Monthly POS â€” {customer.CustomerName}";
-        primary.PaymentStatus = "Unpaid";
+        primary.Remarks = $"{MonthlyFinalRemarkPrefix} — {customer.CustomerName}";
+        await SyncInvoicePaidFromCustomerPaymentsAsync(primary, ct);
         primary.InvoiceStatus = "Completed";
         primary.UpdatedDate = DateTime.Now;
         if (primary.ClientTransactionId is null)
@@ -1602,6 +1815,17 @@ public class POSController : Controller
             SalesInvoiceUid = primary.Uid,
             InvoiceNo = primary.InvoiceNo
         });
+    }
+
+    private static bool IsMonthlyDraftRemark(string? remarks)
+    {
+        if (string.IsNullOrWhiteSpace(remarks)) return false;
+        if (remarks.StartsWith(MonthlyFinalRemarkPrefix, StringComparison.Ordinal)) return false;
+        if (remarks.StartsWith(MonthlyRemarkLegacy + " —", StringComparison.Ordinal)
+            || remarks.StartsWith(MonthlyRemarkLegacy + " -", StringComparison.Ordinal))
+            return false;
+        return remarks.StartsWith(MonthlyRemark, StringComparison.Ordinal)
+               || remarks.Equals(MonthlyRemarkLegacy, StringComparison.Ordinal);
     }
 
     private async Task RecalculateMonthlyDraftTotalsAsync(SalesInvoice invoice, CancellationToken ct)
@@ -1639,10 +1863,8 @@ public class POSController : Controller
             .SumAsync(x => (decimal?)x.AppliedToInvoiceAmount, ct) ?? 0m;
 
         // Prefer ledger total; never drop below what payments already recorded.
+        // Do not clamp PaidAmount down here ? NetAmount may still receive delivery charges after this call.
         invoice.PaidAmount = Math.Max(invoice.PaidAmount, paidFromPayments);
-        if (invoice.NetAmount > 0 && invoice.PaidAmount > invoice.NetAmount)
-            invoice.PaidAmount = invoice.NetAmount;
-
         invoice.BalanceAmount = Math.Max(0, invoice.NetAmount - invoice.PaidAmount);
         invoice.PaymentStatus = invoice.PaidAmount <= 0
             ? "Unpaid"
@@ -1650,7 +1872,7 @@ public class POSController : Controller
     }
 
     /// <summary>
-    /// Sets SalesInvoice.OtherCharges from CustomerMonthlySupply.DeliveryCharges (null → 0)
+    /// Sets SalesInvoice.OtherCharges from CustomerMonthlySupply.DeliveryCharges (null ? 0)
     /// once per detail line (each supply-day product line).
     /// </summary>
     private async Task ApplyMonthlySupplyDeliveryChargesAsync(SalesInvoice invoice, int customerUid, CancellationToken ct)
@@ -1753,6 +1975,15 @@ public class POSController : Controller
                     Message = "Quantity must be greater than zero."
                 });
             }
+
+            if (item.UnitPrice <= 0)
+            {
+                return BadRequest(new PosCheckoutResultViewModel
+                {
+                    Success = false,
+                    Message = "Unit price must be greater than zero."
+                });
+            }
         }
 
         var paymentMethodUid = await _db.PaymentMethods.AsNoTracking()
@@ -1801,7 +2032,36 @@ public class POSController : Controller
         }
 
         var subTotal = request.Items.Sum(x => Math.Round(x.UnitPrice * x.Quantity, 2));
+        var discountAmount = Math.Round(Math.Max(0, request.DiscountAmount), 2);
+        if (discountAmount > subTotal)
+        {
+            return BadRequest(new PosCheckoutResultViewModel
+            {
+                Success = false,
+                Message = "Discount cannot be greater than the total amount."
+            });
+        }
+
+        var netAmount = Math.Round(subTotal - discountAmount, 2);
         var isCash = mode == "Cash";
+
+        decimal? customerGivenAmount = null;
+        decimal? changeGivenAmount = null;
+        if (isCash && request.CustomerGivenAmount is decimal givenRaw)
+        {
+            var given = Math.Round(Math.Max(0, givenRaw), 2);
+            if (given < netAmount)
+            {
+                return BadRequest(new PosCheckoutResultViewModel
+                {
+                    Success = false,
+                    Message = "Customer given amount must be at least the net amount."
+                });
+            }
+
+            customerGivenAmount = given;
+            changeGivenAmount = Math.Round(given - netAmount, 2);
+        }
 
         int? customerUid = null;
         if (isCash)
@@ -1815,7 +2075,10 @@ public class POSController : Controller
                     Message = "Walk-in Customer was not found. Please create an active customer named Walk-in Customer."
                 });
             }
+
         }
+
+        await EnsureCustomerGivenColumnsAsync(ct);
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
@@ -1838,75 +2101,97 @@ public class POSController : Controller
             PaymentMethodUid = paymentMethodUid,
             Terminal = string.IsNullOrWhiteSpace(sessionTerminal) ? null : sessionTerminal.Trim(),
             SubTotal = subTotal,
-            DiscountAmount = 0,
+            DiscountAmount = discountAmount,
             TaxAmount = 0,
             OtherCharges = 0,
-            NetAmount = subTotal,
-            PaidAmount = isCash ? subTotal : 0,
-            BalanceAmount = isCash ? 0 : subTotal,
+            NetAmount = netAmount,
+            PaidAmount = isCash ? netAmount : 0,
+            CustomerGivenAmount = customerGivenAmount,
+            ChangeGivenAmount = changeGivenAmount,
+            BalanceAmount = isCash ? 0 : netAmount,
             PaymentStatus = isCash ? "Paid" : "Unpaid",
             InvoiceStatus = "Completed",
-            Remarks = $"{mode} POS sale",
+            Remarks = BuildPosSaleRemarks(mode, discountAmount, customerGivenAmount, changeGivenAmount),
             CreatedDate = DateTime.Now
         };
 
-        _db.SalesInvoices.Add(invoice);
-        await _db.SaveChangesAsync(ct);
-
-        var stockLines = new List<InventoryLineMovement>();
-        foreach (var item in request.Items)
-        {
-            var product = products[item.ProductUid];
-            var lineTotal = Math.Round(item.UnitPrice * item.Quantity, 2);
-            _db.SalesInvoiceDetails.Add(new SalesInvoiceDetail
-            {
-                SalesInvoiceUid = invoice.Uid,
-                ProductUid = product.Uid,
-                ProductCode = product.ProductCode,
-                ProductName = product.ProductName,
-                Quantity = item.Quantity,
-                UnitPrice = item.UnitPrice,
-                DiscountPercent = 0,
-                DiscountAmount = 0,
-                TaxPercent = product.TaxPercent,
-                TaxAmount = 0,
-                LineTotal = lineTotal,
-                CostPrice = product.PurchasePrice
-            });
-            stockLines.Add(new InventoryLineMovement
-            {
-                ProductUid = product.Uid,
-                ProductName = product.ProductName,
-                Quantity = item.Quantity,
-                UnitCost = item.UnitPrice
-            });
-        }
-
-        await _db.SaveChangesAsync(ct);
-
         try
         {
-            var stockResult = await _inventory.ApplySaleAsync(
-                invoice.Uid, invoice.InvoiceNo, stockLines, warehouseUid: null, branchUid, userUid, terminalUid: null, ct);
-            if (stockResult.HasShortages)
+            _db.SalesInvoices.Add(invoice);
+            await _db.SaveChangesAsync(ct);
+
+            var stockLines = new List<InventoryLineMovement>();
+            foreach (var item in request.Items)
             {
-                invoice.Remarks = _inventory.MergeShortageRemarks(invoice.Remarks, stockResult);
-                await _db.SaveChangesAsync(ct);
+                var product = products[item.ProductUid];
+                var lineTotal = Math.Round(item.UnitPrice * item.Quantity, 2);
+                _db.SalesInvoiceDetails.Add(new SalesInvoiceDetail
+                {
+                    SalesInvoiceUid = invoice.Uid,
+                    ProductUid = product.Uid,
+                    ProductCode = product.ProductCode,
+                    ProductName = product.ProductName,
+                    Quantity = item.Quantity,
+                    UnitPrice = item.UnitPrice,
+                    DiscountPercent = 0,
+                    DiscountAmount = 0,
+                    TaxPercent = product.TaxPercent,
+                    TaxAmount = 0,
+                    LineTotal = lineTotal,
+                    CostPrice = product.PurchasePrice
+                });
+                stockLines.Add(new InventoryLineMovement
+                {
+                    ProductUid = product.Uid,
+                    ProductName = product.ProductName,
+                    Quantity = item.Quantity,
+                    UnitCost = item.UnitPrice
+                });
             }
+
+            await _db.SaveChangesAsync(ct);
+
+            try
+            {
+                var stockResult = await _inventory.ApplySaleAsync(
+                    invoice.Uid, invoice.InvoiceNo, stockLines, warehouseUid: null, branchUid, userUid, terminalUid: null, ct);
+                if (stockResult.HasShortages)
+                {
+                    invoice.Remarks = _inventory.MergeShortageRemarks(invoice.Remarks, stockResult);
+                    await _db.SaveChangesAsync(ct);
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                await tx.RollbackAsync(ct);
+                return BadRequest(new PosCheckoutResultViewModel
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+
+            await _audit.WriteAsync("Create", "SalesInvoices", invoice.Uid.ToString(),
+                $"POS {mode} sale {invoice.InvoiceNo} amount {invoice.NetAmount:N2}", ct);
+            await tx.CommitAsync(ct);
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
-            await tx.RollbackAsync(ct);
+            try { await tx.RollbackAsync(ct); } catch { /* ignore */ }
+            var message = ex.InnerException?.Message ?? ex.Message;
+            if (message.Contains("CustomerGivenAmount", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("ChangeGivenAmount", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("Invalid column", StringComparison.OrdinalIgnoreCase))
+            {
+                message = "Database is missing Customer Given / Change columns. Refresh and try Pay again (columns are added automatically).";
+            }
+
             return BadRequest(new PosCheckoutResultViewModel
             {
                 Success = false,
-                Message = ex.Message
+                Message = message
             });
         }
-
-        await _audit.WriteAsync("Create", "SalesInvoices", invoice.Uid.ToString(),
-            $"POS {mode} sale {invoice.InvoiceNo} amount {invoice.NetAmount:N2}", ct);
-        await tx.CommitAsync(ct);
 
         await _syncOutbox.EnqueueSalesInvoiceAsync(invoice.Uid, clientTxId, ct);
 
@@ -1940,6 +2225,17 @@ public class POSController : Controller
                 ImagePath = x.ImagePath
             })
             .ToListAsync(ct);
+
+        var stockByProduct = await _db.Inventories.AsNoTracking()
+            .GroupBy(x => x.ProductUid)
+            .Select(g => new { ProductUid = g.Key, Qty = g.Sum(x => x.CurrentQuantity) })
+            .ToDictionaryAsync(x => x.ProductUid, x => x.Qty, ct);
+
+        foreach (var product in products)
+        {
+            if (stockByProduct.TryGetValue(product.Uid, out var qty))
+                product.StockQuantity = qty;
+        }
 
         var categories = await _db.ProductCategories.AsNoTracking()
             .Where(x => x.IsActive)
@@ -1990,4 +2286,62 @@ public class POSController : Controller
 
     private static bool IsWalkInCustomer(string? customerCode, string? customerName)
         => Services.CustomerClassification.IsWalkIn(customerCode, customerName);
+
+    private static string BuildPosSaleRemarks(
+        string mode,
+        decimal discountAmount,
+        decimal? customerGivenAmount,
+        decimal? changeGivenAmount)
+    {
+        var parts = new List<string> { $"{mode} POS sale" };
+        if (discountAmount > 0)
+            parts.Add($"discount {discountAmount:N2}");
+        if (customerGivenAmount is decimal given)
+            parts.Add($"given {given:N2}");
+        if (changeGivenAmount is decimal change && change > 0)
+            parts.Add($"change {change:N2}");
+        return string.Join(" | ", parts);
+    }
+
+    private async Task EnsureCustomerGivenColumnsAsync(CancellationToken ct)
+    {
+        if (_db.Database.IsSqlite())
+        {
+            await EnsureSqliteColumnAsync("SalesInvoices", "CustomerGivenAmount",
+                "ALTER TABLE SalesInvoices ADD COLUMN CustomerGivenAmount REAL NULL", ct);
+            await EnsureSqliteColumnAsync("SalesInvoices", "ChangeGivenAmount",
+                "ALTER TABLE SalesInvoices ADD COLUMN ChangeGivenAmount REAL NULL", ct);
+            return;
+        }
+
+        await _db.Database.ExecuteSqlRawAsync("""
+            IF COL_LENGTH(N'dbo.SalesInvoices', N'CustomerGivenAmount') IS NULL
+                ALTER TABLE dbo.SalesInvoices ADD [CustomerGivenAmount] DECIMAL(18, 2) NULL;
+            IF COL_LENGTH(N'dbo.SalesInvoices', N'ChangeGivenAmount') IS NULL
+                ALTER TABLE dbo.SalesInvoices ADD [ChangeGivenAmount] DECIMAL(18, 2) NULL;
+            """, ct);
+    }
+
+    private async Task EnsureSqliteColumnAsync(string table, string column, string alterSql, CancellationToken ct)
+    {
+        var conn = _db.Database.GetDbConnection();
+        await _db.Database.OpenConnectionAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"PRAGMA table_info({table})";
+        var found = false;
+        await using (var reader = await cmd.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                if (string.Equals(reader["name"]?.ToString(), column, StringComparison.OrdinalIgnoreCase))
+                {
+                    found = true;
+                    break;
+                }
+            }
+        }
+
+        if (!found)
+            await _db.Database.ExecuteSqlRawAsync(alterSql, ct);
+    }
 }

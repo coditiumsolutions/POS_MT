@@ -1,0 +1,209 @@
+@model EmployeeDetailsViewModel
+@{
+    ViewData["Title"] = Model.Employee.EmployeeName;
+    var e = Model.Employee;
+    var monthName = System.Globalization.CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(Model.PeriodMonth);
+}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+    <div>
+        <h1 class="page-heading mb-1">@e.EmployeeName</h1>
+        <p class="text-muted mb-0">@e.EmployeeCode · @(e.Cnic ?? "No CNIC") · @(e.IsActive ? "Active" : "Inactive")</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-primary" asp-action="Edit" asp-route-id="@e.Uid">Edit</a>
+        <a class="btn btn-outline-secondary" asp-action="Index">All Employees</a>
+    </div>
+</div>
+@if (TempData["Success"] != null) { <div class="alert alert-success">@TempData["Success"]</div> }
+@if (TempData["Error"] != null) { <div class="alert alert-danger">@TempData["Error"]</div> }
+
+<div class="bg-white border rounded p-3 mb-3">
+    <div class="row g-3">
+        <div class="col-md-3"><div class="text-muted small">Mobile 1</div><div>@(e.MobileNo1 ?? "—")</div></div>
+        <div class="col-md-3"><div class="text-muted small">Mobile 2</div><div>@(e.MobileNo2 ?? "—")</div></div>
+        <div class="col-md-3"><div class="text-muted small">Present Address</div><div>@(e.PresentAddress ?? "—")</div></div>
+        <div class="col-md-3"><div class="text-muted small">Permanent Address</div><div>@(e.PermanentAddress ?? "—")</div></div>
+    </div>
+</div>
+
+<form method="get" class="bg-white border rounded p-2 mb-3">
+    <input type="hidden" name="id" value="@e.Uid" />
+    <div class="row g-2 align-items-end">
+        <div class="col-auto">
+            <label class="form-label mb-1" for="month">Salary period</label>
+            <select class="form-select form-select-sm" id="month" name="month">
+                @for (var m = 1; m <= 12; m++)
+                {
+                    var name = System.Globalization.CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(m);
+                    if (m == Model.PeriodMonth) { <option value="@m" selected>@name</option> }
+                    else { <option value="@m">@name</option> }
+                }
+            </select>
+        </div>
+        <div class="col-auto">
+            <label class="form-label mb-1" for="year">Year</label>
+            <select class="form-select form-select-sm" id="year" name="year">
+                @for (var y = DateTime.Now.Year - 1; y <= DateTime.Now.Year + 1; y++)
+                {
+                    if (y == Model.PeriodYear) { <option value="@y" selected>@y</option> }
+                    else { <option value="@y">@y</option> }
+                }
+            </select>
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-primary btn-sm">Show</button>
+        </div>
+    </div>
+</form>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-2 col-6"><div class="bg-white border rounded p-3 h-100"><div class="text-muted small">Total Salary</div><div class="fs-5 fw-semibold">@Model.TotalSalary.ToString("N2")</div></div></div>
+    <div class="col-md-2 col-6"><div class="bg-white border rounded p-3 h-100"><div class="text-muted small">Allowances</div><div class="fs-5 fw-semibold text-success">+@Model.TotalAllowances.ToString("N2")</div></div></div>
+    <div class="col-md-2 col-6"><div class="bg-white border rounded p-3 h-100"><div class="text-muted small">Deductions</div><div class="fs-5 fw-semibold text-danger">-@Model.TotalDeductions.ToString("N2")</div></div></div>
+    <div class="col-md-2 col-6"><div class="bg-white border rounded p-3 h-100"><div class="text-muted small">Net Payable</div><div class="fs-5 fw-semibold">@Model.NetPayable.ToString("N2")</div></div></div>
+    <div class="col-md-2 col-6"><div class="bg-white border rounded p-3 h-100"><div class="text-muted small">Paid (@monthName)</div><div class="fs-5 fw-semibold">@Model.PaidAmount.ToString("N2")</div></div></div>
+    <div class="col-md-2 col-6"><div class="bg-white border rounded p-3 h-100"><div class="text-muted small">Remaining / Balance</div><div class="fs-5 fw-semibold text-primary">@Model.RemainingAmount.ToString("N2")</div></div></div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-lg-6">
+        <div class="bg-white border rounded p-3 h-100">
+            <h2 class="h5 mb-3">Allowances</h2>
+            <table class="table table-sm align-middle mb-3">
+                <thead><tr><th>Title</th><th class="text-end">Amount</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var a in Model.Allowances.Where(x => x.IsActive))
+                {
+                    <tr>
+                        <td>@a.Title</td>
+                        <td class="text-end">@a.Amount.ToString("N2")</td>
+                        <td class="text-end">
+                            <form asp-action="RemoveAllowance" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@a.Uid" />
+                                <input type="hidden" name="employeeUid" value="@e.Uid" />
+                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove this allowance?');">Remove</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (!Model.Allowances.Any(x => x.IsActive))
+                {
+                    <tr><td colspan="3" class="text-muted text-center">No allowances.</td></tr>
+                }
+                </tbody>
+            </table>
+            <form asp-action="AddAllowance" method="post" class="row g-2 align-items-end">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="employeeUid" value="@e.Uid" />
+                <div class="col-md-6">
+                    <label class="form-label mb-1">Title</label>
+                    <input name="title" class="form-control form-control-sm" required maxlength="150" placeholder="e.g. Transport" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label mb-1">Amount</label>
+                    <input name="amount" type="number" step="0.01" min="0.01" class="form-control form-control-sm" required />
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-sm btn-primary w-100">Add</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="bg-white border rounded p-3 h-100">
+            <h2 class="h5 mb-3">Deductions</h2>
+            <table class="table table-sm align-middle mb-3">
+                <thead><tr><th>Title</th><th class="text-end">Amount</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var d in Model.Deductions.Where(x => x.IsActive))
+                {
+                    <tr>
+                        <td>@d.Title</td>
+                        <td class="text-end">@d.Amount.ToString("N2")</td>
+                        <td class="text-end">
+                            <form asp-action="RemoveDeduction" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@d.Uid" />
+                                <input type="hidden" name="employeeUid" value="@e.Uid" />
+                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove this deduction?');">Remove</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (!Model.Deductions.Any(x => x.IsActive))
+                {
+                    <tr><td colspan="3" class="text-muted text-center">No deductions.</td></tr>
+                }
+                </tbody>
+            </table>
+            <form asp-action="AddDeduction" method="post" class="row g-2 align-items-end">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="employeeUid" value="@e.Uid" />
+                <div class="col-md-6">
+                    <label class="form-label mb-1">Title</label>
+                    <input name="title" class="form-control form-control-sm" required maxlength="150" placeholder="e.g. Loan" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label mb-1">Amount</label>
+                    <input name="amount" type="number" step="0.01" min="0.01" class="form-control form-control-sm" required />
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-sm btn-primary w-100">Add</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="bg-white border rounded p-3 mb-3">
+    <h2 class="h5 mb-3">Payments — @monthName @Model.PeriodYear</h2>
+    <form asp-action="AddPayment" method="post" class="row g-2 align-items-end mb-3">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="employeeUid" value="@e.Uid" />
+        <input type="hidden" name="periodMonth" value="@Model.PeriodMonth" />
+        <input type="hidden" name="periodYear" value="@Model.PeriodYear" />
+        <div class="col-md-3">
+            <label class="form-label mb-1">Payment date</label>
+            <input name="paymentDate" type="date" class="form-control form-control-sm" value="@Model.NewPaymentDate.ToString("yyyy-MM-dd")" required />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label mb-1">Amount</label>
+            <input name="amount" type="number" step="0.01" min="0.01" class="form-control form-control-sm" required placeholder="@Model.RemainingAmount.ToString("0.00")" />
+        </div>
+        <div class="col-md-4">
+            <label class="form-label mb-1">Remarks</label>
+            <input name="remarks" class="form-control form-control-sm" maxlength="500" />
+        </div>
+        <div class="col-md-3">
+            <button type="submit" class="btn btn-success btn-sm">Record Payment</button>
+        </div>
+    </form>
+    <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Payment No</th>
+                    <th>Date</th>
+                    <th class="text-end">Amount</th>
+                    <th>Remarks</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var p in Model.Payments)
+            {
+                <tr>
+                    <td>@p.PaymentNo</td>
+                    <td>@p.PaymentDate.ToString("yyyy-MM-dd")</td>
+                    <td class="text-end">@p.Amount.ToString("N2")</td>
+                    <td>@(p.Remarks ?? "—")</td>
+                </tr>
+            }
+            @if (Model.Payments.Count == 0)
+            {
+                <tr><td colspan="4" class="text-muted text-center py-3">No payments for this period.</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>

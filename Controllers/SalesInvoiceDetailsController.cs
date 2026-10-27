@@ -8,7 +8,7 @@ using POS_MT.ViewModels;
 
 namespace POS_MT.Controllers;
 
-[Authorize]
+[Authorize(Policy = "CanViewSales")]
 public class SalesInvoiceDetailsController : Controller
 {
     private readonly POSDbContext _db;
@@ -25,10 +25,13 @@ public class SalesInvoiceDetailsController : Controller
     private void EnsureSalesInvoiceNav() => _navContext.SetArea("SalesInvoice");
 
     [HttpGet]
-    public async Task<IActionResult> Index(string? customerType, int? month, DateTime? date, CancellationToken ct)
+    public async Task<IActionResult> Index(string? customerType, int? month, DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
     {
         EnsureSalesInvoiceNav();
         ViewData["Title"] = "Invoice Details";
+        var fromDay = dateFrom?.Date;
+        var toExclusive = dateTo?.Date.AddDays(1);
+
         var query =
             from d in _db.SalesInvoiceDetails.AsNoTracking()
             join inv in _db.SalesInvoices.AsNoTracking() on d.SalesInvoiceUid equals inv.Uid
@@ -64,17 +67,14 @@ public class SalesInvoiceDetailsController : Controller
                 x.inv.Remarks.StartsWith("Monthly Supply"));
         }
 
-        if (month is >= 1 and <= 12)
-        {
-            query = query.Where(x => x.inv.InvoiceDate.Month == month.Value);
-        }
+        if (fromDay.HasValue)
+            query = query.Where(x => x.inv.InvoiceDate >= fromDay.Value);
 
-        if (date.HasValue)
-        {
-            var dayStart = date.Value.Date;
-            var dayEnd = dayStart.AddDays(1);
-            query = query.Where(x => x.inv.InvoiceDate >= dayStart && x.inv.InvoiceDate < dayEnd);
-        }
+        if (toExclusive.HasValue)
+            query = query.Where(x => x.inv.InvoiceDate < toExclusive.Value);
+
+        if (month is >= 1 and <= 12 && !fromDay.HasValue && !dateTo.HasValue)
+            query = query.Where(x => x.inv.InvoiceDate.Month == month.Value);
 
         var rows = await query
             .OrderByDescending(x => x.inv.InvoiceDate)
@@ -110,7 +110,8 @@ public class SalesInvoiceDetailsController : Controller
         {
             CustomerType = customerType,
             Month = month is >= 1 and <= 12 ? month : null,
-            Date = date?.Date,
+            DateFrom = fromDay,
+            DateTo = dateTo?.Date,
             Rows = rows
         });
     }
@@ -170,14 +171,20 @@ public class SalesInvoiceDetailsController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Delete(int id, string? customerType, int? month, DateTime? date, CancellationToken ct)
+    public async Task<IActionResult> Delete(int id, string? customerType, int? month, DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
     {
         EnsureSalesInvoiceNav();
         var detail = await _db.SalesInvoiceDetails.FirstOrDefaultAsync(x => x.Uid == id, ct);
         if (detail is null)
         {
             TempData["Error"] = "Invoice detail was not found.";
-            return RedirectToAction(nameof(Index), new { customerType, month, date = date?.ToString("yyyy-MM-dd") });
+            return RedirectToAction(nameof(Index), new
+            {
+                customerType,
+                month,
+                dateFrom = dateFrom?.ToString("yyyy-MM-dd"),
+                dateTo = dateTo?.ToString("yyyy-MM-dd")
+            });
         }
 
         var invoiceUid = detail.SalesInvoiceUid;
@@ -224,6 +231,12 @@ public class SalesInvoiceDetailsController : Controller
             $"Deleted invoice detail '{productLabel}' from invoice UID {invoiceUid}.", ct);
 
         TempData["Success"] = "Invoice detail deleted.";
-        return RedirectToAction(nameof(Index), new { customerType, month, date = date?.ToString("yyyy-MM-dd") });
+        return RedirectToAction(nameof(Index), new
+        {
+            customerType,
+            month,
+            dateFrom = dateFrom?.ToString("yyyy-MM-dd"),
+            dateTo = dateTo?.ToString("yyyy-MM-dd")
+        });
     }
 }

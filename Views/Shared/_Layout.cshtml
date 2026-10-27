@@ -27,7 +27,7 @@
     <meta name="theme-color" content="#0f766e" />
     <meta name="request-verification-token" content="@afTokens.RequestToken" />
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="~/lib/bootstrap-icons/font/bootstrap-icons.min.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/lib/datatables/dataTables.bootstrap5.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
@@ -158,12 +158,16 @@
                                     !string.IsNullOrWhiteSpace(child.Controller)
                                     && IsController(child.Controller)
                                     && string.Equals(ViewContext.RouteData.Values["action"]?.ToString(), child.Action, StringComparison.OrdinalIgnoreCase));
+                                var groupGold = string.Equals(link.Title, "Categories", StringComparison.OrdinalIgnoreCase);
                                 <div class="pos-nav-group @(groupActive ? "open active" : "open")" data-side-nav-group>
                                     <button type="button"
-                                            class="pos-nav-link pos-nav-group-toggle"
+                                            class="pos-nav-link pos-nav-group-toggle @(groupGold ? "pos-nav-gold" : "")"
                                             aria-expanded="true"
                                             data-side-nav-twistee>
-                                        <i class="bi @link.IconClass" aria-hidden="true"></i>
+                                        @if (!string.IsNullOrWhiteSpace(link.IconClass))
+                                        {
+                                            <i class="bi @link.IconClass" aria-hidden="true"></i>
+                                        }
                                         <span>@link.Title</span>
                                         <i class="bi bi-caret-right-fill pos-nav-group-caret" aria-hidden="true"></i>
                                     </button>
@@ -182,7 +186,10 @@
                                                asp-route-filter="@child.Filter"
                                                asp-route-itemMonth="@child.ItemMonth"
                                                asp-route-navArea="@child.NavArea">
-                                                <i class="bi @child.IconClass" aria-hidden="true"></i>
+                                                @if (!string.IsNullOrWhiteSpace(child.IconClass))
+                                                {
+                                                    <i class="bi @child.IconClass" aria-hidden="true"></i>
+                                                }
                                                 <span>@child.Title</span>
                                             </a>
                                         }

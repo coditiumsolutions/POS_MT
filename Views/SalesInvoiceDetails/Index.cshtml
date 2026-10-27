@@ -3,7 +3,6 @@
     ViewData["Title"] = "Invoice Details";
     var type = Model.CustomerType ?? string.Empty;
     var selectedMonth = Model.Month;
-    var selectedDate = Model.Date?.ToString("yyyy-MM-dd") ?? string.Empty;
 }
 
 <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
@@ -77,12 +76,20 @@
             </select>
         </div>
         <div class="col-6 col-md-2">
-            <label class="form-label mb-1" for="date">Date</label>
+            <label class="form-label mb-1" for="dateFrom">Date From</label>
             <input type="date"
                    class="form-control form-control-sm"
-                   id="date"
-                   name="date"
-                   value="@selectedDate" />
+                   id="dateFrom"
+                   name="dateFrom"
+                   value="@(Model.DateFrom?.ToString("yyyy-MM-dd") ?? string.Empty)" />
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label mb-1" for="dateTo">Date To</label>
+            <input type="date"
+                   class="form-control form-control-sm"
+                   id="dateTo"
+                   name="dateTo"
+                   value="@(Model.DateTo?.ToString("yyyy-MM-dd") ?? string.Empty)" />
         </div>
         <div class="col-12 col-md-auto flex-grow-1">
             <label class="form-label mb-1" for="invoiceDetailsSearch">Search</label>
@@ -138,7 +145,8 @@
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="customerType" value="@Model.CustomerType" />
                         <input type="hidden" name="month" value="@Model.Month" />
-                        <input type="hidden" name="date" value="@selectedDate" />
+                        <input type="hidden" name="dateFrom" value="@(Model.DateFrom?.ToString("yyyy-MM-dd") ?? string.Empty)" />
+                        <input type="hidden" name="dateTo" value="@(Model.DateTo?.ToString("yyyy-MM-dd") ?? string.Empty)" />
                         <button type="submit" class="btn btn-sm btn-outline-danger"
                                 onclick="return confirm('Delete this invoice detail line?');">Delete</button>
                     </form>

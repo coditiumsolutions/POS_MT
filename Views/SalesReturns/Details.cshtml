@@ -1,0 +1,73 @@
+@model POS_MT.Models.SalesInvoice
+@{
+    ViewData["Title"] = $"Return {Model.InvoiceNo}";
+    var lines = ViewBag.Lines as IList<POS_MT.Models.SalesInvoiceDetail> ?? [];
+}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h1 class="page-heading mb-1">Sales Return</h1>
+        <p class="text-muted mb-0">Return <strong>@Model.InvoiceNo</strong></p>
+    </div>
+    <a class="btn btn-outline-secondary" asp-action="Index">Back</a>
+</div>
+
+<div class="bg-white border rounded p-3 mb-3">
+    <div class="row g-3">
+        <div class="col-md-3">
+            <div class="text-muted small">Return No</div>
+            <div class="fw-semibold">@Model.InvoiceNo</div>
+        </div>
+        <div class="col-md-3">
+            <div class="text-muted small">Date</div>
+            <div class="fw-semibold">@Model.InvoiceDate.ToString("yyyy-MM-dd HH:mm")</div>
+        </div>
+        <div class="col-md-3">
+            <div class="text-muted small">Net Amount</div>
+            <div class="fw-semibold text-danger">@Model.NetAmount.ToString("N2")</div>
+        </div>
+        <div class="col-md-3">
+            <div class="text-muted small">Status</div>
+            <div class="fw-semibold">@Model.InvoiceStatus · @Model.PaymentStatus</div>
+        </div>
+        <div class="col-12">
+            <div class="text-muted small">Remarks</div>
+            <div>@(string.IsNullOrWhiteSpace(Model.Remarks) ? "—" : Model.Remarks)</div>
+        </div>
+    </div>
+</div>
+
+<div class="table-responsive bg-white border rounded p-2">
+    <table class="table table-hover w-100 mb-0">
+        <thead>
+            <tr>
+                <th>Product</th>
+                <th class="text-end">Qty</th>
+                <th class="text-end">Price</th>
+                <th class="text-end">Line Total</th>
+            </tr>
+        </thead>
+        <tbody>
+        @if (lines.Count == 0)
+        {
+            <tr>
+                <td colspan="4" class="text-muted text-center py-4">No line items.</td>
+            </tr>
+        }
+        else
+        {
+            foreach (var line in lines)
+            {
+                <tr>
+                    <td>
+                        <div class="fw-semibold">@line.ProductName</div>
+                        <div class="small text-muted">@line.ProductCode</div>
+                    </td>
+                    <td class="text-end">@line.Quantity.ToString("N3")</td>
+                    <td class="text-end">@line.UnitPrice.ToString("N2")</td>
+                    <td class="text-end text-danger">@line.LineTotal.ToString("N2")</td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+</div>

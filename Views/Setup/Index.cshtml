@@ -26,6 +26,17 @@
             </label>
             <button type="submit" class="btn btn-primary btn-sm">Save</button>
         </form>
+
+        <div class="mt-4 pt-3 border-top">
+            <h2 class="setup-pos-title">Offline sync</h2>
+            <p class="setup-pos-note">Choose which tables offline pull copies from online SQL.</p>
+            <a class="btn btn-outline-primary btn-sm w-100"
+               asp-controller="OfflineSyncTables"
+               asp-action="Index">
+                <i class="bi bi-arrow-left-right me-1" aria-hidden="true"></i>
+                Sync Tables
+            </a>
+        </div>
     </aside>
 
     <div class="setup-page-main">

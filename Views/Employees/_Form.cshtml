@@ -1,0 +1,49 @@
+@model EmployeeFormViewModel
+<div class="row g-3">
+    <div class="col-md-4">
+        <label asp-for="EmployeeCode" class="form-label"></label>
+        <input asp-for="EmployeeCode" class="form-control" />
+        <span asp-validation-for="EmployeeCode" class="text-danger"></span>
+    </div>
+    <div class="col-md-8">
+        <label asp-for="EmployeeName" class="form-label"></label>
+        <input asp-for="EmployeeName" class="form-control" />
+        <span asp-validation-for="EmployeeName" class="text-danger"></span>
+    </div>
+    <div class="col-md-4">
+        <label asp-for="Cnic" class="form-label"></label>
+        <input asp-for="Cnic" class="form-control" placeholder="xxxxx-xxxxxxx-x" />
+        <span asp-validation-for="Cnic" class="text-danger"></span>
+    </div>
+    <div class="col-md-4">
+        <label asp-for="MobileNo1" class="form-label"></label>
+        <input asp-for="MobileNo1" class="form-control" />
+        <span asp-validation-for="MobileNo1" class="text-danger"></span>
+    </div>
+    <div class="col-md-4">
+        <label asp-for="MobileNo2" class="form-label"></label>
+        <input asp-for="MobileNo2" class="form-control" />
+        <span asp-validation-for="MobileNo2" class="text-danger"></span>
+    </div>
+    <div class="col-md-6">
+        <label asp-for="PresentAddress" class="form-label"></label>
+        <textarea asp-for="PresentAddress" class="form-control" rows="2"></textarea>
+        <span asp-validation-for="PresentAddress" class="text-danger"></span>
+    </div>
+    <div class="col-md-6">
+        <label asp-for="PermanentAddress" class="form-label"></label>
+        <textarea asp-for="PermanentAddress" class="form-control" rows="2"></textarea>
+        <span asp-validation-for="PermanentAddress" class="text-danger"></span>
+    </div>
+    <div class="col-md-4">
+        <label asp-for="TotalSalary" class="form-label"></label>
+        <input asp-for="TotalSalary" class="form-control" type="number" step="0.01" min="0" />
+        <span asp-validation-for="TotalSalary" class="text-danger"></span>
+    </div>
+    <div class="col-md-4 d-flex align-items-end">
+        <div class="form-check mb-2">
+            <input asp-for="IsActive" class="form-check-input" />
+            <label asp-for="IsActive" class="form-check-label"></label>
+        </div>
+    </div>
+</div>

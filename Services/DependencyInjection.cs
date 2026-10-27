@@ -68,6 +68,8 @@ public static class DependencyInjection
         services.AddScoped<IStockMovementService, StockMovementService>();
         services.AddScoped<IInventoryLedgerService, InventoryLedgerService>();
         services.AddScoped<ICustomerAdvanceService, CustomerAdvanceService>();
+        services.AddScoped<IEmployeeSchemaService, EmployeeSchemaService>();
+        services.AddScoped<IOfflineSyncCatalogService, OfflineSyncCatalogService>();
         services.AddScoped<INavContextService, NavContextService>();
 
         return services;

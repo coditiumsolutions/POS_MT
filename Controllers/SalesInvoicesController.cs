@@ -1,7 +1,7 @@
-﻿using Microsoft.AspNetCore.Authorization; using Microsoft.AspNetCore.Mvc; using Microsoft.AspNetCore.Mvc.Rendering; using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization; using Microsoft.AspNetCore.Mvc; using Microsoft.AspNetCore.Mvc.Rendering; using Microsoft.EntityFrameworkCore;
 using POS_MT.Data; using POS_MT.Interfaces; using POS_MT.Models; using POS_MT.Services; using POS_MT.ViewModels;
 namespace POS_MT.Controllers;
-[Authorize]
+[Authorize(Policy = "CanViewSales")]
 public class SalesInvoicesController : Controller {
   private readonly POSDbContext _db; private readonly IAuditService _audit; private readonly INavContextService _navContext;
   private readonly IInventoryLedgerService _inventory;
@@ -21,15 +21,19 @@ public class SalesInvoicesController : Controller {
     ViewBag.Customers=new SelectList(await _db.Customers.AsNoTracking().Where(x=>x.IsActive).OrderBy(x=>x.CustomerName).ToListAsync(ct),"Uid","CustomerName", selectedCustomerUid);
     ViewBag.PaymentMethods=new SelectList(await _db.PaymentMethods.AsNoTracking().Where(x=>x.IsActive).OrderBy(x=>x.PaymentName).ToListAsync(ct),"Uid","PaymentName", selectedPaymentMethodUid);
   }
-  public async Task<IActionResult> Index(string? customerType, int? month, string? search, CancellationToken ct)
+  public async Task<IActionResult> Index(string? customerType, int? month, DateTime? dateFrom, DateTime? dateTo, string? search, CancellationToken ct)
   {
     EnsureSalesInvoiceNav();
     ViewData["Title"] = "Sales Invoices";
+
+    var fromDay = dateFrom?.Date;
+    var toExclusive = dateTo?.Date.AddDays(1);
 
     var query =
       from inv in _db.SalesInvoices.AsNoTracking()
       join c in _db.Customers.AsNoTracking() on inv.CustomerUid equals c.Uid into cj
       from c in cj.DefaultIfEmpty()
+      where inv.InvoiceStatus != SalesReturnsController.ReturnStatus
       select new { inv, c };
 
     if (string.Equals(customerType, "walkin", StringComparison.OrdinalIgnoreCase))
@@ -60,10 +64,14 @@ public class SalesInvoicesController : Controller {
         x.inv.Remarks.StartsWith("Monthly Supply"));
     }
 
-    if (month is >= 1 and <= 12)
-    {
+    if (fromDay.HasValue)
+      query = query.Where(x => x.inv.InvoiceDate >= fromDay.Value);
+
+    if (toExclusive.HasValue)
+      query = query.Where(x => x.inv.InvoiceDate < toExclusive.Value);
+
+    if (month is >= 1 and <= 12 && !fromDay.HasValue && !dateTo.HasValue)
       query = query.Where(x => x.inv.InvoiceDate.Month == month.Value);
-    }
 
     if (!string.IsNullOrWhiteSpace(search))
     {
@@ -106,6 +114,8 @@ public class SalesInvoicesController : Controller {
     {
       CustomerType = customerType,
       Month = month is >= 1 and <= 12 ? month : null,
+      DateFrom = fromDay,
+      DateTo = dateTo?.Date,
       Search = search,
       Rows = list
     });
@@ -138,6 +148,10 @@ public class SalesInvoicesController : Controller {
     if(model.PaidAmount < 0)
     {
       ModelState.AddModelError(nameof(model.PaidAmount), "Paid amount cannot be negative.");
+    }
+    if(model.PaidAmount > e.NetAmount)
+    {
+      ModelState.AddModelError(nameof(model.PaidAmount), "Paid amount cannot exceed net amount.");
     }
     if(!ModelState.IsValid){
       // Restore readonly display values from entity so the form stays consistent.
@@ -267,8 +281,8 @@ public class SalesInvoicesController : Controller {
       Uid = row.inv.Uid,
       InvoiceNo = row.inv.InvoiceNo,
       InvoiceDate = row.inv.InvoiceDate,
-      CustomerCode = customer?.CustomerCode ?? "—",
-      CustomerName = customer?.CustomerName ?? "—",
+      CustomerCode = customer?.CustomerCode ?? "�",
+      CustomerName = customer?.CustomerName ?? "�",
       CustomerType = customerTypeLabel,
       SubTotal = row.inv.SubTotal,
       DiscountAmount = row.inv.DiscountAmount,
@@ -339,9 +353,9 @@ public class SalesInvoicesController : Controller {
     e.Branch = NormalizeName(m.Branch);
     e.Terminal = NormalizeName(m.Terminal);
     e.PaymentMethodUid = m.PaymentMethodUid;
-    e.PaidAmount = m.PaidAmount;
+    e.PaidAmount = Math.Clamp(m.PaidAmount, 0, e.NetAmount);
     e.Remarks = string.IsNullOrWhiteSpace(m.Remarks) ? null : m.Remarks.Trim();
-    e.BalanceAmount = e.NetAmount - e.PaidAmount;
+    e.BalanceAmount = Math.Max(0, e.NetAmount - e.PaidAmount);
     e.PaymentStatus = e.PaidAmount <= 0
       ? "Unpaid"
       : e.PaidAmount >= e.NetAmount

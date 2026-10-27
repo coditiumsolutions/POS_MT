@@ -1,5 +1,8 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Mvc.Rendering;
+
 namespace POS_MT.ViewModels;
+
 public sealed class VendorFormViewModel
 {
     public int Uid { get; set; }
@@ -17,4 +20,6 @@ public sealed class VendorFormViewModel
     [Display(Name = "Credit Limit")] public decimal CreditLimit { get; set; }
     [StringLength(100), Display(Name = "Payment Terms")] public string? PaymentTerms { get; set; }
     [Display(Name = "Active")] public bool IsActive { get; set; } = true;
+
+    public IEnumerable<SelectListItem> CityOptions { get; set; } = [];
 }

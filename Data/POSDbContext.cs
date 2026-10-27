@@ -30,6 +30,14 @@ public partial class POSDbContext : DbContext
 
     public virtual DbSet<ExpenseCategory> ExpenseCategories { get; set; }
 
+    public virtual DbSet<Employee> Employees { get; set; }
+
+    public virtual DbSet<EmployeeAllowance> EmployeeAllowances { get; set; }
+
+    public virtual DbSet<EmployeeDeduction> EmployeeDeductions { get; set; }
+
+    public virtual DbSet<EmployeePayment> EmployeePayments { get; set; }
+
     public virtual DbSet<Inventory> Inventories { get; set; }
 
     public virtual DbSet<InventoryTransaction> InventoryTransactions { get; set; }
@@ -67,6 +75,8 @@ public partial class POSDbContext : DbContext
     public virtual DbSet<VendorPayment> VendorPayments { get; set; }
 
     public virtual DbSet<Warehouse> Warehouses { get; set; }
+
+    public virtual DbSet<OfflineSyncTable> OfflineSyncTables { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -124,6 +134,34 @@ public partial class POSDbContext : DbContext
         {
             entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.ExpenseDate).HasDefaultValueSql(nowSql);
+            entity.Property(e => e.Uid).ValueGeneratedOnAdd();
+        });
+
+        modelBuilder.Entity<Employee>(entity =>
+        {
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.Uid).ValueGeneratedOnAdd();
+        });
+
+        modelBuilder.Entity<EmployeeAllowance>(entity =>
+        {
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.Uid).ValueGeneratedOnAdd();
+        });
+
+        modelBuilder.Entity<EmployeeDeduction>(entity =>
+        {
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.Uid).ValueGeneratedOnAdd();
+        });
+
+        modelBuilder.Entity<EmployeePayment>(entity =>
+        {
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
+            entity.Property(e => e.PaymentDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 
@@ -294,6 +332,15 @@ public partial class POSDbContext : DbContext
                 }
             }
         }
+
+        modelBuilder.Entity<OfflineSyncTable>(entity =>
+        {
+            entity.Property(e => e.PullFromOnline).HasDefaultValue(false);
+            entity.Property(e => e.PushToOnline).HasDefaultValue(false);
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.SyncMode).HasDefaultValue("Lookup");
+            entity.Property(e => e.Uid).ValueGeneratedOnAdd();
+        });
 
         OnModelCreatingPartial(modelBuilder);
     }

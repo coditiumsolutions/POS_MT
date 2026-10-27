@@ -67,6 +67,14 @@ public partial class SalesInvoice
     [Column(TypeName = "decimal(18, 2)")]
     public decimal PaidAmount { get; set; }
 
+    /// <summary>Cash tendered by customer (note/bill amount). Null when not captured.</summary>
+    [Column(TypeName = "decimal(18, 2)")]
+    public decimal? CustomerGivenAmount { get; set; }
+
+    /// <summary>Change returned to customer (CustomerGivenAmount − NetAmount).</summary>
+    [Column(TypeName = "decimal(18, 2)")]
+    public decimal? ChangeGivenAmount { get; set; }
+
     [Column(TypeName = "decimal(18, 2)")]
     public decimal BalanceAmount { get; set; }
 

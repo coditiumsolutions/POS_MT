@@ -15,12 +15,17 @@ public sealed class MonthlyProductOptionViewModel
     public string ProductCode { get; set; } = string.Empty;
     public string ProductName { get; set; } = string.Empty;
     public decimal SalePrice { get; set; }
+    public int? CategoryUid { get; set; }
+    public string? CategoryName { get; set; }
+    public string? ImagePath { get; set; }
 }
 
 public sealed class MonthlyEntryPageViewModel
 {
+    public bool UseCardLayout { get; set; }
     public List<MonthlyCustomerListItemViewModel> Customers { get; set; } = [];
     public List<MonthlyProductOptionViewModel> Products { get; set; } = [];
+    public List<PosCategoryItemViewModel> Categories { get; set; } = [];
 }
 
 public sealed class MonthlyEntryRowViewModel

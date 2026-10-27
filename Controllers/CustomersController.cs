@@ -9,7 +9,7 @@ using POS_MT.ViewModels;
 
 namespace POS_MT.Controllers;
 
-[Authorize]
+[Authorize(Policy = "Staff")]
 public class CustomersController : Controller
 {
     private readonly POSDbContext _db;
@@ -27,11 +27,12 @@ public class CustomersController : Controller
 
     private void EnsureCustomersNav() => _navContext.SetArea("Customers");
 
-    public async Task<IActionResult> Index(string? filter, CancellationToken ct)
+    public async Task<IActionResult> Index(string? filter, string? area, CancellationToken ct)
     {
         EnsureCustomersNav();
         await _advance.EnsureSchemaAsync(ct);
         ViewData["Filter"] = filter;
+        ViewData["Area"] = area;
         var query = _db.Customers.AsNoTracking().AsQueryable();
         if (string.Equals(filter, "credit", StringComparison.OrdinalIgnoreCase))
         {
@@ -48,6 +49,13 @@ public class CustomersController : Controller
             ViewData["Title"] = "Customers";
         }
 
+        if (!string.IsNullOrWhiteSpace(area))
+        {
+            var areaFilter = area.Trim();
+            query = query.Where(x => x.Area != null && x.Area == areaFilter);
+        }
+
+        ViewBag.AreaOptions = await BuildAreaFilterOptionsAsync(area, ct);
         var list = await query.OrderBy(x => x.CustomerName).ToListAsync(ct);
         return View(list);
     }
@@ -174,7 +182,7 @@ public class CustomersController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Delete(int id, string? filter, CancellationToken ct)
+    public async Task<IActionResult> Delete(int id, string? filter, string? area, CancellationToken ct)
     {
         EnsureCustomersNav();
         var entity = await _db.Customers.FindAsync([id], ct);
@@ -189,7 +197,7 @@ public class CustomersController : Controller
             || entity.CustomerName.Contains("Walk In", StringComparison.OrdinalIgnoreCase))
         {
             TempData["Error"] = $"Cannot delete system customer {entity.CustomerCode}.";
-            return RedirectToAction(nameof(Index), new { filter });
+            return RedirectToAction(nameof(Index), new { filter, area });
         }
 
         var code = entity.CustomerCode;
@@ -208,11 +216,11 @@ public class CustomersController : Controller
         {
             await tx.RollbackAsync(ct);
             TempData["Error"] = $"Cannot delete customer {code} because other records still use it.";
-            return RedirectToAction(nameof(Index), new { filter });
+            return RedirectToAction(nameof(Index), new { filter, area });
         }
 
         TempData["Success"] = $"Customer {code} and related records were deleted.";
-        return RedirectToAction(nameof(Index), new { filter });
+        return RedirectToAction(nameof(Index), new { filter, area });
     }
 
     private async Task RemoveCustomerUsageAsync(int customerId, string customerCode, CancellationToken ct)
@@ -261,20 +269,20 @@ public class CustomersController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult OpenItems(int[]? selectedCustomerUids, string? filter)
+    public IActionResult OpenItems(int[]? selectedCustomerUids, string? filter, string? area)
     {
         EnsureCustomersNav();
         if (selectedCustomerUids is null || selectedCustomerUids.Length == 0)
         {
             TempData["Error"] = "Select at least one customer.";
-            return RedirectToAction(nameof(Index), new { filter });
+            return RedirectToAction(nameof(Index), new { filter, area });
         }
 
         var ids = string.Join(",", selectedCustomerUids.Distinct().Where(x => x > 0));
         if (string.IsNullOrWhiteSpace(ids))
         {
             TempData["Error"] = "Select at least one customer.";
-            return RedirectToAction(nameof(Index), new { filter });
+            return RedirectToAction(nameof(Index), new { filter, area });
         }
 
         return RedirectToAction("MonthlySupplyItems", "POS", new { customerUids = ids, returnTo = "Customers" });
@@ -450,6 +458,16 @@ public class CustomersController : Controller
 
         model.CityOptions = BuildConfigOptions(citiesRaw, model.City, "Select city…");
         model.AreaOptions = BuildConfigOptions(areasRaw, model.Area, "Select area…");
+    }
+
+    private async Task<List<SelectListItem>> BuildAreaFilterOptionsAsync(string? selected, CancellationToken ct)
+    {
+        var areasRaw = await _db.Configurations.AsNoTracking()
+            .Where(x => x.ConfigKey == "Areas")
+            .Select(x => x.ConfigValue)
+            .FirstOrDefaultAsync(ct);
+
+        return BuildConfigOptions(areasRaw, selected, "All areas");
     }
 
     private static List<SelectListItem> BuildConfigOptions(string? csv, string? selected, string placeholder)

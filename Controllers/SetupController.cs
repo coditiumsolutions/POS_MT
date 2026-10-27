@@ -9,7 +9,7 @@ using POS_MT.ViewModels;
 
 namespace POS_MT.Controllers;
 
-[Authorize]
+[Authorize(Policy = "AdminOnly")]
 public class SetupController : Controller
 {
     public const string PosItemLayoutKey = "PosItemLayout";
@@ -35,7 +35,7 @@ public class SetupController : Controller
         {
             PageTitle = "Setup",
             PageSubtitle = "Configure system settings and master data.",
-            Modules = NavigationCatalog.SetupModules.ToList(),
+            Modules = RoleModuleAccess.Filter(NavigationCatalog.SetupModules, User).ToList(),
             PosItemLayout = IsCardLayout(layout) ? "Card" : "Grid"
         };
 

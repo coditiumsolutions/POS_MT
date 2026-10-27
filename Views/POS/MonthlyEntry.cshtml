@@ -1,15 +1,57 @@
 @model MonthlyEntryPageViewModel
 @{
-    ViewData["Title"] = "Monthly Customer Entry";
+    ViewData["Title"] = "Credit POS";
+    string ItemIcon(string? name)
+    {
+        var n = (name ?? "").ToLowerInvariant();
+        if (n.Contains("milk") || n.Contains("dairy") || n.Contains("yogurt") || n.Contains("yoghurt") || n.Contains("cream")) return "bi-cup-straw";
+        if (n.Contains("butter") || n.Contains("ghee") || n.Contains("margarine")) return "bi-droplet-fill";
+        if (n.Contains("cheese") || n.Contains("topping")) return "bi-circle-half";
+        if (n.Contains("bread") || n.Contains("roti") || n.Contains("bun") || n.Contains("loaf")) return "bi-basket2-fill";
+        if (n.Contains("egg")) return "bi-egg-fill";
+        if (n.Contains("rice") || n.Contains("flour") || n.Contains("atta") || n.Contains("grocery") || n.Contains("pulse") || n.Contains("dal")) return "bi-bag-fill";
+        if (n.Contains("oil") || n.Contains("spice") || n.Contains("salt") || n.Contains("sugar") || n.Contains("extra")) return "bi-box-seam-fill";
+        if (n.Contains("fruit") || n.Contains("apple") || n.Contains("banana") || n.Contains("mango") || n.Contains("orange")) return "bi-apple";
+        if (n.Contains("veg") || n.Contains("salad") || n.Contains("tomato") || n.Contains("onion")) return "bi-flower1";
+        if (n.Contains("meat") || n.Contains("mutton") || n.Contains("beef") || n.Contains("bbq") || n.Contains("b.b.q") || n.Contains("barbe")) return "bi-fire";
+        if (n.Contains("chicken") || n.Contains("broast") || n.Contains("crispy")) return "bi-egg-fill";
+        if (n.Contains("fish") || n.Contains("seafood")) return "bi-water";
+        if (n.Contains("pizza") || n.Contains("calzone")) return "bi-pie-chart-fill";
+        if (n.Contains("burger") || n.Contains("sandwich")) return "bi-layers-fill";
+        if (n.Contains("fries") || n.Contains("fry") || n.Contains("chips")) return "bi-grid-3x2-gap-fill";
+        if (n.Contains("pasta") || n.Contains("lasagna") || n.Contains("noodle")) return "bi-intersect";
+        if (n.Contains("roll") || n.Contains("wrap")) return "bi-receipt";
+        if (n.Contains("drink") || n.Contains("juice") || n.Contains("beverage") || n.Contains("soda") || n.Contains("water") || n.Contains("tea") || n.Contains("coffee")) return "bi-cup-hot-fill";
+        if (n.Contains("ice") || n.Contains("dessert") || n.Contains("sweet") || n.Contains("cake")) return "bi-snow2";
+        if (n.Contains("deal") || n.Contains("combo") || n.Contains("offer")) return "bi-tags-fill";
+        if (n.Contains("deliver")) return "bi-truck";
+        if (n.Contains("dawn") || n.Contains("brand")) return "bi-buildings-fill";
+        return "bi-box2-fill";
+    }
+
+    string CardPrice(decimal price)
+        => price == decimal.Truncate(price) ? $"Rs. {price:0}" : $"Rs. {price:N2}";
+
+    string IconTone(string? name)
+    {
+        var tones = new[] { "blue", "orange", "green", "pink", "teal", "violet", "amber", "rose" };
+        var key = name ?? string.Empty;
+        var hash = 0;
+        foreach (var ch in key)
+        {
+            hash = (hash * 31) + ch;
+        }
+        return tones[(hash & 0x7fffffff) % tones.Length];
+    }
 }
 @Html.AntiForgeryToken()
 
 <div id="posAlert" class="alert d-none mb-2" role="alert"></div>
 
-<div class="pos-sale-layout monthly-entry-layout">
+<div class="pos-sale-layout monthly-entry-layout @(Model.UseCardLayout ? "pos-sale-layout--cards monthly-entry-layout--cards" : "")">
     <section class="pos-sale-panel">
         <div class="pos-sale-panel-header">
-            <h2 class="pos-sale-panel-title">Monthly Customers</h2>
+            <h2 class="pos-sale-panel-title">Credit Customers</h2>
             <input type="search" id="customerSearch" class="form-control form-control-sm" placeholder="Search customer..." style="max-width:180px" />
         </div>
         <div class="table-responsive pos-sale-table-wrap">
@@ -37,7 +79,7 @@
         </div>
         @if (Model.Customers.Count == 0)
         {
-            <div class="p-3 text-muted">No monthly customers found. Create an active customer (Walk-in is used only for Cash POS).</div>
+            <div class="p-3 text-muted">No credit customers found. Create an active customer (Walk-in is used only for Cash POS).</div>
         }
         <div class="pos-sale-total-bar monthly-selected-bar">
             <span>Selected</span>
@@ -45,11 +87,65 @@
         </div>
     </section>
 
-    <section class="pos-sale-panel">
-        <div class="pos-sale-panel-header">
-            <h2 class="pos-sale-panel-title">Item Entry</h2>
+    <section class="pos-sale-panel monthly-entry-items-panel">
+        <div class="pos-sale-panel-header pos-sale-panel-header--search">
+            <h2 class="pos-sale-panel-title mb-0">Items</h2>
+            <input type="search" id="productSearch" class="form-control form-control-sm" placeholder="Search items..." />
             <button type="button" id="btnCancelEdit" class="btn btn-outline-secondary btn-sm d-none">Cancel Edit</button>
         </div>
+
+        @if (Model.UseCardLayout)
+        {
+            <div class="pos-category-toolbar pos-category-tiles" id="posCategoryToolbar" role="group" aria-label="Product categories">
+                @{
+                    var catTone = 0;
+                }
+                <button type="button"
+                        class="btn btn-sm btn-outline-secondary pos-category-btn pos-cat-tone-@(catTone++ % 12) active"
+                        data-category-uid="">
+                    <span class="pos-cat-accent" aria-hidden="true"></span>
+                    <span class="pos-cat-icon" aria-hidden="true"><i class="bi bi-grid-fill"></i></span>
+                    <span class="pos-cat-label">All Items</span>
+                </button>
+                @foreach (var cat in Model.Categories)
+                {
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary pos-category-btn pos-cat-tone-@(catTone++ % 12)"
+                            data-category-uid="@cat.Uid">
+                        <span class="pos-cat-accent" aria-hidden="true"></span>
+                        <span class="pos-cat-icon" aria-hidden="true"><i class="bi @ItemIcon(cat.CategoryName)"></i></span>
+                        <span class="pos-cat-label">@cat.CategoryName</span>
+                    </button>
+                }
+            </div>
+            <div class="pos-product-cards" id="productsTable">
+                @foreach (var item in Model.Products)
+                {
+                    var iconSource = string.IsNullOrWhiteSpace(item.CategoryName) ? item.ProductName : item.ProductName + " " + item.CategoryName;
+                    <button type="button"
+                            class="pos-item-card credit-product-card"
+                            data-uid="@item.Uid"
+                            data-code="@item.ProductCode"
+                            data-name="@item.ProductName"
+                            data-category-uid="@(item.CategoryUid?.ToString() ?? "")"
+                            data-price="@item.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                            title="@item.ProductCode">
+                        @if (!string.IsNullOrWhiteSpace(item.ImagePath))
+                        {
+                            <img class="pos-item-card-photo" src="@item.ImagePath" alt="" />
+                        }
+                        else
+                        {
+                            <span class="pos-icon-tile pos-icon-tile--lg pos-icon-tone-@IconTone(iconSource)" aria-hidden="true">
+                                <i class="bi @ItemIcon(iconSource)"></i>
+                            </span>
+                        }
+                        <span class="pos-item-card-name">@item.ProductName</span>
+                        <span class="pos-item-card-price">@CardPrice(item.SalePrice)</span>
+                    </button>
+                }
+            </div>
+        }
 
         <div class="p-3 border-bottom">
             <div class="row g-2 align-items-end">
@@ -57,20 +153,43 @@
                     <label class="form-label mb-1" for="entryDate">Date</label>
                     <input type="date" id="entryDate" class="form-control form-control-sm" />
                 </div>
-                <div class="col-12 col-lg-4">
-                    <label class="form-label mb-1" for="entryProduct">Item</label>
-                    <select id="entryProduct" class="form-select form-select-sm">
-                        <option value="">-- Select item --</option>
-                        @foreach (var p in Model.Products)
-                        {
-                            <option value="@p.Uid"
-                                    data-price="@p.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)"
-                                    data-code="@p.ProductCode">
-                                @p.ProductName (@p.ProductCode)
-                            </option>
-                        }
-                    </select>
-                </div>
+                @if (Model.UseCardLayout)
+                {
+                    <div class="col-12 col-lg-4">
+                        <label class="form-label mb-1">Selected item</label>
+                        <input type="text" id="selectedProductLabel" class="form-control form-control-sm" readonly placeholder="Tap an item card above" />
+                        <select id="entryProduct" class="d-none" aria-hidden="true">
+                            <option value="">-- Select item --</option>
+                            @foreach (var p in Model.Products)
+                            {
+                                <option value="@p.Uid"
+                                        data-price="@p.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                        data-code="@p.ProductCode"
+                                        data-name="@p.ProductName">
+                                    @p.ProductName
+                                </option>
+                            }
+                        </select>
+                    </div>
+                }
+                else
+                {
+                    <div class="col-12 col-lg-4">
+                        <label class="form-label mb-1" for="entryProduct">Item</label>
+                        <select id="entryProduct" class="form-select form-select-sm">
+                            <option value="">-- Select item --</option>
+                            @foreach (var p in Model.Products)
+                            {
+                                <option value="@p.Uid"
+                                        data-price="@p.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                        data-code="@p.ProductCode"
+                                        data-name="@p.ProductName">
+                                    @p.ProductName (@p.ProductCode)
+                                </option>
+                            }
+                        </select>
+                    </div>
+                }
                 <div class="col-4 col-lg-1">
                     <label class="form-label mb-1" for="entryQty">Qty</label>
                     <input type="number" id="entryQty" class="form-control form-control-sm" min="0.1" step="0.1" value="1.0" />
@@ -134,16 +253,19 @@
     const saveUrl = '@Url.Action("SaveMonthlyEntry", "POS")';
     const deleteUrl = '@Url.Action("DeleteMonthlyEntry", "POS")';
     const createInvoiceUrl = '@Url.Action("CreateMonthlySalesInvoice", "POS")';
+    const cardLayout = @(Model.UseCardLayout ? "true" : "false");
 
     let selectedCustomerUid = null;
     let editingDetailUid = null;
     let currentEntryCount = 0;
+    let activeCategoryUid = '';
 
     const customersTable = document.getElementById('customersTable');
     const customerSearch = document.getElementById('customerSearch');
     const selectedCustomerLabel = document.getElementById('selectedCustomerLabel');
     const entryDate = document.getElementById('entryDate');
     const entryProduct = document.getElementById('entryProduct');
+    const selectedProductLabel = document.getElementById('selectedProductLabel');
     const entryQty = document.getElementById('entryQty');
     const entryPrice = document.getElementById('entryPrice');
     const entryTotal = document.getElementById('entryTotal');
@@ -156,6 +278,9 @@
     const recordsHint = document.getElementById('recordsHint');
     const alertBox = document.getElementById('posAlert');
     const btnCreateSalesInvoice = document.getElementById('btnCreateSalesInvoice');
+    const productSearch = document.getElementById('productSearch');
+    const productsTable = document.getElementById('productsTable');
+    const categoryToolbar = document.getElementById('posCategoryToolbar');
 
     function todayInputValue() {
         const d = new Date();
@@ -192,16 +317,89 @@
         entryTotal.value = money(qty * price);
     }
 
+    function syncSelectedProductLabel() {
+        if (!selectedProductLabel) return;
+        const opt = entryProduct.selectedOptions[0];
+        if (!opt || !opt.value) {
+            selectedProductLabel.value = '';
+            return;
+        }
+        selectedProductLabel.value = (opt.getAttribute('data-name') || opt.textContent || '').trim();
+    }
+
+    function selectProduct(uid, price, name) {
+        entryProduct.value = String(uid);
+        if (price != null && !Number.isNaN(Number(price))) {
+            entryPrice.value = Number(price).toFixed(2);
+        }
+        if (selectedProductLabel) {
+            selectedProductLabel.value = name || '';
+        }
+        if (productsTable) {
+            productsTable.querySelectorAll('.credit-product-card').forEach(function (card) {
+                card.classList.toggle('is-selected', card.getAttribute('data-uid') === String(uid));
+            });
+        }
+        recalcTotal();
+    }
+
+    function filterProducts() {
+        if (!productsTable) return;
+        const q = (productSearch?.value || '').trim().toLowerCase();
+        productsTable.querySelectorAll('.credit-product-card').forEach(function (card) {
+            const name = (card.getAttribute('data-name') || '').toLowerCase();
+            const code = (card.getAttribute('data-code') || '').toLowerCase();
+            const cat = card.getAttribute('data-category-uid') || '';
+            const matchCat = !activeCategoryUid || cat === activeCategoryUid;
+            const matchText = !q || name.indexOf(q) !== -1 || code.indexOf(q) !== -1;
+            card.style.display = matchCat && matchText ? '' : 'none';
+        });
+    }
+
     entryQty.addEventListener('input', recalcTotal);
     entryPrice.addEventListener('input', recalcTotal);
 
     entryProduct.addEventListener('change', function () {
         const opt = entryProduct.selectedOptions[0];
-        if (!opt || !opt.value) return;
+        if (!opt || !opt.value) {
+            syncSelectedProductLabel();
+            return;
+        }
         const price = parseFloat(opt.getAttribute('data-price') || '0');
         entryPrice.value = price.toFixed(2);
+        syncSelectedProductLabel();
         recalcTotal();
     });
+
+    if (cardLayout && productsTable) {
+        productsTable.addEventListener('click', function (e) {
+            const card = e.target.closest('.credit-product-card');
+            if (!card) return;
+            selectProduct(
+                card.getAttribute('data-uid'),
+                card.getAttribute('data-price'),
+                card.getAttribute('data-name')
+            );
+            entryQty.focus();
+            entryQty.select();
+        });
+    }
+
+    if (productSearch) {
+        productSearch.addEventListener('input', filterProducts);
+    }
+
+    if (categoryToolbar) {
+        categoryToolbar.addEventListener('click', function (e) {
+            const btn = e.target.closest('.pos-category-btn');
+            if (!btn) return;
+            categoryToolbar.querySelectorAll('.pos-category-btn').forEach(function (b) {
+                b.classList.toggle('active', b === btn);
+            });
+            activeCategoryUid = btn.getAttribute('data-category-uid') || '';
+            filterProducts();
+        });
+    }
 
     customerSearch.addEventListener('input', function () {
         const q = customerSearch.value.trim().toLowerCase();
@@ -228,21 +426,22 @@
         loadEntries();
     }
 
-    function clearItemFields(keepDate) {
+    function clearItemFields() {
         entryProduct.value = '';
         entryQty.value = '1.0';
         entryPrice.value = '0';
-        recalcTotal();
-        if (!keepDate) {
-            // intentionally keep date by default after Add
+        if (selectedProductLabel) selectedProductLabel.value = '';
+        if (productsTable) {
+            productsTable.querySelectorAll('.credit-product-card.is-selected').forEach(c => c.classList.remove('is-selected'));
         }
+        recalcTotal();
     }
 
     function clearEditMode() {
         editingDetailUid = null;
         btnAddLabel.textContent = 'Add';
         btnCancelEdit.classList.add('d-none');
-        clearItemFields(true);
+        clearItemFields();
     }
 
     btnCancelEdit.addEventListener('click', function () {
@@ -311,7 +510,7 @@
     btnCreateSalesInvoice.addEventListener('click', async function () {
         hideAlert();
         if (!selectedCustomerUid) {
-            showAlert('warning', 'Select a monthly customer first.');
+            showAlert('warning', 'Select a credit customer first.');
             return;
         }
         if (currentEntryCount <= 0) {
@@ -362,10 +561,13 @@
         if (action === 'edit') {
             editingDetailUid = detailUid;
             entryDate.value = btn.getAttribute('data-date');
-            entryProduct.value = btn.getAttribute('data-product');
+            const productUid = btn.getAttribute('data-product');
+            const price = btn.getAttribute('data-price');
+            entryProduct.value = productUid;
             entryQty.value = parseFloat(btn.getAttribute('data-qty')).toFixed(1);
-            entryPrice.value = parseFloat(btn.getAttribute('data-price')).toFixed(2);
-            recalcTotal();
+            entryPrice.value = parseFloat(price).toFixed(2);
+            const opt = entryProduct.selectedOptions[0];
+            selectProduct(productUid, price, opt ? (opt.getAttribute('data-name') || opt.textContent) : '');
             btnAddLabel.textContent = 'Update';
             btnCancelEdit.classList.remove('d-none');
             hideAlert();
@@ -402,7 +604,7 @@
     btnAdd.addEventListener('click', async function () {
         hideAlert();
         if (!selectedCustomerUid) {
-            showAlert('warning', 'Select a monthly customer first.');
+            showAlert('warning', 'Select a credit customer first.');
             return;
         }
         if (!entryDate.value) {
@@ -410,7 +612,7 @@
             return;
         }
         if (!entryProduct.value) {
-            showAlert('warning', 'Select an item.');
+            showAlert('warning', cardLayout ? 'Tap an item card first.' : 'Select an item.');
             return;
         }
         const qty = Math.round((parseFloat(entryQty.value) || 0) * 10) / 10;
@@ -420,8 +622,8 @@
             return;
         }
         entryQty.value = qty.toFixed(1);
-        if (!(price >= 0) || Number.isNaN(price)) {
-            showAlert('warning', 'Enter a valid price.');
+        if (!(price > 0) || Number.isNaN(price)) {
+            showAlert('warning', 'Enter a valid price greater than zero.');
             return;
         }
 
@@ -469,6 +671,7 @@
     }
 
     recalcTotal();
+    filterProducts();
 })();
 </script>
 }

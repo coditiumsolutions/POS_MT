@@ -7,6 +7,7 @@ public sealed class PosProductItemViewModel
     public string ProductName { get; set; } = string.Empty;
     public string? Barcode { get; set; }
     public decimal SalePrice { get; set; }
+    public decimal StockQuantity { get; set; }
     public int? CategoryUid { get; set; }
     public string? CategoryName { get; set; }
     public string? ImagePath { get; set; }

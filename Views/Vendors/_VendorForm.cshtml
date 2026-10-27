@@ -3,86 +3,155 @@
     var vendorCodeReadonly = ViewBag.VendorCodeReadonly as bool? == true;
 }
 <div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
-<div class="invoice-meta-grid invoice-meta-form">
-    <div class="invoice-meta-row">
-        <label asp-for="VendorCode" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            @if (vendorCodeReadonly)
-            {
-                <input asp-for="VendorCode" class="form-control form-control-sm invoice-meta-input" readonly />
-                <small class="text-muted">Auto-generated</small>
-            }
-            else
-            {
-                <input asp-for="VendorCode" class="form-control form-control-sm invoice-meta-input" />
-            }
-            <span asp-validation-for="VendorCode" class="text-danger"></span>
-        </div>
-        <label asp-for="VendorName" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="VendorName" class="form-control form-control-sm invoice-meta-input" />
-            <span asp-validation-for="VendorName" class="text-danger"></span>
+
+<div class="product-tabs vendor-form" id="vendorTabs">
+    <div class="product-tab-buttons" role="tablist" aria-label="Vendor form tabs">
+        <button type="button"
+                class="product-tab-btn active"
+                data-tab="details"
+                role="tab"
+                aria-selected="true"
+                aria-controls="vendor-panel-details">
+            Vendor Details
+        </button>
+        <button type="button"
+                class="product-tab-btn"
+                data-tab="others"
+                role="tab"
+                aria-selected="false"
+                aria-controls="vendor-panel-others">
+            Others
+        </button>
+    </div>
+
+    <div class="product-tab-panel active"
+         id="vendor-panel-details"
+         data-panel="details"
+         role="tabpanel">
+        <div class="invoice-meta-grid invoice-meta-form">
+            <div class="invoice-meta-row">
+                <label asp-for="VendorCode" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    @if (vendorCodeReadonly)
+                    {
+                        <input asp-for="VendorCode" class="form-control form-control-sm invoice-meta-input" readonly />
+                    }
+                    else
+                    {
+                        <input asp-for="VendorCode" class="form-control form-control-sm invoice-meta-input" />
+                    }
+                    <span asp-validation-for="VendorCode" class="text-danger"></span>
+                </div>
+                <label asp-for="VendorName" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="VendorName" class="form-control form-control-sm invoice-meta-input" />
+                    <span asp-validation-for="VendorName" class="text-danger"></span>
+                </div>
+            </div>
+            <div class="invoice-meta-row">
+                <label asp-for="ContactPerson" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="ContactPerson" class="form-control form-control-sm invoice-meta-input" />
+                </div>
+                <label asp-for="MobileNo" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="MobileNo" class="form-control form-control-sm invoice-meta-input" />
+                </div>
+            </div>
+            <div class="invoice-meta-row">
+                <label asp-for="PhoneNo" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="PhoneNo" class="form-control form-control-sm invoice-meta-input" />
+                </div>
+                <label asp-for="Email" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="Email" class="form-control form-control-sm invoice-meta-input" />
+                    <span asp-validation-for="Email" class="text-danger"></span>
+                </div>
+            </div>
+            <div class="invoice-meta-row">
+                <label asp-for="Address" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="Address" class="form-control form-control-sm invoice-meta-input" />
+                </div>
+                <label asp-for="City" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <select asp-for="City" asp-items="Model.CityOptions" class="form-select form-select-sm invoice-meta-input"></select>
+                </div>
+            </div>
+            <div class="invoice-meta-row">
+                <label asp-for="IsActive" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field d-flex align-items-center">
+                    <input asp-for="IsActive" class="form-check-input m-0" />
+                </div>
+            </div>
         </div>
     </div>
-    <div class="invoice-meta-row">
-        <label asp-for="ContactPerson" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="ContactPerson" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-        <label asp-for="MobileNo" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="MobileNo" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-    </div>
-    <div class="invoice-meta-row">
-        <label asp-for="PhoneNo" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="PhoneNo" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-        <label asp-for="Email" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="Email" class="form-control form-control-sm invoice-meta-input" />
-            <span asp-validation-for="Email" class="text-danger"></span>
-        </div>
-    </div>
-    <div class="invoice-meta-row">
-        <label asp-for="Address" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="Address" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-        <label asp-for="City" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="City" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-    </div>
-    <div class="invoice-meta-row">
-        <label asp-for="Ntn" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="Ntn" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-        <label asp-for="Strn" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="Strn" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-    </div>
-    <div class="invoice-meta-row">
-        <label asp-for="OpeningBalance" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="OpeningBalance" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-        <label asp-for="CreditLimit" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="CreditLimit" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-    </div>
-    <div class="invoice-meta-row">
-        <label asp-for="PaymentTerms" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="PaymentTerms" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-        <label asp-for="IsActive" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field d-flex align-items-center">
-            <input asp-for="IsActive" class="form-check-input m-0" />
+
+    <div class="product-tab-panel"
+         id="vendor-panel-others"
+         data-panel="others"
+         role="tabpanel"
+         hidden>
+        <div class="invoice-meta-grid invoice-meta-form">
+            <div class="invoice-meta-row">
+                <label asp-for="Ntn" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="Ntn" class="form-control form-control-sm invoice-meta-input" />
+                </div>
+                <label asp-for="Strn" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="Strn" class="form-control form-control-sm invoice-meta-input" />
+                </div>
+            </div>
+            <div class="invoice-meta-row">
+                <label asp-for="OpeningBalance" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="OpeningBalance" class="form-control form-control-sm invoice-meta-input" />
+                </div>
+                <label asp-for="CreditLimit" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="CreditLimit" class="form-control form-control-sm invoice-meta-input" />
+                </div>
+            </div>
+            <div class="invoice-meta-row">
+                <label asp-for="PaymentTerms" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="PaymentTerms" class="form-control form-control-sm invoice-meta-input" />
+                </div>
+            </div>
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    var root = document.getElementById('vendorTabs');
+    if (!root) return;
+    var buttons = root.querySelectorAll('.product-tab-btn');
+    var panels = root.querySelectorAll('.product-tab-panel');
+
+    function activate(tabName) {
+        buttons.forEach(function (btn) {
+            var on = btn.getAttribute('data-tab') === tabName;
+            btn.classList.toggle('active', on);
+            btn.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        panels.forEach(function (panel) {
+            var on = panel.getAttribute('data-panel') === tabName;
+            panel.classList.toggle('active', on);
+            if (on) {
+                panel.removeAttribute('hidden');
+            } else {
+                panel.setAttribute('hidden', 'hidden');
+            }
+        });
+    }
+
+    buttons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            activate(btn.getAttribute('data-tab'));
+        });
+    });
+})();
+</script>

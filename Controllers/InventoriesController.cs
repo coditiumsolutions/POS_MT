@@ -1,7 +1,7 @@
-﻿using Microsoft.AspNetCore.Authorization; using Microsoft.AspNetCore.Mvc; using Microsoft.AspNetCore.Mvc.Rendering; using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization; using Microsoft.AspNetCore.Mvc; using Microsoft.AspNetCore.Mvc.Rendering; using Microsoft.EntityFrameworkCore;
 using POS_MT.Data; using POS_MT.Interfaces; using POS_MT.Models; using POS_MT.ViewModels;
 namespace POS_MT.Controllers;
-[Authorize]
+[Authorize(Policy = "ManagerOrAdmin")]
 public class InventoriesController : Controller {
   private readonly POSDbContext _db; private readonly IAuditService _audit; private readonly INavContextService _navContext;
   public InventoriesController(POSDbContext db, IAuditService audit, INavContextService navContext){ _db=db; _audit=audit; _navContext=navContext; }
@@ -25,7 +25,7 @@ public class InventoriesController : Controller {
     EnsureInventoriesNav();
     if(!ModelState.IsValid){ await LoadLookups(ct); return View(model);} 
     if(await _db.Inventories.AnyAsync(x=>x.ProductUid==model.ProductUid && x.WarehouseUid==model.WarehouseUid,ct)){ ModelState.AddModelError(string.Empty,"Inventory already exists for this product and warehouse."); await LoadLookups(ct); return View(model);} 
-    var e=new Inventory{ProductUid=model.ProductUid,WarehouseUid=model.WarehouseUid,QuantityIn=model.QuantityIn,QuantityOut=model.QuantityOut,CurrentQuantity=model.CurrentQuantity,AverageCost=model.AverageCost,LastPurchasePrice=model.LastPurchasePrice,LastSalePrice=model.LastSalePrice,MinimumStock=model.MinimumStock,MaximumStock=model.MaximumStock,LastStockDate=DateTime.Now,UpdatedDate=DateTime.Now};
+    var e=new Inventory{ProductUid=model.ProductUid,WarehouseUid=model.WarehouseUid,QuantityIn=0,QuantityOut=0,CurrentQuantity=0,AverageCost=0,LastPurchasePrice=0,LastSalePrice=0,MinimumStock=model.MinimumStock,MaximumStock=model.MaximumStock,LastStockDate=DateTime.Now,UpdatedDate=DateTime.Now};
     _db.Inventories.Add(e); await _db.SaveChangesAsync(ct); await _audit.WriteAsync("Create","Inventory",e.Uid.ToString(),"Created inventory row",ct);
     TempData["Success"]="Inventory created."; return RedirectToAction(nameof(Index));
   }
@@ -35,7 +35,7 @@ public class InventoriesController : Controller {
     EnsureInventoriesNav();
     if(id!=model.Uid) return BadRequest(); if(!ModelState.IsValid){ await LoadLookups(ct); return View(model);} 
     var e=await _db.Inventories.FindAsync([id],ct); if(e is null) return NotFound();
-    e.ProductUid=model.ProductUid; e.WarehouseUid=model.WarehouseUid; e.QuantityIn=model.QuantityIn; e.QuantityOut=model.QuantityOut; e.CurrentQuantity=model.CurrentQuantity; e.AverageCost=model.AverageCost; e.LastPurchasePrice=model.LastPurchasePrice; e.LastSalePrice=model.LastSalePrice; e.MinimumStock=model.MinimumStock; e.MaximumStock=model.MaximumStock; e.UpdatedDate=DateTime.Now;
+    e.MinimumStock=model.MinimumStock; e.MaximumStock=model.MaximumStock; e.UpdatedDate=DateTime.Now;
     await _db.SaveChangesAsync(ct); await _audit.WriteAsync("Update","Inventory",e.Uid.ToString(),"Updated inventory row",ct);
     TempData["Success"]="Inventory updated."; return RedirectToAction(nameof(Index));
   }

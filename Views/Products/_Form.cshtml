@@ -1,4 +1,7 @@
 ﻿@model ProductFormViewModel
+@{
+    var productCodeReadonly = ViewBag.ProductCodeReadonly as bool? == true;
+}
 <div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
 
 <div class="product-tabs" id="productTabs">
@@ -29,7 +32,14 @@
             <div class="invoice-meta-row">
                 <label asp-for="ProductCode" class="invoice-meta-title"></label>
                 <div class="invoice-meta-field">
-                    <input asp-for="ProductCode" class="form-control form-control-sm invoice-meta-input" />
+                    @if (productCodeReadonly)
+                    {
+                        <input asp-for="ProductCode" class="form-control form-control-sm invoice-meta-input" readonly />
+                    }
+                    else
+                    {
+                        <input asp-for="ProductCode" class="form-control form-control-sm invoice-meta-input" />
+                    }
                     <span asp-validation-for="ProductCode" class="text-danger"></span>
                 </div>
                 <label asp-for="Barcode" class="invoice-meta-title"></label>
@@ -43,17 +53,17 @@
                     <input asp-for="ProductName" class="form-control form-control-sm invoice-meta-input" />
                     <span asp-validation-for="ProductName" class="text-danger"></span>
                 </div>
-                <label asp-for="BrandName" class="invoice-meta-title"></label>
-                <div class="invoice-meta-field">
-                    <input asp-for="BrandName" class="form-control form-control-sm invoice-meta-input" />
-                </div>
-            </div>
-            <div class="invoice-meta-row">
                 <label asp-for="CategoryUid" class="invoice-meta-title"></label>
                 <div class="invoice-meta-field">
                     <select asp-for="CategoryUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Categories">
                         <option value="">-- Select --</option>
                     </select>
+                </div>
+            </div>
+            <div class="invoice-meta-row">
+                <label asp-for="BrandName" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="BrandName" class="form-control form-control-sm invoice-meta-input" />
                 </div>
                 <label asp-for="UnitUid" class="invoice-meta-title"></label>
                 <div class="invoice-meta-field">
@@ -65,27 +75,27 @@
             <div class="invoice-meta-row">
                 <label asp-for="PurchasePrice" class="invoice-meta-title"></label>
                 <div class="invoice-meta-field">
-                    <input asp-for="PurchasePrice" class="form-control form-control-sm invoice-meta-input" />
+                    <input asp-for="PurchasePrice" class="form-control form-control-sm invoice-meta-input js-select-on-focus" />
                 </div>
                 <label asp-for="SalePrice" class="invoice-meta-title"></label>
                 <div class="invoice-meta-field">
-                    <input asp-for="SalePrice" class="form-control form-control-sm invoice-meta-input" />
+                    <input asp-for="SalePrice" class="form-control form-control-sm invoice-meta-input js-select-on-focus" />
                 </div>
             </div>
             <div class="invoice-meta-row">
                 <label asp-for="WholesalePrice" class="invoice-meta-title"></label>
                 <div class="invoice-meta-field">
-                    <input asp-for="WholesalePrice" class="form-control form-control-sm invoice-meta-input" />
+                    <input asp-for="WholesalePrice" class="form-control form-control-sm invoice-meta-input js-select-on-focus" />
                 </div>
                 <label asp-for="TaxPercent" class="invoice-meta-title"></label>
                 <div class="invoice-meta-field">
-                    <input asp-for="TaxPercent" class="form-control form-control-sm invoice-meta-input" />
+                    <input asp-for="TaxPercent" class="form-control form-control-sm invoice-meta-input js-select-on-focus" />
                 </div>
             </div>
             <div class="invoice-meta-row">
                 <label asp-for="DiscountPercent" class="invoice-meta-title"></label>
                 <div class="invoice-meta-field">
-                    <input asp-for="DiscountPercent" class="form-control form-control-sm invoice-meta-input" />
+                    <input asp-for="DiscountPercent" class="form-control form-control-sm invoice-meta-input js-select-on-focus" />
                 </div>
                 <div class="invoice-meta-title"></div>
                 <div class="invoice-meta-field"></div>
@@ -102,11 +112,11 @@
             <div class="invoice-meta-row">
                 <label asp-for="MinimumStock" class="invoice-meta-title"></label>
                 <div class="invoice-meta-field">
-                    <input asp-for="MinimumStock" class="form-control form-control-sm invoice-meta-input" />
+                    <input asp-for="MinimumStock" class="form-control form-control-sm invoice-meta-input js-select-on-focus" />
                 </div>
                 <label asp-for="MaximumStock" class="invoice-meta-title"></label>
                 <div class="invoice-meta-field">
-                    <input asp-for="MaximumStock" class="form-control form-control-sm invoice-meta-input" />
+                    <input asp-for="MaximumStock" class="form-control form-control-sm invoice-meta-input js-select-on-focus" />
                 </div>
             </div>
             <div class="invoice-meta-row">
@@ -190,5 +200,16 @@
             previewWrap.classList.remove('d-none');
         });
     }
+
+    root.querySelectorAll('.js-select-on-focus').forEach(function (input) {
+        input.addEventListener('focus', function () {
+            requestAnimationFrame(function () {
+                input.select();
+            });
+        });
+        input.addEventListener('mouseup', function (e) {
+            e.preventDefault();
+        });
+    });
 })();
 </script>

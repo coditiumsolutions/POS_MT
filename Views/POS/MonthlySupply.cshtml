@@ -7,7 +7,6 @@
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
     <div>
         <h1 class="page-heading mb-1">Monthly Supply</h1>
-        <p class="text-muted mb-0">Select customers, choose a supply date, and click <strong>Add Supplied</strong>. Standing list is <strong>CustomerMonthlySupply</strong>; use day overrides when a customer wants less/more on that date only. Use <strong>▶</strong> or double-click a row.</p>
     </div>
     <div class="text-muted small align-self-center">
         Selected: <strong id="monthlySupplySelectedCount">0</strong>
@@ -43,6 +42,14 @@
                 disabled>
             Add Supplied
         </button>
+        <button type="submit"
+                class="btn btn-outline-danger"
+                id="monthlySupplyCancelOrderBtn"
+                formaction="@Url.Action("CancelMonthlySupplied", "POS")"
+                disabled
+                title="Cancel Add Supplied for selected customers on this date and restore stock">
+            Cancel Order
+        </button>
         <button type="submit" class="btn btn-primary" id="monthlySupplyContinueBtn" disabled>
             Open Items for Selected Customers
         </button>
@@ -63,7 +70,7 @@
 </form>
 
     <div class="table-responsive bg-white border rounded p-2">
-        <table id="monthlySupplyTable" class="table table-striped table-hover w-100 align-middle mb-0">
+        <table id="monthlySupplyTable" class="table table-hover w-100 align-middle mb-0 monthly-supply-grid">
             <thead>
                 <tr>
                     <th style="width:42px">
@@ -157,6 +164,7 @@
                 const countLabel = document.getElementById('monthlySupplySelectedCount');
                 const continueBtn = document.getElementById('monthlySupplyContinueBtn');
                 const addSuppliedBtn = document.getElementById('monthlySupplyAddSuppliedBtn');
+                const cancelOrderBtn = document.getElementById('monthlySupplyCancelOrderBtn');
                 const filterInput = document.getElementById('monthlySupplyFilter');
                 const openCustomerUid = @(openCustomer.HasValue ? openCustomer.Value.ToString() : "null");
 
@@ -170,10 +178,27 @@
                     if (addSuppliedBtn) {
                         addSuppliedBtn.disabled = selected === 0;
                     }
+                    if (cancelOrderBtn) {
+                        cancelOrderBtn.disabled = selected === 0;
+                    }
                     if (selectAll) {
                         selectAll.checked = selected > 0 && selected === checks.length;
                         selectAll.indeterminate = selected > 0 && selected < checks.length;
                     }
+                }
+
+                if (cancelOrderBtn) {
+                    cancelOrderBtn.addEventListener('click', function (e) {
+                        const selected = checks.filter(function (c) { return c.checked; }).length;
+                        if (selected === 0) {
+                            e.preventDefault();
+                            return;
+                        }
+                        const day = getSupplyDateValue();
+                        if (!confirm('Cancel supplied order for ' + selected + ' customer(s) on ' + day + '?\n\nStock will be restored to inventory (same as a sales return).')) {
+                            e.preventDefault();
+                        }
+                    });
                 }
 
                 if (selectAll) {

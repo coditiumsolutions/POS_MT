@@ -21,9 +21,9 @@
 
   <!-- Publish output lives under build/ — exclude it so publish does not recurse into itself. -->
   <ItemGroup>
-    <Content Remove="build\**;pos_mt\**;pos_mt_02\**;pos_mt_03\**;pos_mt_3\**;pos_mt_4\**;pos_16Oct26\**;pos_mt_17Oct2026\**;bin\**;obj\**" />
-    <None Remove="build\**;pos_mt\**;pos_mt_02\**;pos_mt_03\**;pos_mt_3\**;pos_mt_4\**;pos_16Oct26\**;pos_mt_17Oct2026\**;bin\**;obj\**" />
-    <EmbeddedResource Remove="build\**;pos_mt\**;pos_mt_02\**;pos_mt_03\**;pos_mt_3\**;pos_mt_4\**;pos_16Oct26\**;pos_mt_17Oct2026\**;bin\**;obj\**" />
+    <Content Remove="build\**;pos_mt\**;pos_mt_02\**;pos_mt_03\**;pos_mt_3\**;pos_mt_4\**;pos_16Oct26\**;pos_mt_17Oct2026\**;pos_22_oct_26\**;pos_23_oct_26\**;bin\**;obj\**" />
+    <None Remove="build\**;pos_mt\**;pos_mt_02\**;pos_mt_03\**;pos_mt_3\**;pos_mt_4\**;pos_16Oct26\**;pos_mt_17Oct2026\**;pos_22_oct_26\**;pos_23_oct_26\**;bin\**;obj\**" />
+    <EmbeddedResource Remove="build\**;pos_mt\**;pos_mt_02\**;pos_mt_03\**;pos_mt_3\**;pos_mt_4\**;pos_16Oct26\**;pos_mt_17Oct2026\**;pos_22_oct_26\**;pos_23_oct_26\**;bin\**;obj\**" />
   </ItemGroup>
 
   <!--

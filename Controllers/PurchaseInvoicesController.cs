@@ -9,7 +9,7 @@ using POS_MT.ViewModels;
 
 namespace POS_MT.Controllers;
 
-[Authorize]
+[Authorize(Policy = "ManagerOrAdmin")]
 public class PurchaseInvoicesController : Controller
 {
     private readonly POSDbContext _db;
@@ -39,10 +39,23 @@ public class PurchaseInvoicesController : Controller
         ViewBag.Products = new SelectList(await _db.Products.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.ProductName).ToListAsync(ct), "Uid", "ProductName");
     }
 
-    public async Task<IActionResult> Index(CancellationToken ct)
+    public async Task<IActionResult> Index(DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
     {
         EnsurePurchasesNav();
-        return View(await _db.PurchaseInvoices.AsNoTracking().OrderByDescending(x => x.PurchaseDate).ThenByDescending(x => x.Uid).ToListAsync(ct));
+        ViewData["Title"] = "Purchase Invoices";
+        var fromDay = dateFrom?.Date;
+        var toExclusive = dateTo?.Date.AddDays(1);
+
+        var query = _db.PurchaseInvoices.AsNoTracking().AsQueryable();
+        if (fromDay.HasValue)
+            query = query.Where(x => x.PurchaseDate >= fromDay.Value);
+        if (toExclusive.HasValue)
+            query = query.Where(x => x.PurchaseDate < toExclusive.Value);
+
+        ViewBag.DateFrom = fromDay;
+        ViewBag.DateTo = dateTo?.Date;
+
+        return View(await query.OrderByDescending(x => x.PurchaseDate).ThenByDescending(x => x.Uid).ToListAsync(ct));
     }
 
     public async Task<IActionResult> Create(CancellationToken ct)
@@ -61,12 +74,25 @@ public class PurchaseInvoicesController : Controller
     public async Task<IActionResult> Create(PurchaseInvoiceFormViewModel model, CancellationToken ct)
     {
         EnsurePurchasesNav();
+        var invalidLines = (model.Lines ?? [])
+            .Where(x => x.ProductUid is > 0 && (x.Quantity <= 0 || x.UnitCost < 0))
+            .ToList();
+        if (invalidLines.Count > 0)
+            ModelState.AddModelError(nameof(model.Lines), "Line quantity must be greater than zero and unit cost cannot be negative.");
+
         var receiveLines = (model.Lines ?? [])
-            .Where(x => x.ProductUid is > 0 && x.Quantity > 0)
+            .Where(x => x.ProductUid is > 0 && x.Quantity > 0 && x.UnitCost >= 0)
             .ToList();
 
         if (receiveLines.Count > 0 && model.WarehouseUid is null or <= 0)
             ModelState.AddModelError(nameof(model.WarehouseUid), "Select a warehouse when receiving stock lines.");
+
+        var allowedStatus = new[] { "Completed", "Draft", "Cancelled" };
+        var allowedPay = new[] { "Unpaid", "Partial", "Paid" };
+        if (!allowedStatus.Contains(model.InvoiceStatus))
+            ModelState.AddModelError(nameof(model.InvoiceStatus), "Invalid invoice status.");
+        if (!allowedPay.Contains(model.PaymentStatus))
+            ModelState.AddModelError(nameof(model.PaymentStatus), "Invalid payment status.");
 
         if (!ModelState.IsValid)
         {
@@ -98,9 +124,13 @@ public class PurchaseInvoicesController : Controller
         if (receiveLines.Count > 0)
         {
             var sub = receiveLines.Sum(x => Math.Round(x.Quantity * x.UnitCost, 2));
-            if (e.SubTotal <= 0) e.SubTotal = sub;
-            if (e.NetAmount <= 0) e.NetAmount = sub + e.TaxAmount + e.OtherCharges - e.DiscountAmount;
+            e.SubTotal = sub;
+            e.NetAmount = sub + e.TaxAmount + e.OtherCharges - e.DiscountAmount;
+            if (e.NetAmount < 0) e.NetAmount = 0;
+            if (e.PaidAmount < 0) e.PaidAmount = 0;
+            if (e.PaidAmount > e.NetAmount) e.PaidAmount = e.NetAmount;
             e.BalanceAmount = e.NetAmount - e.PaidAmount;
+            e.PaymentStatus = e.PaidAmount <= 0 ? "Unpaid" : e.PaidAmount >= e.NetAmount ? "Paid" : "Partial";
         }
 
         _db.PurchaseInvoices.Add(e);
@@ -292,14 +322,28 @@ public class PurchaseInvoicesController : Controller
         EnsurePurchasesNav();
         var e = await _db.PurchaseInvoices.FindAsync([id], ct);
         if (e is null) return NotFound();
+        if (string.Equals(e.InvoiceStatus, "Cancelled", StringComparison.OrdinalIgnoreCase))
+        {
+            TempData["Error"] = "Purchase invoice is already cancelled.";
+            return RedirectToAction(nameof(Index));
+        }
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
-        e.InvoiceStatus = "Cancelled";
-        e.UpdatedDate = DateTime.Now;
-        await _inventory.ReversePurchaseAsync(e.Uid, e.PurchaseInvoiceNo, e.UserUid, e.TerminalUid, ct);
-        await _db.SaveChangesAsync(ct);
-        await _audit.WriteAsync("Cancel", "PurchaseInvoices", e.Uid.ToString(), $"Cancelled purchase {e.PurchaseInvoiceNo}", ct);
-        await tx.CommitAsync(ct);
+        try
+        {
+            e.InvoiceStatus = "Cancelled";
+            e.UpdatedDate = DateTime.Now;
+            await _inventory.ReversePurchaseAsync(e.Uid, e.PurchaseInvoiceNo, e.UserUid, e.TerminalUid, ct);
+            await _db.SaveChangesAsync(ct);
+            await _audit.WriteAsync("Cancel", "PurchaseInvoices", e.Uid.ToString(), $"Cancelled purchase {e.PurchaseInvoiceNo}", ct);
+            await tx.CommitAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync(ct);
+            TempData["Error"] = "Cancel failed: " + ex.Message;
+            return RedirectToAction(nameof(Index));
+        }
 
         TempData["Success"] = "Purchase invoice cancelled and stock reversed.";
         return RedirectToAction(nameof(Index));

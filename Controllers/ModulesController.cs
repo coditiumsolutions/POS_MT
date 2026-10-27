@@ -6,7 +6,7 @@ using POS_MT.ViewModels;
 
 namespace POS_MT.Controllers;
 
-[Authorize]
+[Authorize(Policy = "Staff")]
 public class ModulesController : Controller
 {
     private readonly INavContextService _navContext;
@@ -24,7 +24,8 @@ public class ModulesController : Controller
         {
             PageTitle = "Modules",
             PageSubtitle = "Open a module to manage your POS operations.",
-            Modules = NavigationCatalog.MainModules.ToList()
+            Sections = RoleModuleAccess.FilterSections(NavigationCatalog.MainModuleSections, User).ToList(),
+            Modules = RoleModuleAccess.Filter(NavigationCatalog.MainModules, User).ToList()
         };
 
         return View(model);

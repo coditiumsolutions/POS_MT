@@ -2,6 +2,8 @@
 @{
     ViewData["Title"] = ViewData["Title"] ?? "Customers";
     var filter = ViewData["Filter"] as string;
+    var area = ViewData["Area"] as string;
+    var areaOptions = ViewBag.AreaOptions as IEnumerable<SelectListItem> ?? Enumerable.Empty<SelectListItem>();
 }
 <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
     <span class="sales-invoices-heading">@ViewData["Title"]</span>
@@ -10,11 +12,29 @@
 @if (TempData["Success"] != null) { <div class="alert alert-success">@TempData["Success"]</div> }
 @if (TempData["Error"] != null) { <div class="alert alert-danger">@TempData["Error"]</div> }
 
+<form asp-action="Index" method="get" class="mb-2 d-flex flex-wrap gap-2 align-items-center" id="customersAreaFilterForm">
+    @if (!string.IsNullOrWhiteSpace(filter))
+    {
+        <input type="hidden" name="filter" value="@filter" />
+    }
+    <label for="area" class="form-label mb-0 small text-muted">Area</label>
+    <select id="area"
+            name="area"
+            class="form-select form-select-sm"
+            style="width:auto; min-width:12rem;"
+            asp-items="areaOptions"
+            onchange="this.form.submit()"></select>
+</form>
+
 <form asp-action="OpenItems" method="post" id="customersOpenItemsForm">
     @Html.AntiForgeryToken()
     @if (!string.IsNullOrWhiteSpace(filter))
     {
         <input type="hidden" name="filter" value="@filter" />
+    }
+    @if (!string.IsNullOrWhiteSpace(area))
+    {
+        <input type="hidden" name="area" value="@area" />
     }
     <div class="mb-2 d-flex flex-wrap gap-2 align-items-center">
         <button type="submit" class="btn btn-sm btn-primary" id="customersOpenItemsBtn" disabled>
@@ -31,11 +51,9 @@
                 <th style="width:42px">
                     <input type="checkbox" id="customersSelectAll" class="form-check-input" title="Select all" />
                 </th>
-                <th>Code</th>
                 <th>Name</th>
                 <th>Mobile</th>
-                <th>City</th>
-                <th>Credit Limit</th>
+                <th>Area</th>
                 <th>Advance</th>
                 <th>Active</th>
                 <th>Actions</th>
@@ -58,11 +76,9 @@
                            @(item.IsActive ? null : "disabled")
                            title="@(item.IsActive ? "Select customer" : "Inactive customers cannot open items")" />
                 </td>
-                <td>@item.CustomerCode</td>
                 <td>@item.CustomerName</td>
                 <td>@item.MobileNo</td>
-                <td>@item.City</td>
-                <td>@item.CreditLimit.ToString("N2")</td>
+                <td>@(string.IsNullOrWhiteSpace(item.Area) ? "—" : item.Area)</td>
                 <td>@item.AdvanceBalance.ToString("N2")</td>
                 <td>@(item.IsActive ? "Yes" : "No")</td>
                 <td class="text-nowrap">
@@ -87,6 +103,10 @@
                             @if (!string.IsNullOrWhiteSpace(filter))
                             {
                                 <input type="hidden" name="filter" value="@filter" />
+                            }
+                            @if (!string.IsNullOrWhiteSpace(area))
+                            {
+                                <input type="hidden" name="area" value="@area" />
                             }
                             <button type="submit"
                                     class="btn btn-sm btn-outline-danger"

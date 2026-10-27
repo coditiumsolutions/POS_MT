@@ -1,31 +1,54 @@
 @model PosSaleViewModel
 @{
     ViewData["Title"] = $"{Model.Mode} POS";
-    string ItemGlyph(string? name)
+    string ItemIcon(string? name)
     {
         var n = (name ?? "").ToLowerInvariant();
-        if (n.Contains("pizza")) return "🍕";
-        if (n.Contains("burger")) return "🍔";
-        if (n.Contains("fries") || n.Contains("fry")) return "🍟";
-        if (n.Contains("broast") || n.Contains("chicken")) return "🍗";
-        if (n.Contains("bbq") || n.Contains("b.b.q") || n.Contains("barbe")) return "🍖";
-        if (n.Contains("sandwich")) return "🥪";
-        if (n.Contains("lasagna") || n.Contains("pasta")) return "🍝";
-        if (n.Contains("roll")) return "🌯";
-        if (n.Contains("deal")) return "🎁";
-        if (n.Contains("deliver")) return "🚗";
-        if (n.Contains("extra")) return "🧂";
-        if (n.Contains("topping") || n.Contains("cheese")) return "🧀";
-        if (n.Contains("crispy")) return "🍽️";
-        if (n.Contains("calzone")) return "🥟";
-        if (n.Contains("drink") || n.Contains("juice") || n.Contains("beverage")) return "🥤";
-        return "🍽️";
+        if (n.Contains("milk") || n.Contains("dairy") || n.Contains("yogurt") || n.Contains("yoghurt") || n.Contains("cream")) return "bi-cup-straw";
+        if (n.Contains("butter") || n.Contains("ghee") || n.Contains("margarine")) return "bi-droplet-fill";
+        if (n.Contains("cheese") || n.Contains("topping")) return "bi-circle-half";
+        if (n.Contains("bread") || n.Contains("roti") || n.Contains("bun") || n.Contains("loaf")) return "bi-basket2-fill";
+        if (n.Contains("egg")) return "bi-egg-fill";
+        if (n.Contains("rice") || n.Contains("flour") || n.Contains("atta") || n.Contains("grocery") || n.Contains("pulse") || n.Contains("dal")) return "bi-bag-fill";
+        if (n.Contains("oil") || n.Contains("spice") || n.Contains("salt") || n.Contains("sugar") || n.Contains("extra")) return "bi-box-seam-fill";
+        if (n.Contains("fruit") || n.Contains("apple") || n.Contains("banana") || n.Contains("mango") || n.Contains("orange")) return "bi-apple";
+        if (n.Contains("veg") || n.Contains("salad") || n.Contains("tomato") || n.Contains("onion")) return "bi-flower1";
+        if (n.Contains("meat") || n.Contains("mutton") || n.Contains("beef") || n.Contains("bbq") || n.Contains("b.b.q") || n.Contains("barbe")) return "bi-fire";
+        if (n.Contains("chicken") || n.Contains("broast") || n.Contains("crispy")) return "bi-egg-fill";
+        if (n.Contains("fish") || n.Contains("seafood")) return "bi-water";
+        if (n.Contains("pizza") || n.Contains("calzone")) return "bi-pie-chart-fill";
+        if (n.Contains("burger") || n.Contains("sandwich")) return "bi-layers-fill";
+        if (n.Contains("fries") || n.Contains("fry") || n.Contains("chips")) return "bi-grid-3x2-gap-fill";
+        if (n.Contains("pasta") || n.Contains("lasagna") || n.Contains("noodle")) return "bi-intersect";
+        if (n.Contains("roll") || n.Contains("wrap")) return "bi-receipt";
+        if (n.Contains("drink") || n.Contains("juice") || n.Contains("beverage") || n.Contains("soda") || n.Contains("water") || n.Contains("tea") || n.Contains("coffee")) return "bi-cup-hot-fill";
+        if (n.Contains("ice") || n.Contains("dessert") || n.Contains("sweet") || n.Contains("cake")) return "bi-snow2";
+        if (n.Contains("deal") || n.Contains("combo") || n.Contains("offer")) return "bi-tags-fill";
+        if (n.Contains("deliver")) return "bi-truck";
+        if (n.Contains("dawn") || n.Contains("brand")) return "bi-buildings-fill";
+        return "bi-box2-fill";
     }
 
     string CardPrice(decimal price)
-        => price == decimal.Truncate(price) ? $"Rs. {price:0}" : $"Rs. {price:N2}";
+        => price == decimal.Truncate(price) ? $"Rs: {price:0}" : $"Rs: {price:N2}";
 
-    string[] iconColors = ["#7c6bf2", "#3b82f6", "#f97316", "#10b981", "#ec4899", "#0ea5e9"];
+    string FormatStockQty(decimal qty)
+        => qty == decimal.Truncate(qty) ? qty.ToString("0") : qty.ToString("0.###");
+
+    string CardPriceWithStock(decimal price, decimal stock)
+        => $"{CardPrice(price)} ({FormatStockQty(stock)})";
+
+    string IconTone(string? name)
+    {
+        var tones = new[] { "blue", "orange", "green", "pink", "teal", "violet", "amber", "rose" };
+        var key = name ?? string.Empty;
+        var hash = 0;
+        foreach (var ch in key)
+        {
+            hash = (hash * 31) + ch;
+        }
+        return tones[(hash & 0x7fffffff) % tones.Length];
+    }
 }
 @Html.AntiForgeryToken()
 <div id="posAlert" class="alert d-none mb-2" role="alert"></div>
@@ -35,26 +58,39 @@
         <div class="pos-sale-panel-header pos-sale-panel-header--search">
             <input type="search" id="productSearch" class="form-control form-control-sm" placeholder="Search items..." />
         </div>
-        <div class="pos-category-toolbar @(Model.UseCardLayout ? "pos-category-pills" : "")" id="posCategoryToolbar" role="group" aria-label="Product categories">
+        <div class="pos-category-toolbar @(Model.UseCardLayout ? "pos-category-tiles" : "")" id="posCategoryToolbar" role="group" aria-label="Product categories">
+            @{
+                var catTone = 0;
+            }
             <button type="button"
-                    class="btn btn-sm btn-outline-secondary pos-category-btn active"
+                    class="btn btn-sm btn-outline-secondary pos-category-btn @(Model.UseCardLayout ? $"pos-cat-tone-{catTone++ % 12} active" : "active")"
                     data-category-uid="">
                 @if (Model.UseCardLayout)
                 {
-                    <span class="pos-category-glyph" aria-hidden="true">⭐</span>
+                    <span class="pos-cat-accent" aria-hidden="true"></span>
+                    <span class="pos-cat-icon" aria-hidden="true"><i class="bi bi-grid-fill"></i></span>
+                    <span class="pos-cat-label">All Items</span>
                 }
-                @(Model.UseCardLayout ? "All Items" : "All")
+                else
+                {
+                    @:All
+                }
             </button>
             @foreach (var cat in Model.Categories)
             {
                 <button type="button"
-                        class="btn btn-sm btn-outline-secondary pos-category-btn"
+                        class="btn btn-sm btn-outline-secondary pos-category-btn @(Model.UseCardLayout ? $"pos-cat-tone-{catTone++ % 12}" : null)"
                         data-category-uid="@cat.Uid">
                     @if (Model.UseCardLayout)
                     {
-                        <span class="pos-category-glyph" aria-hidden="true">@ItemGlyph(cat.CategoryName)</span>
+                        <span class="pos-cat-accent" aria-hidden="true"></span>
+                        <span class="pos-cat-icon" aria-hidden="true"><i class="bi @ItemIcon(cat.CategoryName)"></i></span>
+                        <span class="pos-cat-label">@cat.CategoryName</span>
                     }
-                    @cat.CategoryName
+                    else
+                    {
+                        @cat.CategoryName
+                    }
                 </button>
             }
         </div>
@@ -63,8 +99,7 @@
             <div class="pos-product-cards" id="productsTable">
                 @foreach (var item in Model.Products)
                 {
-                    var glyphSource = string.IsNullOrWhiteSpace(item.CategoryName) ? item.ProductName : item.CategoryName + " " + item.ProductName;
-                    var color = iconColors[(item.ProductName.GetHashCode() & 0x7fffffff) % iconColors.Length];
+                    var iconSource = string.IsNullOrWhiteSpace(item.CategoryName) ? item.ProductName : item.ProductName + " " + item.CategoryName;
                     <button type="button"
                             class="pos-item-card pos-product-row"
                             data-uid="@item.Uid"
@@ -72,6 +107,7 @@
                             data-name="@item.ProductName"
                             data-category-uid="@(item.CategoryUid?.ToString() ?? "")"
                             data-price="@item.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                            data-stock="@item.StockQuantity.ToString(System.Globalization.CultureInfo.InvariantCulture)"
                             title="@item.ProductCode">
                         @if (!string.IsNullOrWhiteSpace(item.ImagePath))
                         {
@@ -79,10 +115,12 @@
                         }
                         else
                         {
-                            <span class="pos-item-card-icon" style="background: linear-gradient(180deg, @color, color-mix(in srgb, @color 70%, #1e1b4b));">@ItemGlyph(glyphSource)</span>
+                            <span class="pos-icon-tile pos-icon-tile--lg pos-icon-tone-@IconTone(iconSource)" aria-hidden="true">
+                                <i class="bi @ItemIcon(iconSource)"></i>
+                            </span>
                         }
                         <span class="pos-item-card-name">@item.ProductName</span>
-                        <span class="pos-item-card-price">@CardPrice(item.SalePrice)</span>
+                        <span class="pos-item-card-price">@CardPriceWithStock(item.SalePrice, item.StockQuantity)</span>
                     </button>
                 }
             </div>
@@ -95,7 +133,7 @@
                         <tr>
                             <th>Code</th>
                             <th>Name</th>
-                            <th class="text-end">Price</th>
+                            <th class="text-end">Price (Qty)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -107,10 +145,11 @@
                             data-name="@item.ProductName"
                             data-category-uid="@(item.CategoryUid?.ToString() ?? "")"
                             data-price="@item.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                            data-stock="@item.StockQuantity.ToString(System.Globalization.CultureInfo.InvariantCulture)"
                             tabindex="0">
                             <td>@item.ProductCode</td>
                             <td>@item.ProductName</td>
-                            <td class="text-end">@item.SalePrice.ToString("N2")</td>
+                            <td class="text-end pos-item-card-price">@CardPriceWithStock(item.SalePrice, item.StockQuantity)</td>
                         </tr>
                     }
                     </tbody>
@@ -127,8 +166,8 @@
         <div class="pos-sale-panel-header">
             <h2 class="pos-sale-panel-title">Basket</h2>
             <div class="pos-sale-toolbar">
-                <button type="button" id="btnPrintReceipt" class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-printer" aria-hidden="true"></i> Print
+                <button type="button" id="btnPrintReceipt" class="btn btn-outline-secondary btn-sm d-none" hidden>
+                    <i class="bi bi-printer" aria-hidden="true"></i> Print Receipt
                 </button>
                 <button type="button" id="btnPay" class="btn btn-success btn-sm">
                     <i class="bi bi-cash-coin" aria-hidden="true"></i> Pay
@@ -156,9 +195,43 @@
                 </tbody>
             </table>
         </div>
-        <div class="pos-sale-total-bar">
-            <span>Total</span>
-            <strong id="basketTotal">0.00</strong>
+        <div class="pos-sale-totals">
+            <div class="pos-sale-total-row">
+                <span>Total Amount</span>
+                <strong id="basketTotal">0.00</strong>
+            </div>
+            <div class="pos-sale-total-row pos-sale-discount-row">
+                <label for="basketDiscount">Discount</label>
+                <input type="number"
+                       id="basketDiscount"
+                       class="form-control form-control-sm pos-sale-discount-input"
+                       min="0"
+                       step="0.01"
+                       value="0.00"
+                       inputmode="decimal" />
+            </div>
+            <div class="pos-sale-total-row pos-sale-net-row">
+                <span>Net Amount</span>
+                <strong id="basketNet">0.00</strong>
+            </div>
+            @if (string.Equals(Model.Mode, "Cash", StringComparison.OrdinalIgnoreCase))
+            {
+                <div class="pos-sale-total-row pos-sale-tender-row">
+                    <label for="basketCustomerGiven">Customer Given</label>
+                    <input type="number"
+                           id="basketCustomerGiven"
+                           class="form-control form-control-sm pos-sale-discount-input"
+                           min="0"
+                           step="0.01"
+                           value=""
+                           placeholder="0.00"
+                           inputmode="decimal" />
+                </div>
+                <div class="pos-sale-total-row pos-sale-change-row">
+                    <span>Change</span>
+                    <strong id="basketChange">0.00</strong>
+                </div>
+            }
         </div>
     </section>
 </div>
@@ -179,6 +252,10 @@
     const basketBody = document.getElementById('basketBody');
     const basketEmptyRow = document.getElementById('basketEmptyRow');
     const basketTotalEl = document.getElementById('basketTotal');
+    const basketNetEl = document.getElementById('basketNet');
+    const basketDiscountEl = document.getElementById('basketDiscount');
+    const basketCustomerGivenEl = document.getElementById('basketCustomerGiven');
+    const basketChangeEl = document.getElementById('basketChange');
     const btnClear = document.getElementById('btnClearBasket');
     const btnPrint = document.getElementById('btnPrintReceipt');
     const btnPay = document.getElementById('btnPay');
@@ -189,6 +266,43 @@
 
     function money(n) {
         return Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function parseDiscount() {
+        const raw = Number(basketDiscountEl?.value);
+        if (!Number.isFinite(raw) || raw < 0) return 0;
+        return Math.round(raw * 100) / 100;
+    }
+
+    function parseCustomerGiven() {
+        if (!basketCustomerGivenEl) return null;
+        const rawText = (basketCustomerGivenEl.value || '').trim();
+        if (!rawText) return null;
+        const raw = Number(rawText);
+        if (!Number.isFinite(raw) || raw < 0) return null;
+        return Math.round(raw * 100) / 100;
+    }
+
+    function syncTotalsDisplay(total) {
+        const discount = parseDiscount();
+        const capped = Math.min(discount, total);
+        if (basketDiscountEl && discount !== capped) {
+            basketDiscountEl.value = capped.toFixed(2);
+        }
+        const net = Math.max(0, Math.round((total - capped) * 100) / 100);
+        if (basketTotalEl) basketTotalEl.textContent = money(total);
+        if (basketNetEl) basketNetEl.textContent = money(net);
+
+        const given = parseCustomerGiven();
+        let change = 0;
+        if (given != null && given >= net) {
+            change = Math.round((given - net) * 100) / 100;
+        }
+        if (basketChangeEl) {
+            basketChangeEl.textContent = money(change);
+            basketChangeEl.classList.toggle('text-danger', given != null && given < net);
+        }
+        return { total: total, discount: capped, net: net, customerGiven: given, change: change };
     }
 
     function applyProductFilters() {
@@ -281,6 +395,22 @@
         });
     }
 
+    function roundQty(n) {
+        return Math.round(n * 1000) / 1000;
+    }
+
+    function formatQty(n) {
+        const v = roundQty(Number(n) || 0);
+        if (Number.isInteger(v)) return String(v);
+        return String(v);
+    }
+
+    function parseQtyInput(raw) {
+        const n = Number(String(raw || '').replace(',', '.').trim());
+        if (!Number.isFinite(n) || n <= 0) return null;
+        return roundQty(n);
+    }
+
     basketBody.addEventListener('click', function (e) {
         const btn = e.target.closest('[data-action]');
         if (!btn) return;
@@ -290,14 +420,45 @@
         if (!item) return;
 
         if (action === 'inc') {
-            item.qty += 1;
+            item.qty = roundQty(item.qty + 1);
         } else if (action === 'dec') {
-            item.qty -= 1;
+            item.qty = roundQty(item.qty - 1);
             if (item.qty <= 0) basket.delete(uid);
         } else if (action === 'remove') {
             basket.delete(uid);
         }
         renderBasket();
+    });
+
+    basketBody.addEventListener('change', function (e) {
+        const input = e.target.closest('.pos-qty-input');
+        if (!input) return;
+        const uid = input.getAttribute('data-uid');
+        const item = basket.get(uid);
+        if (!item) return;
+
+        const qty = parseQtyInput(input.value);
+        if (qty == null) {
+            basket.delete(uid);
+        } else {
+            item.qty = qty;
+        }
+        renderBasket();
+    });
+
+    basketBody.addEventListener('keydown', function (e) {
+        const input = e.target.closest('.pos-qty-input');
+        if (!input) return;
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            input.blur();
+        }
+    });
+
+    basketBody.addEventListener('focusin', function (e) {
+        const input = e.target.closest('.pos-qty-input');
+        if (!input) return;
+        requestAnimationFrame(function () { input.select(); });
     });
 
     function basketItems() {
@@ -313,7 +474,9 @@
 
         if (basket.size === 0) {
             basketEmptyRow.style.display = '';
-            basketTotalEl.textContent = money(0);
+            if (basketDiscountEl) basketDiscountEl.value = '0.00';
+            if (basketCustomerGivenEl) basketCustomerGivenEl.value = '';
+            syncTotalsDisplay(0);
             return;
         }
 
@@ -331,7 +494,8 @@
                 '<td class="text-center">' +
                 '<div class="pos-qty-controls">' +
                 '<button type="button" class="btn btn-sm btn-outline-secondary" data-action="dec" data-uid="' + item.uid + '" title="Decrease"><i class="bi bi-dash-lg"></i></button>' +
-                '<span class="pos-qty-value">' + item.qty + '</span>' +
+                '<input type="number" class="form-control form-control-sm pos-qty-input" data-uid="' + item.uid +
+                '" min="0.001" step="0.001" inputmode="decimal" value="' + formatQty(item.qty) + '" title="Enter fraction e.g. 0.5 or 0.25" />' +
                 '<button type="button" class="btn btn-sm btn-outline-secondary" data-action="inc" data-uid="' + item.uid + '" title="Increase"><i class="bi bi-plus-lg"></i></button>' +
                 '</div></td>' +
                 '<td class="text-end fw-semibold">' + money(line) + '</td>' +
@@ -341,7 +505,40 @@
             basketBody.appendChild(tr);
         });
 
-        basketTotalEl.textContent = money(total);
+        syncTotalsDisplay(total);
+    }
+
+    if (basketDiscountEl) {
+        basketDiscountEl.addEventListener('focus', function () {
+            requestAnimationFrame(function () { basketDiscountEl.select(); });
+        });
+        basketDiscountEl.addEventListener('mouseup', function (e) { e.preventDefault(); });
+        basketDiscountEl.addEventListener('input', function () {
+            syncTotalsDisplay(basketTotal());
+        });
+        basketDiscountEl.addEventListener('blur', function () {
+            const totals = syncTotalsDisplay(basketTotal());
+            basketDiscountEl.value = totals.discount.toFixed(2);
+        });
+    }
+
+    if (basketCustomerGivenEl) {
+        basketCustomerGivenEl.addEventListener('focus', function () {
+            requestAnimationFrame(function () { basketCustomerGivenEl.select(); });
+        });
+        basketCustomerGivenEl.addEventListener('mouseup', function (e) { e.preventDefault(); });
+        basketCustomerGivenEl.addEventListener('input', function () {
+            syncTotalsDisplay(basketTotal());
+        });
+        basketCustomerGivenEl.addEventListener('blur', function () {
+            const given = parseCustomerGiven();
+            if (given == null) {
+                basketCustomerGivenEl.value = '';
+            } else {
+                basketCustomerGivenEl.value = given.toFixed(2);
+            }
+            syncTotalsDisplay(basketTotal());
+        });
     }
 
     function formatReceiptDateTime(d) {
@@ -377,7 +574,8 @@
             '.meta-center{font-size:12px;color:#444;text-align:center;margin:2px 0 8px}' +
             'table{width:100%;border-collapse:collapse;margin-top:12px;text-align:left}' +
             'th,td{border-bottom:1px solid #ddd;padding:6px 4px;font-size:13px}' +
-            'th{text-align:left}.total{margin-top:12px;font-size:16px;font-weight:700;text-align:right}' +
+            'th{text-align:left}.totals{margin-top:12px;font-size:14px;text-align:right}' +
+            '.totals div{margin:2px 0}.totals .net{font-size:16px;font-weight:700;margin-top:6px}' +
             '.footer{margin-top:18px;padding-top:10px;border-top:1px dashed #999;font-size:11px;color:#333;text-align:center;line-height:1.45}' +
             '</style></head><body>' +
             '<div class="shop-name">THE FORM SHOP</div>' +
@@ -388,7 +586,11 @@
             '<div class="meta-center">Date: ' + printed.dateText + ' &nbsp;&nbsp; Time: ' + printed.timeText + '</div>' +
             '<table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Amount</th></tr></thead><tbody>' +
             rows + '</tbody></table>' +
-            '<div class="total">Total: ' + money(data.total) + '</div>' +
+            '<div class="totals">' +
+            '<div>Total Amount: ' + money(data.subTotal != null ? data.subTotal : data.total) + '</div>' +
+            ((Number(data.discount) || 0) > 0 ? '<div>Discount: ' + money(data.discount) + '</div>' : '') +
+            '<div class="net">Net Amount: ' + money(data.total) + '</div>' +
+            '</div>' +
             '<div class="footer">Software By: Coditium Solutions<br>Web: www.coditium.com &nbsp; Mob: 0301-8882992</div>' +
             '<script>window.onload=function(){window.print();}<\\/script></body></html>';
     }
@@ -408,22 +610,18 @@
         w.document.close();
     }
 
+    function showPrintReceiptButton() {
+        if (!btnPrint) return;
+        btnPrint.classList.remove('d-none');
+        btnPrint.hidden = false;
+    }
+
     btnPrint.addEventListener('click', function () {
-        const items = basketItems();
-        if (items.length > 0) {
-            printReceipt({
-                items: items,
-                total: basketTotal(),
-                invoiceNo: lastReceipt?.invoiceNo || '',
-                invoiceDate: lastReceipt?.invoiceDate || new Date().toLocaleString()
-            });
+        if (!lastReceipt) {
+            showAlert('warning', 'Pay the invoice first, then print the receipt.');
             return;
         }
-        if (lastReceipt) {
-            printReceipt(lastReceipt);
-            return;
-        }
-        showAlert('warning', 'Basket is empty.');
+        printReceipt(lastReceipt);
     });
 
     btnPay.addEventListener('click', async function () {
@@ -433,7 +631,26 @@
             return;
         }
 
-        if (!confirm('Confirm payment and save this sale?')) return;
+        const totals = syncTotalsDisplay(basketTotal());
+        if (totals.discount > totals.total) {
+            showAlert('warning', 'Discount cannot be greater than the total amount.');
+            return;
+        }
+
+        if (basketCustomerGivenEl && totals.customerGiven != null && totals.customerGiven < totals.net) {
+            showAlert('warning', 'Customer given amount must be at least the net amount.');
+            basketCustomerGivenEl.focus();
+            return;
+        }
+
+        var confirmMsg = 'Confirm payment and save this sale?\nTotal: ' + money(totals.total) +
+            '\nDiscount: ' + money(totals.discount) +
+            '\nNet Amount: ' + money(totals.net);
+        if (totals.customerGiven != null) {
+            confirmMsg += '\nCustomer Given: ' + money(totals.customerGiven) +
+                '\nChange: ' + money(totals.change);
+        }
+        if (!confirm(confirmMsg)) return;
 
         btnPay.disabled = true;
         hideAlert();
@@ -450,6 +667,8 @@
                     clientTransactionId: (window.crypto && crypto.randomUUID)
                         ? crypto.randomUUID()
                         : null,
+                    discountAmount: totals.discount,
+                    customerGivenAmount: totals.customerGiven,
                     items: items.map(function (item) {
                         return {
                             productUid: parseInt(item.uid, 10),
@@ -460,14 +679,23 @@
                 })
             });
 
-            const result = await response.json();
-            if (!response.ok || !result.success) {
-                showAlert('danger', result.message || 'Unable to save the sale.');
+            const raw = await response.text();
+            let result = null;
+            try {
+                result = raw ? JSON.parse(raw) : null;
+            } catch (parseErr) {
+                showAlert('danger', 'Payment failed: ' + (raw || response.statusText || 'unexpected server response').toString().slice(0, 240));
+                return;
+            }
+            if (!response.ok || !result || !result.success) {
+                showAlert('danger', (result && result.message) || 'Unable to save the sale.');
                 return;
             }
 
             lastReceipt = {
                 items: items.map(function (x) { return { ...x }; }),
+                subTotal: totals.total,
+                discount: totals.discount,
                 total: result.netAmount,
                 invoiceNo: result.invoiceNo,
                 invoiceDate: result.invoiceDate ? new Date(result.invoiceDate).toLocaleString() : new Date().toLocaleString()
@@ -475,9 +703,10 @@
 
             basket.clear();
             renderBasket();
+            showPrintReceiptButton();
             showAlert('success', result.message + ' You can print the receipt now.');
         } catch (err) {
-            showAlert('danger', 'Payment failed. Please try again.');
+            showAlert('danger', 'Payment failed. Please try again.' + (err && err.message ? ' (' + err.message + ')' : ''));
         } finally {
             btnPay.disabled = false;
         }

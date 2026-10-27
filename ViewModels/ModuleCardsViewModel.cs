@@ -10,6 +10,8 @@ public sealed class ModuleCardsViewModel
 
     public List<ModuleCardItem> Modules { get; set; } = [];
 
+    public List<ModuleSection> Sections { get; set; } = [];
+
     /// <summary>Cash POS item layout: Grid or Card.</summary>
     public string PosItemLayout { get; set; } = "Grid";
 }

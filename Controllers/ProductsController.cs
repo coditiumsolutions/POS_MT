@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +9,7 @@ using POS_MT.ViewModels;
 
 namespace POS_MT.Controllers;
 
-[Authorize]
+[Authorize(Policy = "ManagerOrAdmin")]
 public class ProductsController : Controller
 {
     private static readonly HashSet<string> AllowedImageExtensions =
@@ -17,6 +17,8 @@ public class ProductsController : Controller
 
     private const long MaxImageBytes = 2 * 1024 * 1024;
     private const string ProductImageFolder = "uploads/products";
+    private const string ProductCodePrefix = "PRD-";
+    private const int ProductCodeStartNumber = 1000;
 
     private readonly POSDbContext _db;
     private readonly IAuditService _audit;
@@ -37,14 +39,37 @@ public class ProductsController : Controller
 
     private void EnsureProductsNav() => _navContext.SetArea("Products");
 
-    private async Task LoadLookups(CancellationToken ct)
+    private void MarkProductCodeReadonly() => ViewBag.ProductCodeReadonly = true;
+
+    private async Task LoadLookups(int? selectedUnitUid = null, CancellationToken ct = default)
     {
         ViewBag.Categories = new SelectList(
             await _db.ProductCategories.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.CategoryName).ToListAsync(ct),
             "Uid", "CategoryName");
-        ViewBag.Units = new SelectList(
-            await _db.ProductUnits.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.UnitName).ToListAsync(ct),
-            "Uid", "UnitName");
+
+        var units = await _db.ProductUnits.AsNoTracking()
+            .Where(x => x.IsActive)
+            .ToListAsync(ct);
+
+        // ProductUnits has duplicate UnitCode rows; show one option per code.
+        var distinctUnits = units
+            .GroupBy(x => x.UnitCode.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderBy(x => x.Uid).First())
+            .OrderBy(x => x.UnitName)
+            .ToList();
+
+        if (selectedUnitUid is int uid && distinctUnits.All(x => x.Uid != uid))
+        {
+            var selected = units.FirstOrDefault(x => x.Uid == uid)
+                ?? await _db.ProductUnits.AsNoTracking().FirstOrDefaultAsync(x => x.Uid == uid, ct);
+            if (selected is not null)
+            {
+                distinctUnits.Add(selected);
+                distinctUnits = distinctUnits.OrderBy(x => x.UnitName).ToList();
+            }
+        }
+
+        ViewBag.Units = new SelectList(distinctUnits, "Uid", "UnitName", selectedUnitUid);
     }
 
     public async Task<IActionResult> Index(CancellationToken ct)
@@ -56,26 +81,40 @@ public class ProductsController : Controller
     public async Task<IActionResult> Create(CancellationToken ct)
     {
         EnsureProductsNav();
-        await LoadLookups(ct);
-        return View(new ProductFormViewModel { IsActive = true });
+        MarkProductCodeReadonly();
+        await LoadLookups(ct: ct);
+        return View(new ProductFormViewModel
+        {
+            IsActive = true,
+            ProductCode = await GenerateNextProductCodeAsync(ct)
+        });
     }
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(ProductFormViewModel model, CancellationToken ct)
     {
         EnsureProductsNav();
+        MarkProductCodeReadonly();
+
+        model.ProductCode = await GenerateNextProductCodeAsync(ct);
+        ModelState.Remove(nameof(model.ProductCode));
+
         await ValidateAndSaveImageAsync(model, existingPath: null, ct);
         if (!ModelState.IsValid)
         {
-            await LoadLookups(ct);
+            await LoadLookups(model.UnitUid, ct);
             return View(model);
         }
 
         if (await _db.Products.AnyAsync(x => x.ProductCode == model.ProductCode, ct))
         {
-            ModelState.AddModelError(nameof(model.ProductCode), "Product code already exists.");
-            await LoadLookups(ct);
-            return View(model);
+            model.ProductCode = await GenerateNextProductCodeAsync(ct);
+            if (await _db.Products.AnyAsync(x => x.ProductCode == model.ProductCode, ct))
+            {
+                ModelState.AddModelError(nameof(model.ProductCode), "Could not generate a unique product code. Please try again.");
+                await LoadLookups(model.UnitUid, ct);
+                return View(model);
+            }
         }
 
         var e = ToEntity(model);
@@ -92,7 +131,7 @@ public class ProductsController : Controller
         EnsureProductsNav();
         var e = await _db.Products.FindAsync([id], ct);
         if (e is null) return NotFound();
-        await LoadLookups(ct);
+        await LoadLookups(e.UnitUid, ct);
         return View(ToForm(e));
     }
 
@@ -108,14 +147,14 @@ public class ProductsController : Controller
         await ValidateAndSaveImageAsync(model, e.ImagePath, ct);
         if (!ModelState.IsValid)
         {
-            await LoadLookups(ct);
+            await LoadLookups(model.UnitUid, ct);
             return View(model);
         }
 
         if (await _db.Products.AnyAsync(x => x.ProductCode == model.ProductCode && x.Uid != id, ct))
         {
             ModelState.AddModelError(nameof(model.ProductCode), "Product code already exists.");
-            await LoadLookups(ct);
+            await LoadLookups(model.UnitUid, ct);
             return View(model);
         }
 
@@ -370,6 +409,26 @@ public class ProductsController : Controller
         await _audit.WriteAsync("Cancel", "Products", e.Uid.ToString(), $"Deactivated {e.ProductCode}", ct);
         TempData["Success"] = "Product deactivated.";
         return RedirectToAction(nameof(Index));
+    }
+
+    private async Task<string> GenerateNextProductCodeAsync(CancellationToken ct)
+    {
+        var existing = await _db.Products.AsNoTracking()
+            .Where(x => x.ProductCode.StartsWith(ProductCodePrefix))
+            .Select(x => x.ProductCode)
+            .ToListAsync(ct);
+
+        var maxNumber = ProductCodeStartNumber - 1;
+        foreach (var code in existing)
+        {
+            var suffix = code.Length > ProductCodePrefix.Length
+                ? code[ProductCodePrefix.Length..]
+                : string.Empty;
+            if (int.TryParse(suffix, out var number) && number > maxNumber)
+                maxNumber = number;
+        }
+
+        return $"{ProductCodePrefix}{maxNumber + 1}";
     }
 
     private async Task ValidateAndSaveImageAsync(ProductFormViewModel model, string? existingPath, CancellationToken ct)

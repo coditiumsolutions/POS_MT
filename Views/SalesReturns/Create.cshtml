@@ -1,0 +1,502 @@
+@model SalesReturnCreateViewModel
+@{
+    ViewData["Title"] = "New Sales Return";
+    string ItemIcon(string? name)
+    {
+        var n = (name ?? "").ToLowerInvariant();
+        if (n.Contains("milk") || n.Contains("dairy") || n.Contains("yogurt") || n.Contains("yoghurt") || n.Contains("cream")) return "bi-cup-straw";
+        if (n.Contains("butter") || n.Contains("ghee") || n.Contains("margarine")) return "bi-droplet-fill";
+        if (n.Contains("cheese") || n.Contains("topping")) return "bi-circle-half";
+        if (n.Contains("bread") || n.Contains("roti") || n.Contains("bun") || n.Contains("loaf")) return "bi-basket2-fill";
+        if (n.Contains("egg")) return "bi-egg-fill";
+        if (n.Contains("rice") || n.Contains("flour") || n.Contains("atta") || n.Contains("grocery") || n.Contains("pulse") || n.Contains("dal")) return "bi-bag-fill";
+        if (n.Contains("oil") || n.Contains("spice") || n.Contains("salt") || n.Contains("sugar") || n.Contains("extra")) return "bi-box-seam-fill";
+        if (n.Contains("fruit") || n.Contains("apple") || n.Contains("banana") || n.Contains("mango") || n.Contains("orange")) return "bi-apple";
+        if (n.Contains("veg") || n.Contains("salad") || n.Contains("tomato") || n.Contains("onion")) return "bi-flower1";
+        if (n.Contains("meat") || n.Contains("mutton") || n.Contains("beef") || n.Contains("bbq") || n.Contains("b.b.q") || n.Contains("barbe")) return "bi-fire";
+        if (n.Contains("chicken") || n.Contains("broast") || n.Contains("crispy")) return "bi-egg-fill";
+        if (n.Contains("fish") || n.Contains("seafood")) return "bi-water";
+        if (n.Contains("pizza") || n.Contains("calzone")) return "bi-pie-chart-fill";
+        if (n.Contains("burger") || n.Contains("sandwich")) return "bi-layers-fill";
+        if (n.Contains("fries") || n.Contains("fry") || n.Contains("chips")) return "bi-grid-3x2-gap-fill";
+        if (n.Contains("pasta") || n.Contains("lasagna") || n.Contains("noodle")) return "bi-intersect";
+        if (n.Contains("roll") || n.Contains("wrap")) return "bi-receipt";
+        if (n.Contains("drink") || n.Contains("juice") || n.Contains("beverage") || n.Contains("soda") || n.Contains("water") || n.Contains("tea") || n.Contains("coffee")) return "bi-cup-hot-fill";
+        if (n.Contains("ice") || n.Contains("dessert") || n.Contains("sweet") || n.Contains("cake")) return "bi-snow2";
+        if (n.Contains("deal") || n.Contains("combo") || n.Contains("offer")) return "bi-tags-fill";
+        if (n.Contains("deliver")) return "bi-truck";
+        if (n.Contains("dawn") || n.Contains("brand")) return "bi-buildings-fill";
+        return "bi-box2-fill";
+    }
+
+    string CardPrice(decimal price)
+        => price == decimal.Truncate(price) ? $"Rs. {price:0}" : $"Rs. {price:N2}";
+
+    string IconTone(string? name)
+    {
+        var tones = new[] { "blue", "orange", "green", "pink", "teal", "violet", "amber", "rose" };
+        var key = name ?? string.Empty;
+        var hash = 0;
+        foreach (var ch in key)
+        {
+            hash = (hash * 31) + ch;
+        }
+        return tones[(hash & 0x7fffffff) % tones.Length];
+    }
+}
+@Html.AntiForgeryToken()
+
+<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+    <div>
+        <h1 class="page-heading mb-1">New Sales Return</h1>
+        <p class="text-muted mb-0">Pick items to restock. Amount is deducted from sales totals.</p>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm" asp-action="Index">All Returns</a>
+</div>
+
+<div id="posAlert" class="alert d-none mb-2" role="alert"></div>
+
+<div class="row g-2 mb-2">
+    <div class="col-md-4">
+        <label class="form-label mb-1" for="originalInvoiceNo">Original invoice (optional)</label>
+        <input type="text" id="originalInvoiceNo" class="form-control form-control-sm" maxlength="50" placeholder="e.g. POS-C-..." />
+    </div>
+    <div class="col-md-8">
+        <label class="form-label mb-1" for="returnReason">Reason (optional)</label>
+        <input type="text" id="returnReason" class="form-control form-control-sm" maxlength="400" placeholder="Damaged, wrong item, customer request..." />
+    </div>
+</div>
+
+<div class="pos-sale-layout @(Model.UseCardLayout ? "pos-sale-layout--cards" : "")">
+    <section class="pos-sale-panel">
+        <div class="pos-sale-panel-header pos-sale-panel-header--search">
+            <input type="search" id="productSearch" class="form-control form-control-sm" placeholder="Search items..." />
+        </div>
+        <div class="pos-category-toolbar @(Model.UseCardLayout ? "pos-category-tiles" : "")" id="posCategoryToolbar" role="group" aria-label="Product categories">
+            @{
+                var catTone = 0;
+            }
+            <button type="button"
+                    class="btn btn-sm btn-outline-secondary pos-category-btn @(Model.UseCardLayout ? $"pos-cat-tone-{catTone++ % 12} active" : "active")"
+                    data-category-uid="">
+                @if (Model.UseCardLayout)
+                {
+                    <span class="pos-cat-accent" aria-hidden="true"></span>
+                    <span class="pos-cat-icon" aria-hidden="true"><i class="bi bi-grid-fill"></i></span>
+                    <span class="pos-cat-label">All Items</span>
+                }
+                else
+                {
+                    @:All
+                }
+            </button>
+            @foreach (var cat in Model.Categories)
+            {
+                <button type="button"
+                        class="btn btn-sm btn-outline-secondary pos-category-btn @(Model.UseCardLayout ? $"pos-cat-tone-{catTone++ % 12}" : null)"
+                        data-category-uid="@cat.Uid">
+                    @if (Model.UseCardLayout)
+                    {
+                        <span class="pos-cat-accent" aria-hidden="true"></span>
+                        <span class="pos-cat-icon" aria-hidden="true"><i class="bi @ItemIcon(cat.CategoryName)"></i></span>
+                        <span class="pos-cat-label">@cat.CategoryName</span>
+                    }
+                    else
+                    {
+                        @cat.CategoryName
+                    }
+                </button>
+            }
+        </div>
+        @if (Model.UseCardLayout)
+        {
+            <div class="pos-product-cards" id="productsTable">
+                @foreach (var item in Model.Products)
+                {
+                    var iconSource = string.IsNullOrWhiteSpace(item.CategoryName) ? item.ProductName : item.ProductName + " " + item.CategoryName;
+                    <button type="button"
+                            class="pos-item-card pos-product-row"
+                            data-uid="@item.Uid"
+                            data-code="@item.ProductCode"
+                            data-name="@item.ProductName"
+                            data-category-uid="@(item.CategoryUid?.ToString() ?? "")"
+                            data-price="@item.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                            title="@item.ProductCode">
+                        @if (!string.IsNullOrWhiteSpace(item.ImagePath))
+                        {
+                            <img class="pos-item-card-photo" src="@item.ImagePath" alt="" />
+                        }
+                        else
+                        {
+                            <span class="pos-icon-tile pos-icon-tile--lg pos-icon-tone-@IconTone(iconSource)" aria-hidden="true">
+                                <i class="bi @ItemIcon(iconSource)"></i>
+                            </span>
+                        }
+                        <span class="pos-item-card-name">@item.ProductName</span>
+                        <span class="pos-item-card-price">@CardPrice(item.SalePrice)</span>
+                    </button>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive pos-sale-table-wrap">
+                <table class="table table-hover table-sm align-middle mb-0" id="productsTable">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th class="text-end">Price</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var item in Model.Products)
+                    {
+                        <tr class="pos-product-row"
+                            data-uid="@item.Uid"
+                            data-code="@item.ProductCode"
+                            data-name="@item.ProductName"
+                            data-category-uid="@(item.CategoryUid?.ToString() ?? "")"
+                            data-price="@item.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                            tabindex="0">
+                            <td>@item.ProductCode</td>
+                            <td>@item.ProductName</td>
+                            <td class="text-end">@item.SalePrice.ToString("N2")</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+        @if (Model.Products.Count == 0)
+        {
+            <div class="p-3 text-muted">No active products found.</div>
+        }
+    </section>
+
+    <section class="pos-sale-panel">
+        <div class="pos-sale-panel-header">
+            <h2 class="pos-sale-panel-title">Return basket</h2>
+            <div class="pos-sale-toolbar">
+                <button type="button" id="btnSaveReturn" class="btn btn-warning btn-sm">
+                    <i class="bi bi-arrow-return-left" aria-hidden="true"></i> Save Return
+                </button>
+                <button type="button" id="btnClearBasket" class="btn btn-outline-danger btn-sm" title="Clear basket">
+                    <i class="bi bi-trash" aria-hidden="true"></i> Clear
+                </button>
+            </div>
+        </div>
+        <div class="table-responsive pos-sale-table-wrap">
+            <table class="table table-sm align-middle mb-0" id="basketTable">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th class="text-end">Price</th>
+                        <th class="text-center">Qty</th>
+                        <th class="text-end">Line</th>
+                        <th class="text-center" style="width:3rem;"></th>
+                    </tr>
+                </thead>
+                <tbody id="basketBody">
+                    <tr id="basketEmptyRow">
+                        <td colspan="5" class="text-muted text-center py-4">Basket is empty.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="pos-sale-totals">
+            <div class="pos-sale-total-row pos-sale-net-row">
+                <span>Return Amount</span>
+                <strong id="basketTotal" class="text-danger">0.00</strong>
+            </div>
+        </div>
+    </section>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    const saveUrl = '@Url.Action("SaveReturn", "SalesReturns")';
+    const detailsUrlBase = '@Url.Action("Details", "SalesReturns")';
+    const antiforgery = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+    const basket = new Map();
+    let selectedUid = null;
+
+    const productsTable = document.getElementById('productsTable');
+    const cardLayout = productsTable?.classList.contains('pos-product-cards') === true;
+    const basketBody = document.getElementById('basketBody');
+    const basketEmptyRow = document.getElementById('basketEmptyRow');
+    const basketTotalEl = document.getElementById('basketTotal');
+    const btnClear = document.getElementById('btnClearBasket');
+    const btnSave = document.getElementById('btnSaveReturn');
+    const searchInput = document.getElementById('productSearch');
+    const categoryToolbar = document.getElementById('posCategoryToolbar');
+    const alertBox = document.getElementById('posAlert');
+    let activeCategoryUid = '';
+
+    function money(n) {
+        return Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function applyProductFilters() {
+        const q = (searchInput?.value || '').trim().toLowerCase();
+        productsTable.querySelectorAll('.pos-product-row').forEach(function (row) {
+            const text = (row.getAttribute('data-code') + ' ' + row.getAttribute('data-name')).toLowerCase();
+            const rowCategory = row.getAttribute('data-category-uid') || '';
+            const matchesSearch = !q || text.indexOf(q) !== -1;
+            const matchesCategory = !activeCategoryUid || rowCategory === activeCategoryUid;
+            row.style.display = matchesSearch && matchesCategory ? '' : 'none';
+        });
+    }
+
+    function showAlert(type, message) {
+        alertBox.className = 'alert alert-' + type;
+        alertBox.textContent = message;
+        alertBox.classList.remove('d-none');
+    }
+
+    function hideAlert() {
+        alertBox.classList.add('d-none');
+    }
+
+    function getSelectedRow() {
+        if (selectedUid == null) return null;
+        return productsTable.querySelector('.pos-product-row[data-uid="' + selectedUid + '"]');
+    }
+
+    function selectRow(row) {
+        productsTable.querySelectorAll('.pos-product-row.selected').forEach(r => r.classList.remove('selected'));
+        if (!row) {
+            selectedUid = null;
+            return;
+        }
+        row.classList.add('selected');
+        selectedUid = row.getAttribute('data-uid');
+    }
+
+    productsTable.addEventListener('click', function (e) {
+        const row = e.target.closest('.pos-product-row');
+        if (!row) return;
+        selectRow(row);
+        if (cardLayout) addSelected();
+    });
+
+    if (!cardLayout) {
+        productsTable.addEventListener('dblclick', function (e) {
+            const row = e.target.closest('.pos-product-row');
+            if (!row) return;
+            selectRow(row);
+            addSelected();
+        });
+    }
+
+    function addSelected() {
+        const row = getSelectedRow();
+        if (!row) return;
+        const uid = row.getAttribute('data-uid');
+        const code = row.getAttribute('data-code');
+        const name = row.getAttribute('data-name');
+        const price = parseFloat(row.getAttribute('data-price'));
+        if (basket.has(uid)) {
+            basket.get(uid).qty += 1;
+        } else {
+            basket.set(uid, { uid, code, name, price, qty: 1 });
+        }
+        hideAlert();
+        renderBasket();
+    }
+
+    btnClear.addEventListener('click', function () {
+        if (basket.size === 0) return;
+        if (!confirm('Clear all items from the return basket?')) return;
+        basket.clear();
+        renderBasket();
+    });
+
+    searchInput.addEventListener('input', applyProductFilters);
+
+    if (categoryToolbar) {
+        categoryToolbar.addEventListener('click', function (e) {
+            const btn = e.target.closest('.pos-category-btn');
+            if (!btn) return;
+            categoryToolbar.querySelectorAll('.pos-category-btn').forEach(function (b) {
+                b.classList.remove('active');
+            });
+            btn.classList.add('active');
+            activeCategoryUid = btn.getAttribute('data-category-uid') || '';
+            applyProductFilters();
+        });
+    }
+
+    function roundQty(n) {
+        return Math.round(n * 1000) / 1000;
+    }
+
+    function formatQty(n) {
+        const v = roundQty(Number(n) || 0);
+        return String(v);
+    }
+
+    function parseQtyInput(raw) {
+        const n = Number(String(raw || '').replace(',', '.').trim());
+        if (!Number.isFinite(n) || n <= 0) return null;
+        return roundQty(n);
+    }
+
+    basketBody.addEventListener('click', function (e) {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const uid = btn.getAttribute('data-uid');
+        const action = btn.getAttribute('data-action');
+        const item = basket.get(uid);
+        if (!item) return;
+
+        if (action === 'inc') {
+            item.qty = roundQty(item.qty + 1);
+        } else if (action === 'dec') {
+            item.qty = roundQty(item.qty - 1);
+            if (item.qty <= 0) basket.delete(uid);
+        } else if (action === 'remove') {
+            basket.delete(uid);
+        }
+        renderBasket();
+    });
+
+    basketBody.addEventListener('change', function (e) {
+        const input = e.target.closest('.pos-qty-input');
+        if (!input) return;
+        const uid = input.getAttribute('data-uid');
+        const item = basket.get(uid);
+        if (!item) return;
+        const qty = parseQtyInput(input.value);
+        if (qty == null) basket.delete(uid);
+        else item.qty = qty;
+        renderBasket();
+    });
+
+    basketBody.addEventListener('keydown', function (e) {
+        const input = e.target.closest('.pos-qty-input');
+        if (!input) return;
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            input.blur();
+        }
+    });
+
+    basketBody.addEventListener('focusin', function (e) {
+        const input = e.target.closest('.pos-qty-input');
+        if (!input) return;
+        requestAnimationFrame(function () { input.select(); });
+    });
+
+    function basketItems() {
+        return Array.from(basket.values());
+    }
+
+    function basketTotal() {
+        return basketItems().reduce((sum, item) => sum + (item.price * item.qty), 0);
+    }
+
+    function renderBasket() {
+        basketBody.querySelectorAll('tr:not(#basketEmptyRow)').forEach(r => r.remove());
+
+        if (basket.size === 0) {
+            basketEmptyRow.style.display = '';
+            if (basketTotalEl) basketTotalEl.textContent = money(0);
+            return;
+        }
+
+        basketEmptyRow.style.display = 'none';
+        let total = 0;
+
+        basket.forEach(function (item) {
+            const line = item.price * item.qty;
+            total += line;
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td><div class="fw-semibold">' + escapeHtml(item.name) + '</div>' +
+                '<div class="small text-muted">' + escapeHtml(item.code) + '</div></td>' +
+                '<td class="text-end">' + money(item.price) + '</td>' +
+                '<td class="text-center">' +
+                '<div class="pos-qty-controls">' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary" data-action="dec" data-uid="' + item.uid + '" title="Decrease"><i class="bi bi-dash-lg"></i></button>' +
+                '<input type="number" class="form-control form-control-sm pos-qty-input" data-uid="' + item.uid +
+                '" min="0.001" step="0.001" inputmode="decimal" value="' + formatQty(item.qty) + '" title="Enter fraction e.g. 0.5 or 0.25" />' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary" data-action="inc" data-uid="' + item.uid + '" title="Increase"><i class="bi bi-plus-lg"></i></button>' +
+                '</div></td>' +
+                '<td class="text-end fw-semibold">' + money(line) + '</td>' +
+                '<td class="text-center">' +
+                '<button type="button" class="btn btn-sm btn-outline-danger" data-action="remove" data-uid="' + item.uid + '" title="Remove"><i class="bi bi-x-lg"></i></button>' +
+                '</td>';
+            basketBody.appendChild(tr);
+        });
+
+        if (basketTotalEl) basketTotalEl.textContent = money(total);
+    }
+
+    btnSave.addEventListener('click', async function () {
+        const items = basketItems();
+        if (items.length === 0) {
+            showAlert('warning', 'Add items to the return basket before saving.');
+            return;
+        }
+
+        const total = basketTotal();
+        if (!confirm('Confirm sales return?\nReturn Amount: ' + money(total) +
+            '\nStock will be restored and sales total reduced.')) return;
+
+        btnSave.disabled = true;
+        hideAlert();
+
+        try {
+            const response = await fetch(saveUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': antiforgery
+                },
+                body: JSON.stringify({
+                    originalInvoiceNo: document.getElementById('originalInvoiceNo')?.value || null,
+                    reason: document.getElementById('returnReason')?.value || null,
+                    items: items.map(function (item) {
+                        return {
+                            productUid: parseInt(item.uid, 10),
+                            quantity: item.qty,
+                            unitPrice: item.price
+                        };
+                    })
+                })
+            });
+
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+                showAlert('danger', result.message || 'Unable to save the return.');
+                return;
+            }
+
+            basket.clear();
+            renderBasket();
+            showAlert('success', result.message);
+            if (result.invoiceUid) {
+                setTimeout(function () {
+                    window.location.href = detailsUrlBase + '/' + result.invoiceUid;
+                }, 800);
+            }
+        } catch (err) {
+            showAlert('danger', 'Save failed. Please try again.');
+        } finally {
+            btnSave.disabled = false;
+        }
+    });
+
+    function escapeHtml(s) {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+})();
+</script>
+}

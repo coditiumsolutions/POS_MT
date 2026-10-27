@@ -52,6 +52,17 @@ public interface IInventoryLedgerService
         int? terminalUid,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Restock products for a sales return document (increases inventory).</summary>
+    Task ApplyReturnAsync(
+        int returnInvoiceUid,
+        string returnNo,
+        IReadOnlyList<InventoryLineMovement> lines,
+        int? warehouseUid,
+        int? branchUid,
+        int? userUid,
+        int? terminalUid,
+        CancellationToken cancellationToken = default);
+
     Task ApplyPurchaseAsync(
         int purchaseInvoiceUid,
         string purchaseInvoiceNo,

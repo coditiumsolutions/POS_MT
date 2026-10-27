@@ -1,10 +1,20 @@
 ﻿@model ProductCategoryFormViewModel
+@{
+    var categoryCodeReadonly = ViewBag.CategoryCodeReadonly as bool? == true;
+}
 <div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
 <div class="invoice-meta-grid invoice-meta-form">
     <div class="invoice-meta-row">
         <label asp-for="CategoryCode" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <input asp-for="CategoryCode" class="form-control form-control-sm invoice-meta-input" />
+            @if (categoryCodeReadonly)
+            {
+                <input asp-for="CategoryCode" class="form-control form-control-sm invoice-meta-input" readonly />
+            }
+            else
+            {
+                <input asp-for="CategoryCode" class="form-control form-control-sm invoice-meta-input" />
+            }
             <span asp-validation-for="CategoryCode" class="text-danger"></span>
         </div>
         <label asp-for="CategoryName" class="invoice-meta-title"></label>
@@ -14,21 +24,13 @@
         </div>
     </div>
     <div class="invoice-meta-row">
-        <label asp-for="ParentCategoryUid" class="invoice-meta-title"></label>
+        <label asp-for="Description" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <select asp-for="ParentCategoryUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Parents">
-                <option value="">-- None --</option>
-            </select>
+            <textarea asp-for="Description" class="form-control form-control-sm invoice-meta-input" rows="2"></textarea>
         </div>
         <label asp-for="IsActive" class="invoice-meta-title"></label>
         <div class="invoice-meta-field d-flex align-items-center">
             <input asp-for="IsActive" class="form-check-input m-0" />
-        </div>
-    </div>
-    <div class="invoice-meta-row">
-        <label asp-for="Description" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field invoice-meta-field-span">
-            <textarea asp-for="Description" class="form-control form-control-sm invoice-meta-input" rows="2"></textarea>
         </div>
     </div>
 </div>

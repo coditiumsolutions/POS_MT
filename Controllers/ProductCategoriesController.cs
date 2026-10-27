@@ -1,6 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using POS_MT.Data;
 using POS_MT.Interfaces;
@@ -9,9 +8,12 @@ using POS_MT.ViewModels;
 
 namespace POS_MT.Controllers;
 
-[Authorize]
+[Authorize(Policy = "ManagerOrAdmin")]
 public class ProductCategoriesController : Controller
 {
+    private const string CategoryCodePrefix = "CAT-";
+    private const int CategoryCodeStartNumber = 1000;
+
     private readonly POSDbContext _db;
     private readonly IAuditService _audit;
     private readonly INavContextService _navContext;
@@ -25,12 +27,7 @@ public class ProductCategoriesController : Controller
 
     private void EnsureProductsNav() => _navContext.SetArea("Products");
 
-    private async Task LoadParents(int? excludeId = null, CancellationToken ct = default)
-    {
-        var q = _db.ProductCategories.AsNoTracking().Where(x => x.IsActive);
-        if (excludeId.HasValue) q = q.Where(x => x.Uid != excludeId.Value);
-        ViewBag.Parents = new SelectList(await q.OrderBy(x => x.CategoryName).ToListAsync(ct), "Uid", "CategoryName");
-    }
+    private void MarkCategoryCodeReadonly() => ViewBag.CategoryCodeReadonly = true;
 
     public async Task<IActionResult> Index(CancellationToken ct)
     {
@@ -41,32 +38,40 @@ public class ProductCategoriesController : Controller
     public async Task<IActionResult> Create(CancellationToken ct)
     {
         EnsureProductsNav();
-        await LoadParents(ct: ct);
-        return View(new ProductCategoryFormViewModel { IsActive = true });
+        MarkCategoryCodeReadonly();
+        return View(new ProductCategoryFormViewModel
+        {
+            IsActive = true,
+            CategoryCode = await GenerateNextCategoryCodeAsync(ct)
+        });
     }
 
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(ProductCategoryFormViewModel model, CancellationToken ct)
     {
         EnsureProductsNav();
+        MarkCategoryCodeReadonly();
+
+        model.CategoryCode = await GenerateNextCategoryCodeAsync(ct);
+        ModelState.Remove(nameof(model.CategoryCode));
+
         if (!ModelState.IsValid)
-        {
-            await LoadParents(ct: ct);
             return View(model);
-        }
 
         if (await _db.ProductCategories.AnyAsync(x => x.CategoryCode == model.CategoryCode, ct))
         {
-            ModelState.AddModelError(nameof(model.CategoryCode), "Category code already exists.");
-            await LoadParents(ct: ct);
-            return View(model);
+            model.CategoryCode = await GenerateNextCategoryCodeAsync(ct);
+            if (await _db.ProductCategories.AnyAsync(x => x.CategoryCode == model.CategoryCode, ct))
+            {
+                ModelState.AddModelError(nameof(model.CategoryCode), "Could not generate a unique category code. Please try again.");
+                return View(model);
+            }
         }
 
         var e = new ProductCategory
         {
             CategoryCode = model.CategoryCode.Trim(),
             CategoryName = model.CategoryName.Trim(),
-            ParentCategoryUid = model.ParentCategoryUid,
             Description = model.Description,
             IsActive = model.IsActive,
             CreatedDate = DateTime.Now
@@ -83,13 +88,11 @@ public class ProductCategoriesController : Controller
         EnsureProductsNav();
         var e = await _db.ProductCategories.FindAsync([id], ct);
         if (e is null) return NotFound();
-        await LoadParents(id, ct);
         return View(new ProductCategoryFormViewModel
         {
             Uid = e.Uid,
             CategoryCode = e.CategoryCode,
             CategoryName = e.CategoryName,
-            ParentCategoryUid = e.ParentCategoryUid,
             Description = e.Description,
             IsActive = e.IsActive
         });
@@ -101,23 +104,18 @@ public class ProductCategoriesController : Controller
         EnsureProductsNav();
         if (id != model.Uid) return BadRequest();
         if (!ModelState.IsValid)
-        {
-            await LoadParents(id, ct);
             return View(model);
-        }
 
         var e = await _db.ProductCategories.FindAsync([id], ct);
         if (e is null) return NotFound();
         if (await _db.ProductCategories.AnyAsync(x => x.CategoryCode == model.CategoryCode && x.Uid != id, ct))
         {
             ModelState.AddModelError(nameof(model.CategoryCode), "Category code already exists.");
-            await LoadParents(id, ct);
             return View(model);
         }
 
         e.CategoryCode = model.CategoryCode.Trim();
         e.CategoryName = model.CategoryName.Trim();
-        e.ParentCategoryUid = model.ParentCategoryUid;
         e.Description = model.Description;
         e.IsActive = model.IsActive;
         e.UpdatedDate = DateTime.Now;
@@ -187,5 +185,25 @@ public class ProductCategoriesController : Controller
         }
 
         return RedirectToAction(nameof(Index));
+    }
+
+    private async Task<string> GenerateNextCategoryCodeAsync(CancellationToken ct)
+    {
+        var existing = await _db.ProductCategories.AsNoTracking()
+            .Where(x => x.CategoryCode.StartsWith(CategoryCodePrefix))
+            .Select(x => x.CategoryCode)
+            .ToListAsync(ct);
+
+        var maxNumber = CategoryCodeStartNumber - 1;
+        foreach (var code in existing)
+        {
+            var suffix = code.Length > CategoryCodePrefix.Length
+                ? code[CategoryCodePrefix.Length..]
+                : string.Empty;
+            if (int.TryParse(suffix, out var number) && number > maxNumber)
+                maxNumber = number;
+        }
+
+        return $"{CategoryCodePrefix}{maxNumber + 1}";
     }
 }

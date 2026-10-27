@@ -206,6 +206,8 @@ public sealed class CentralSyncWorker : BackgroundService
                 OtherCharges = localInvoice.OtherCharges,
                 NetAmount = localInvoice.NetAmount,
                 PaidAmount = localInvoice.PaidAmount,
+                CustomerGivenAmount = localInvoice.CustomerGivenAmount,
+                ChangeGivenAmount = localInvoice.ChangeGivenAmount,
                 BalanceAmount = localInvoice.BalanceAmount,
                 PaymentStatus = localInvoice.PaymentStatus,
                 InvoiceStatus = localInvoice.InvoiceStatus,
@@ -225,6 +227,8 @@ public sealed class CentralSyncWorker : BackgroundService
             centralInvoice.OtherCharges = localInvoice.OtherCharges;
             centralInvoice.NetAmount = localInvoice.NetAmount;
             centralInvoice.PaidAmount = localInvoice.PaidAmount;
+            centralInvoice.CustomerGivenAmount = localInvoice.CustomerGivenAmount;
+            centralInvoice.ChangeGivenAmount = localInvoice.ChangeGivenAmount;
             centralInvoice.BalanceAmount = localInvoice.BalanceAmount;
             centralInvoice.PaymentStatus = localInvoice.PaymentStatus;
             centralInvoice.InvoiceStatus = localInvoice.InvoiceStatus;

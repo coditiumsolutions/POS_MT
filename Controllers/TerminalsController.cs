@@ -1,7 +1,7 @@
-﻿using Microsoft.AspNetCore.Authorization; using Microsoft.AspNetCore.Mvc; using Microsoft.AspNetCore.Mvc.Rendering; using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization; using Microsoft.AspNetCore.Mvc; using Microsoft.AspNetCore.Mvc.Rendering; using Microsoft.EntityFrameworkCore;
 using POS_MT.Data; using POS_MT.Interfaces; using POS_MT.Models; using POS_MT.ViewModels;
 namespace POS_MT.Controllers;
-[Authorize]
+[Authorize(Policy = "AdminOnly")]
 public class TerminalsController : Controller {
   private readonly POSDbContext _db; private readonly IAuditService _audit;
   public TerminalsController(POSDbContext db, IAuditService audit){ _db=db; _audit=audit; }

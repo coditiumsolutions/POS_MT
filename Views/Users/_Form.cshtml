@@ -33,10 +33,10 @@
         <label asp-for="RoleName" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
             <select asp-for="RoleName" class="form-select form-select-sm invoice-meta-input">
-                <option>Admin</option>
-                <option>Manager</option>
-                <option>Cashier</option>
-                <option>Viewer</option>
+                <option value="Administrator">Administrator</option>
+                <option value="Manager">Manager</option>
+                <option value="Cashier">Cashier</option>
+                <option value="Viewer">Viewer</option>
             </select>
             <span asp-validation-for="RoleName" class="text-danger"></span>
         </div>

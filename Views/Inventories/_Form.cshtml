@@ -16,31 +16,33 @@
     <div class="invoice-meta-row">
         <label asp-for="QuantityIn" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <input asp-for="QuantityIn" class="form-control form-control-sm invoice-meta-input" />
+            <input asp-for="QuantityIn" class="form-control form-control-sm invoice-meta-input" readonly />
+            <span class="form-text">Updated by purchases / adjustments only.</span>
         </div>
         <label asp-for="QuantityOut" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <input asp-for="QuantityOut" class="form-control form-control-sm invoice-meta-input" />
+            <input asp-for="QuantityOut" class="form-control form-control-sm invoice-meta-input" readonly />
         </div>
     </div>
     <div class="invoice-meta-row">
         <label asp-for="CurrentQuantity" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <input asp-for="CurrentQuantity" class="form-control form-control-sm invoice-meta-input" />
+            <input asp-for="CurrentQuantity" class="form-control form-control-sm invoice-meta-input" readonly />
+            <span class="form-text">Use Stock Adjustments to change stock.</span>
         </div>
         <label asp-for="AverageCost" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <input asp-for="AverageCost" class="form-control form-control-sm invoice-meta-input" />
+            <input asp-for="AverageCost" class="form-control form-control-sm invoice-meta-input" readonly />
         </div>
     </div>
     <div class="invoice-meta-row">
         <label asp-for="LastPurchasePrice" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <input asp-for="LastPurchasePrice" class="form-control form-control-sm invoice-meta-input" />
+            <input asp-for="LastPurchasePrice" class="form-control form-control-sm invoice-meta-input" readonly />
         </div>
         <label asp-for="LastSalePrice" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <input asp-for="LastSalePrice" class="form-control form-control-sm invoice-meta-input" />
+            <input asp-for="LastSalePrice" class="form-control form-control-sm invoice-meta-input" readonly />
         </div>
     </div>
     <div class="invoice-meta-row">

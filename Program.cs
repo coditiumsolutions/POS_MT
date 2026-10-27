@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 using POS_MT.Cli;
 using POS_MT.Services;
 
@@ -58,7 +60,30 @@ builder.Services.AddAuthorization(options =>
         .Build();
 
     options.AddPolicy("AdminOnly", policy => policy.RequireRole(AppRoles.Administrator));
-    options.AddPolicy("ManagerOrAdmin", policy => policy.RequireRole(AppRoles.Administrator, AppRoles.Manager));
+    options.AddPolicy("ManagerOrAdmin", policy =>
+        policy.RequireRole(AppRoles.Administrator, AppRoles.Manager));
+    options.AddPolicy("Staff", policy =>
+        policy.RequireRole(AppRoles.Administrator, AppRoles.Manager, AppRoles.Cashier));
+    options.AddPolicy("CanViewSales", policy =>
+        policy.RequireRole(AppRoles.Administrator, AppRoles.Manager, AppRoles.Cashier, AppRoles.Viewer));
+});
+
+builder.Services.AddMemoryCache();
+builder.Services.AddHsts(options =>
+{
+    options.MaxAge = TimeSpan.FromDays(365);
+    options.IncludeSubDomains = true;
+    options.Preload = true;
+});
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("login", limiter =>
+    {
+        limiter.PermitLimit = 10;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+    });
 });
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -82,8 +107,20 @@ else
     app.UseDeveloperExceptionPage();
 }
 
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+    context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
+    context.Response.Headers["Content-Security-Policy"] =
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'";
+    await next();
+});
+
 app.UseStaticFiles();
 app.UseRouting();
+app.UseRateLimiter();
 app.UseSession();
 app.UseAuthentication();
 app.UseAuthorization();

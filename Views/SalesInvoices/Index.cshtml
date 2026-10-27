@@ -75,6 +75,22 @@
                 }
             </select>
         </div>
+        <div class="col-sm-6 col-md-4 col-lg-2">
+            <label class="form-label mb-1" for="dateFrom">Date From</label>
+            <input type="date"
+                   class="form-control form-control-sm"
+                   id="dateFrom"
+                   name="dateFrom"
+                   value="@(Model.DateFrom?.ToString("yyyy-MM-dd") ?? string.Empty)" />
+        </div>
+        <div class="col-sm-6 col-md-4 col-lg-2">
+            <label class="form-label mb-1" for="dateTo">Date To</label>
+            <input type="date"
+                   class="form-control form-control-sm"
+                   id="dateTo"
+                   name="dateTo"
+                   value="@(Model.DateTo?.ToString("yyyy-MM-dd") ?? string.Empty)" />
+        </div>
         <div class="col-auto">
             <button type="submit" class="btn btn-primary btn-sm">Apply</button>
             <a class="btn btn-outline-secondary btn-sm" asp-action="Index">Clear</a>

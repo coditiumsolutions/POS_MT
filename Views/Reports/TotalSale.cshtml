@@ -94,12 +94,20 @@
             {
                 <tr>
                     <td>
-                        <a asp-controller="SalesInvoices" asp-action="Details" asp-route-id="@row.Uid">@row.InvoiceNo</a>
+                        @if (string.Equals(row.SaleType, "Return", StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(row.InvoiceStatus, "Return", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <a asp-controller="SalesReturns" asp-action="Details" asp-route-id="@row.Uid">@row.InvoiceNo</a>
+                        }
+                        else
+                        {
+                            <a asp-controller="SalesInvoices" asp-action="Details" asp-route-id="@row.Uid">@row.InvoiceNo</a>
+                        }
                     </td>
                     <td>@row.InvoiceDate.ToString("dd-MMM-yyyy")</td>
                     <td>@row.CustomerName</td>
                     <td>@row.SaleType</td>
-                    <td class="text-end">@row.NetAmount.ToString("N2")</td>
+                    <td class="text-end @(string.Equals(row.SaleType, "Return", StringComparison.OrdinalIgnoreCase) || row.NetAmount < 0 ? "text-danger" : null)">@row.NetAmount.ToString("N2")</td>
                     <td class="text-end">@row.PaidAmount.ToString("N2")</td>
                     <td>@row.InvoiceStatus</td>
                     <td>@row.PaymentStatus</td>

@@ -9,7 +9,7 @@ using System.Globalization;
 
 namespace POS_MT.Controllers;
 
-[Authorize]
+[Authorize(Policy = "ManagerOrAdmin")]
 public class ReportsController : Controller
 {
     private readonly POSDbContext _db;
@@ -87,14 +87,16 @@ public class ReportsController : Controller
                 InvoiceNo = x.inv.InvoiceNo,
                 InvoiceDate = x.inv.InvoiceDate,
                 CustomerName = x.c != null ? x.c.CustomerName : "—",
-                SaleType = x.c == null
-                    ? "—"
-                    : (x.c.CustomerCode == "C001" ||
-                       x.c.CustomerName.Contains("Walk-in") ||
-                       x.c.CustomerName.Contains("Walk-In") ||
-                       x.c.CustomerName.Contains("Walk In")
-                        ? "Walk-in"
-                        : "Monthly"),
+                SaleType = x.inv.InvoiceStatus == SalesReturnsController.ReturnStatus
+                    ? "Return"
+                    : (x.c == null
+                        ? "—"
+                        : (x.c.CustomerCode == "C001" ||
+                           x.c.CustomerName.Contains("Walk-in") ||
+                           x.c.CustomerName.Contains("Walk-In") ||
+                           x.c.CustomerName.Contains("Walk In")
+                            ? "Walk-in"
+                            : "Monthly")),
                 NetAmount = x.inv.NetAmount,
                 PaidAmount = x.inv.PaidAmount,
                 InvoiceStatus = x.inv.InvoiceStatus,

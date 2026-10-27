@@ -1,15 +1,16 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using POS_MT.Data;
 using POS_MT.Interfaces;
 using POS_MT.Models;
+using POS_MT.Services;
 using POS_MT.ViewModels;
 
 namespace POS_MT.Controllers;
 
-[Authorize]
+[Authorize(Policy = "AdminOnly")]
 public class UsersController : Controller
 {
     private readonly POSDbContext _db;
@@ -23,8 +24,22 @@ public class UsersController : Controller
         _hash = hash;
     }
 
-    public async Task<IActionResult> Index(CancellationToken ct) =>
-        View(await _db.Users.AsNoTracking().OrderBy(x => x.UserName).ToListAsync(ct));
+    public async Task<IActionResult> Index(CancellationToken ct)
+    {
+        // Normalize legacy "Admin" role labels to Administrator.
+        var legacy = await _db.Users.Where(x => x.RoleName == "Admin").ToListAsync(ct);
+        if (legacy.Count > 0)
+        {
+            foreach (var u in legacy)
+            {
+                u.RoleName = AppRoles.Administrator;
+            }
+
+            await _db.SaveChangesAsync(ct);
+        }
+
+        return View(await _db.Users.AsNoTracking().OrderBy(x => x.UserName).ToListAsync(ct));
+    }
 
     public async Task<IActionResult> Create(CancellationToken ct)
     {
@@ -37,8 +52,12 @@ public class UsersController : Controller
     {
         if (string.IsNullOrWhiteSpace(model.Password))
             ModelState.AddModelError(nameof(model.Password), "Password is required.");
+        else if (!AppRoles.IsPasswordStrongEnough(model.Password, out var pwdError))
+            ModelState.AddModelError(nameof(model.Password), pwdError);
         if (string.IsNullOrWhiteSpace(model.TerminalName))
             ModelState.AddModelError(nameof(model.TerminalName), "Terminal is required.");
+        if (!AppRoles.IsKnown(model.RoleName))
+            ModelState.AddModelError(nameof(model.RoleName), "Select a valid role.");
 
         if (!ModelState.IsValid)
         {
@@ -60,7 +79,7 @@ public class UsersController : Controller
             PasswordHash = _hash.Hash(model.Password!),
             MobileNo = model.MobileNo,
             Email = model.Email,
-            RoleName = model.RoleName.Trim(),
+            RoleName = AppRoles.Normalize(model.RoleName),
             UserType = model.UserType,
             TerminalName = NormalizeName(model.TerminalName)!,
             Branch = NormalizeName(model.Branch),
@@ -102,6 +121,11 @@ public class UsersController : Controller
 
         if (string.IsNullOrWhiteSpace(model.TerminalName))
             ModelState.AddModelError(nameof(model.TerminalName), "Terminal is required.");
+        if (!AppRoles.IsKnown(model.RoleName))
+            ModelState.AddModelError(nameof(model.RoleName), "Select a valid role.");
+        if (!string.IsNullOrWhiteSpace(model.Password)
+            && !AppRoles.IsPasswordStrongEnough(model.Password, out var pwdError))
+            ModelState.AddModelError(nameof(model.Password), pwdError);
 
         if (!ModelState.IsValid)
         {
@@ -123,7 +147,7 @@ public class UsersController : Controller
         e.FullName = model.FullName.Trim();
         e.MobileNo = model.MobileNo;
         e.Email = model.Email;
-        e.RoleName = model.RoleName.Trim();
+        e.RoleName = AppRoles.Normalize(model.RoleName);
         e.UserType = model.UserType;
         e.TerminalName = NormalizeName(model.TerminalName)!;
         e.Branch = NormalizeName(model.Branch);

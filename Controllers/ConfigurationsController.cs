@@ -8,7 +8,7 @@ using POS_MT.ViewModels;
 
 namespace POS_MT.Controllers;
 
-[Authorize]
+[Authorize(Policy = "AdminOnly")]
 public class ConfigurationsController : Controller
 {
     private readonly POSDbContext _db;

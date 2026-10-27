@@ -15,11 +15,20 @@
     <div class="invoice-meta-row">
         <label asp-for="AdjustmentType" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <input asp-for="AdjustmentType" class="form-control form-control-sm invoice-meta-input" />
+            <select asp-for="AdjustmentType" class="form-select form-select-sm invoice-meta-input">
+                <option>Correction</option>
+                <option>Damage</option>
+                <option>Found</option>
+                <option>Transfer</option>
+            </select>
         </div>
         <label asp-for="Status" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <input asp-for="Status" class="form-control form-control-sm invoice-meta-input" />
+            <select asp-for="Status" class="form-select form-select-sm invoice-meta-input">
+                <option>Completed</option>
+                <option>Draft</option>
+                <option>Cancelled</option>
+            </select>
         </div>
     </div>
     <div class="invoice-meta-row">
@@ -36,8 +45,29 @@
         </div>
     </div>
     <div class="invoice-meta-row">
+        <label asp-for="ProductUid" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <select asp-for="ProductUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Products">
+                <option value="">-- Select product --</option>
+            </select>
+            <span asp-validation-for="ProductUid" class="text-danger"></span>
+        </div>
+        <label asp-for="Direction" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <select asp-for="Direction" class="form-select form-select-sm invoice-meta-input">
+                <option>Increase</option>
+                <option>Decrease</option>
+            </select>
+        </div>
+    </div>
+    <div class="invoice-meta-row">
+        <label asp-for="Quantity" class="invoice-meta-title"></label>
+        <div class="invoice-meta-field">
+            <input asp-for="Quantity" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="Quantity" class="text-danger"></span>
+        </div>
         <label asp-for="Remarks" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field invoice-meta-field-span">
+        <div class="invoice-meta-field">
             <textarea asp-for="Remarks" class="form-control form-control-sm invoice-meta-input" rows="2"></textarea>
         </div>
     </div>

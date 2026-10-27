@@ -1,5 +1,6 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using POS_MT.Data;
 using POS_MT.Interfaces;
@@ -8,7 +9,7 @@ using POS_MT.ViewModels;
 
 namespace POS_MT.Controllers;
 
-[Authorize]
+[Authorize(Policy = "ManagerOrAdmin")]
 public class VendorsController : Controller
 {
     private const string VendorCodePrefix = "VEN-";
@@ -38,11 +39,13 @@ public class VendorsController : Controller
     {
         EnsureVendorsNav();
         MarkVendorCodeReadonly();
-        return View(new VendorFormViewModel
+        var model = new VendorFormViewModel
         {
             IsActive = true,
             VendorCode = await GenerateNextVendorCodeAsync(ct)
-        });
+        };
+        await PopulateCityOptionsAsync(model, ct);
+        return View(model);
     }
 
     [HttpPost, ValidateAntiForgeryToken]
@@ -56,7 +59,10 @@ public class VendorsController : Controller
         ModelState.Remove(nameof(model.VendorCode));
 
         if (!ModelState.IsValid)
+        {
+            await PopulateCityOptionsAsync(model, ct);
             return View(model);
+        }
 
         if (await _db.Vendors.AnyAsync(x => x.VendorCode == model.VendorCode, ct))
         {
@@ -64,6 +70,7 @@ public class VendorsController : Controller
             if (await _db.Vendors.AnyAsync(x => x.VendorCode == model.VendorCode, ct))
             {
                 ModelState.AddModelError(nameof(model.VendorCode), "Could not generate a unique vendor code. Please try again.");
+                await PopulateCityOptionsAsync(model, ct);
                 return View(model);
             }
         }
@@ -81,7 +88,10 @@ public class VendorsController : Controller
     {
         EnsureVendorsNav();
         var e = await _db.Vendors.FindAsync([id], ct);
-        return e is null ? NotFound() : View(ToForm(e));
+        if (e is null) return NotFound();
+        var model = ToForm(e);
+        await PopulateCityOptionsAsync(model, ct);
+        return View(model);
     }
 
     [HttpPost, ValidateAntiForgeryToken]
@@ -89,12 +99,17 @@ public class VendorsController : Controller
     {
         EnsureVendorsNav();
         if (id != model.Uid) return BadRequest();
-        if (!ModelState.IsValid) return View(model);
+        if (!ModelState.IsValid)
+        {
+            await PopulateCityOptionsAsync(model, ct);
+            return View(model);
+        }
         var e = await _db.Vendors.FindAsync([id], ct);
         if (e is null) return NotFound();
         if (await _db.Vendors.AnyAsync(x => x.VendorCode == model.VendorCode && x.Uid != id, ct))
         {
             ModelState.AddModelError(nameof(model.VendorCode), "Vendor code already exists.");
+            await PopulateCityOptionsAsync(model, ct);
             return View(model);
         }
         Apply(e, model);
@@ -217,7 +232,7 @@ public class VendorsController : Controller
         PhoneNo = m.PhoneNo,
         Email = m.Email,
         Address = m.Address,
-        City = m.City,
+        City = string.IsNullOrWhiteSpace(m.City) ? null : m.City.Trim(),
         Ntn = m.Ntn,
         Strn = m.Strn,
         OpeningBalance = m.OpeningBalance,
@@ -235,12 +250,53 @@ public class VendorsController : Controller
         e.PhoneNo = m.PhoneNo;
         e.Email = m.Email;
         e.Address = m.Address;
-        e.City = m.City;
+        e.City = string.IsNullOrWhiteSpace(m.City) ? null : m.City.Trim();
         e.Ntn = m.Ntn;
         e.Strn = m.Strn;
         e.OpeningBalance = m.OpeningBalance;
         e.CreditLimit = m.CreditLimit;
         e.PaymentTerms = m.PaymentTerms;
         e.IsActive = m.IsActive;
+    }
+
+    private async Task PopulateCityOptionsAsync(VendorFormViewModel model, CancellationToken ct)
+    {
+        var citiesRaw = await _db.Configurations.AsNoTracking()
+            .Where(x => x.ConfigKey == "Cities")
+            .Select(x => x.ConfigValue)
+            .FirstOrDefaultAsync(ct);
+
+        model.CityOptions = BuildCityOptions(citiesRaw, model.City);
+    }
+
+    private static List<SelectListItem> BuildCityOptions(string? csv, string? selected)
+    {
+        var values = (csv ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(selected)
+            && !values.Any(x => string.Equals(x, selected, StringComparison.OrdinalIgnoreCase)))
+        {
+            values.Insert(0, selected.Trim());
+        }
+
+        var items = new List<SelectListItem>
+        {
+            new() { Value = "", Text = "Select city…", Selected = string.IsNullOrWhiteSpace(selected) }
+        };
+
+        items.AddRange(values.Select(v => new SelectListItem
+        {
+            Value = v,
+            Text = v,
+            Selected = !string.IsNullOrWhiteSpace(selected)
+                       && string.Equals(v, selected, StringComparison.OrdinalIgnoreCase)
+        }));
+
+        return items;
     }
 }

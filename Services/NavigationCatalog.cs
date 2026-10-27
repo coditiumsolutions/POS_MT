@@ -14,6 +14,8 @@ public sealed record TopNavArea(string Key, string Title, IReadOnlyList<NavLinkI
 
 public sealed record ModuleCardItem(string Name, string IconClass, string? Controller = null, string Action = "Index");
 
+public sealed record ModuleSection(string Title, string? Subtitle, IReadOnlyList<ModuleCardItem> Modules);
+
 public static class NavigationCatalog
 {
     public const string SessionKey = "CurrentTopNav";
@@ -48,6 +50,12 @@ public static class NavigationCatalog
             new("Daily Report", "Reports", "DailyReport", IconClass: "bi-calendar-day"),
             new("Slow / Dead Stock", "StockMovement", IconClass: "bi-hourglass-split", NavArea: "Reports")
         ]),
+        new("Employees", "Employees",
+        [
+            new("All Employees", "Employees", IconClass: "bi-people"),
+            new("Add Employee", "Employees", "Create", IconClass: "bi-person-plus"),
+            new("Salary Payments", "EmployeePayments", IconClass: "bi-cash-coin")
+        ]),
         new("AllModules", "All Modules",
         [
             new("Vendors", "Vendors", IconClass: "bi-truck"),
@@ -55,7 +63,8 @@ public static class NavigationCatalog
             new("Inventories", "Inventories", IconClass: "bi-boxes"),
             new("Purchases", "PurchaseInvoices", IconClass: "bi-cart-plus"),
             new("Sales", "SalesInvoices", IconClass: "bi-receipt"),
-            new("Expenses", "Expenses", IconClass: "bi-credit-card")
+            new("Expenses", "Expenses", IconClass: "bi-credit-card"),
+            new("Employees", "Employees", IconClass: "bi-person-badge")
         ])
     ];
 
@@ -71,13 +80,13 @@ public static class NavigationCatalog
         [
             new("Categories", IconClass: "bi-tags", Children:
             [
-                new("Add Category", "ProductCategories", "Create", IconClass: "bi-plus-circle", NavArea: "Products"),
-                new("Categories", "ProductCategories", IconClass: "bi-tags", NavArea: "Products")
+                new("Add Category", "ProductCategories", "Create", IconClass: "", NavArea: "Products"),
+                new("Categories", "ProductCategories", IconClass: "", NavArea: "Products")
             ]),
             new("Products", IconClass: "bi-box-seam", Children:
             [
-                new("Add Product", "Products", "Create", IconClass: "bi-plus-circle"),
-                new("All Products", "Products", IconClass: "bi-box-seam")
+                new("Add Product", "Products", "Create", IconClass: ""),
+                new("All Products", "Products", IconClass: "")
             ])
         ]),
         new("Purchases", "Purchases",
@@ -92,28 +101,55 @@ public static class NavigationCatalog
         ])
     ];
 
-    public static IReadOnlyList<ModuleCardItem> MainModules { get; } =
+    public static IReadOnlyList<ModuleSection> MainModuleSections { get; } =
     [
-        new("Products", "bi-box-seam", "Products"),
-        new("Product Categories", "bi-tags", "ProductCategories"),
-        new("Product Units", "bi-rulers", "ProductUnits"),
-        new("Vendors", "bi-truck", "Vendors"),
-        new("Customers", "bi-people", "Customers"),
-        new("Purchases", "bi-cart-plus", "PurchaseInvoices"),
-        new("Sales", "bi-receipt", "SalesInvoices"),
-        new("Customer Payments", "bi-cash-coin", "CustomerPayments"),
-        new("Vendor Payments", "bi-wallet2", "VendorPayments"),
-        new("Expense Categories", "bi-folder2", "ExpenseCategories"),
-        new("Expenses", "bi-credit-card", "Expenses"),
-        new("Inventory", "bi-boxes", "Inventories"),
-        new("Stock Adjustments", "bi-arrow-left-right", "StockAdjustments"),
-        new("Reports", "bi-graph-up", "Reports", "TotalSale"),
-        new("Users", "bi-person-gear", "Users"),
-        new("Terminals", "bi-display", "Terminals"),
-        new("Branches", "bi-building", "Branches"),
-        new("Warehouses", "bi-house-door", "Warehouses"),
-        new("Audit Logs", "bi-journal-text", "AuditLogs")
+        new("Products", "Catalog, categories, and units",
+        [
+            new("Products", "bi-box-seam", "Products"),
+            new("Product Categories", "bi-tags", "ProductCategories"),
+            new("Product Units", "bi-rulers", "ProductUnits")
+        ]),
+        new("Inventory", "Stock levels and adjustments",
+        [
+            new("Inventory", "bi-boxes", "Inventories"),
+            new("Stock Adjustments", "bi-arrow-left-right", "StockAdjustments")
+        ]),
+        new("Sales & Purchases", "Trading partners, invoices, and payments",
+        [
+            new("Vendors", "bi-truck", "Vendors"),
+            new("Customers", "bi-people", "Customers"),
+            new("Purchases", "bi-cart-plus", "PurchaseInvoices"),
+            new("Sales", "bi-receipt", "SalesInvoices"),
+            new("Sales Returns", "bi-arrow-return-left", "SalesReturns"),
+            new("Customer Payments", "bi-cash-coin", "CustomerPayments"),
+            new("Vendor Payments", "bi-wallet2", "VendorPayments")
+        ]),
+        new("Expenses", "Business expense tracking",
+        [
+            new("Expense Categories", "bi-folder2", "ExpenseCategories"),
+            new("Expenses", "bi-credit-card", "Expenses")
+        ]),
+        new("HR & Payroll", "Employees, salary, allowances, and payments",
+        [
+            new("Employees", "bi-person-badge", "Employees"),
+            new("Salary Payments", "bi-cash-coin", "EmployeePayments")
+        ]),
+        new("Organization", "Users, terminals, branches, and warehouses",
+        [
+            new("Users", "bi-person-gear", "Users"),
+            new("Terminals", "bi-display", "Terminals"),
+            new("Branches", "bi-building", "Branches"),
+            new("Warehouses", "bi-house-door", "Warehouses")
+        ]),
+        new("Reports & Logs", "Sales reports and audit history",
+        [
+            new("Reports", "bi-graph-up", "Reports", "TotalSale"),
+            new("Audit Logs", "bi-journal-text", "AuditLogs")
+        ])
     ];
+
+    public static IReadOnlyList<ModuleCardItem> MainModules { get; } =
+        MainModuleSections.SelectMany(s => s.Modules).ToList();
 
     public static IReadOnlyList<ModuleCardItem> SetupModules { get; } =
     [
@@ -122,6 +158,7 @@ public static class NavigationCatalog
         new("Branches", "bi-building", "Branches"),
         new("Warehouses", "bi-house-door", "Warehouses"),
         new("Configs", "bi-sliders", "Configurations"),
+        new("Sync Tables", "bi-arrow-left-right", "OfflineSyncTables"),
         new("Audit Logs", "bi-journal-text", "AuditLogs")
     ];
 

@@ -1,12 +1,16 @@
+@using POS_MT.Services
 @model ModuleCardsViewModel
 @{
     ViewData["Title"] = Model.PageTitle;
+    var sections = Model.Sections.Count > 0
+        ? Model.Sections
+        : new List<ModuleSection> { new(Model.PageTitle, null, Model.Modules) };
 }
 
-<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 modules-page-head">
     <div>
-        <h1 class="page-heading mb-1">@Model.PageTitle</h1>
-        <p class="text-muted mb-0">@Model.PageSubtitle</p>
+        <h1 class="page-heading modules-page-title mb-0">@Model.PageTitle</h1>
+        <p class="text-muted mb-0 modules-page-subtitle">@Model.PageSubtitle</p>
     </div>
     <div class="module-search-wrap">
         <input type="search"
@@ -18,35 +22,51 @@
     </div>
 </div>
 
-<div class="module-grid" id="moduleGrid">
-    @foreach (var module in Model.Modules)
-    {
-        if (!string.IsNullOrWhiteSpace(module.Controller))
-        {
-            <a class="module-card"
-               asp-controller="@module.Controller"
-               asp-action="@module.Action"
-               title="@module.Name"
-               data-module-name="@module.Name">
-                <span class="module-card-icon">
-                    <i class="bi @module.IconClass" aria-hidden="true"></i>
-                </span>
-                <span class="module-card-name">@module.Name</span>
-            </a>
-        }
-        else
-        {
-            <a class="module-card module-card-disabled"
-               href="#"
-               title="@module.Name — no matching table"
-               data-module-name="@module.Name">
-                <span class="module-card-icon">
-                    <i class="bi @module.IconClass" aria-hidden="true"></i>
-                </span>
-                <span class="module-card-name">@module.Name</span>
-            </a>
-        }
-    }
+<div id="moduleSections">
+@foreach (var moduleSection in sections)
+{
+    <section class="module-section" data-module-section="@moduleSection.Title">
+        <div class="module-section-head">
+            <h2 class="module-section-title">@moduleSection.Title</h2>
+            @if (!string.IsNullOrWhiteSpace(moduleSection.Subtitle))
+            {
+                <p class="module-section-subtitle">@moduleSection.Subtitle</p>
+            }
+        </div>
+        <div class="module-grid">
+            @foreach (var module in moduleSection.Modules)
+            {
+                var moduleAction = module.Action;
+                var moduleController = module.Controller;
+                if (!string.IsNullOrWhiteSpace(moduleController))
+                {
+                    <a class="module-card"
+                       asp-controller="@moduleController"
+                       asp-action="@moduleAction"
+                       title="@module.Name"
+                       data-module-name="@module.Name">
+                        <span class="module-card-icon">
+                            <i class="bi @module.IconClass" aria-hidden="true"></i>
+                        </span>
+                        <span class="module-card-name">@module.Name</span>
+                    </a>
+                }
+                else
+                {
+                    <a class="module-card module-card-disabled"
+                       href="#"
+                       title="@module.Name — no matching table"
+                       data-module-name="@module.Name">
+                        <span class="module-card-icon">
+                            <i class="bi @module.IconClass" aria-hidden="true"></i>
+                        </span>
+                        <span class="module-card-name">@module.Name</span>
+                    </a>
+                }
+            }
+        </div>
+    </section>
+}
 </div>
 <p id="moduleSearchEmpty" class="text-muted d-none mt-3 mb-0">No modules match your search.</p>
 
@@ -54,18 +74,25 @@
 <script>
 (function () {
     const input = document.getElementById('moduleSearch');
-    const grid = document.getElementById('moduleGrid');
+    const root = document.getElementById('moduleSections');
     const empty = document.getElementById('moduleSearchEmpty');
-    if (!input || !grid) return;
+    if (!input || !root) return;
 
     input.addEventListener('input', function () {
         const q = input.value.trim().toLowerCase();
         let visible = 0;
-        grid.querySelectorAll('.module-card').forEach(function (card) {
-            const name = (card.getAttribute('data-module-name') || '').toLowerCase();
-            const show = !q || name.indexOf(q) !== -1;
-            card.style.display = show ? '' : 'none';
-            if (show) visible += 1;
+        root.querySelectorAll('.module-section').forEach(function (section) {
+            let sectionVisible = 0;
+            section.querySelectorAll('.module-card').forEach(function (card) {
+                const name = (card.getAttribute('data-module-name') || '').toLowerCase();
+                const show = !q || name.indexOf(q) !== -1;
+                card.style.display = show ? '' : 'none';
+                if (show) {
+                    visible += 1;
+                    sectionVisible += 1;
+                }
+            });
+            section.style.display = sectionVisible > 0 ? '' : 'none';
         });
         if (empty) empty.classList.toggle('d-none', visible > 0);
     });

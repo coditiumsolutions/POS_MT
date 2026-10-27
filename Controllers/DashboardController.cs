@@ -4,7 +4,7 @@ using POS_MT.Interfaces;
 
 namespace POS_MT.Controllers;
 
-[Authorize]
+[Authorize(Policy = "CanViewSales")]
 public class DashboardController : Controller
 {
     private readonly IDashboardService _dashboardService;

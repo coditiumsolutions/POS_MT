@@ -126,6 +126,43 @@ public sealed class InventoryLedgerService : IInventoryLedgerService
         return result;
     }
 
+    public async Task ApplyReturnAsync(
+        int returnInvoiceUid,
+        string returnNo,
+        IReadOnlyList<InventoryLineMovement> lines,
+        int? warehouseUid,
+        int? branchUid,
+        int? userUid,
+        int? terminalUid,
+        CancellationToken cancellationToken = default)
+    {
+        if (lines.Count == 0)
+            return;
+
+        var alreadyApplied = await _db.InventoryTransactions.AsNoTracking()
+            .AnyAsync(x => x.ReferenceUid == returnInvoiceUid
+                           && x.TransactionType == TxSaleReversal
+                           && x.Remarks != null
+                           && x.Remarks.StartsWith("Return "),
+                cancellationToken);
+        if (alreadyApplied)
+            return;
+
+        var wh = await ResolveWarehouseUidAsync(warehouseUid, branchUid, cancellationToken);
+        var now = DateTime.Now;
+
+        foreach (var group in lines.Where(x => x.ProductUid > 0 && x.Quantity > 0)
+                     .GroupBy(x => x.ProductUid))
+        {
+            var qty = group.Sum(x => x.Quantity);
+            var name = group.Select(x => x.ProductName).FirstOrDefault(x => !string.IsNullOrWhiteSpace(x))
+                       ?? group.Key.ToString();
+            var unitCost = group.Last().UnitCost;
+            await RestoreStockAsync(wh, group.Key, name, qty, unitCost, returnInvoiceUid, returnNo,
+                userUid, terminalUid, now, TxSaleReversal, $"Return {returnNo}", cancellationToken);
+        }
+    }
+
     public async Task ReverseSaleAsync(
         int salesInvoiceUid,
         string invoiceNo,
@@ -377,8 +414,9 @@ public sealed class InventoryLedgerService : IInventoryLedgerService
 
         if (shortfall > 0)
         {
-            result.ShortageNotes.Add(
-                $"{productName} short {shortfall:0.###} (requested {requestedQty:0.###}, available {available:0.###})");
+            // Fail closed — do not oversell or silently clamp stock to zero.
+            throw new InvalidOperationException(
+                $"Insufficient stock for '{productName}'. Requested {requestedQty:0.###}, available {available:0.###}.");
         }
     }
 

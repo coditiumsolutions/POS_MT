@@ -17,6 +17,8 @@ public sealed class SalesInvoiceIndexViewModel
 {
     public string? CustomerType { get; set; }
     public int? Month { get; set; }
+    public DateTime? DateFrom { get; set; }
+    public DateTime? DateTo { get; set; }
     public string? Search { get; set; }
     public List<SalesInvoiceListItemViewModel> Rows { get; set; } = [];
 }
@@ -41,7 +43,8 @@ public sealed class SalesInvoiceDetailIndexViewModel
 {
     public string? CustomerType { get; set; }
     public int? Month { get; set; }
-    public DateTime? Date { get; set; }
+    public DateTime? DateFrom { get; set; }
+    public DateTime? DateTo { get; set; }
     public string? Search { get; set; }
     public List<SalesInvoiceDetailListItemViewModel> Rows { get; set; } = [];
 }
