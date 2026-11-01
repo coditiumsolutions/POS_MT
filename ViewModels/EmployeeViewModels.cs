@@ -54,6 +54,8 @@ public sealed class EmployeeSalaryLineViewModel
     public string Title { get; set; } = string.Empty;
     public decimal Amount { get; set; }
     public bool IsActive { get; set; }
+    public int? PeriodMonth { get; set; }
+    public int? PeriodYear { get; set; }
 }
 
 public sealed class EmployeePaymentRowViewModel

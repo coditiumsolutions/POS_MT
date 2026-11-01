@@ -1,0 +1,232 @@
+@model SalesReportPrintViewModel
+@{
+    Layout = null;
+    ViewData["Title"] = "Sales Report";
+    string PeriodLabel()
+    {
+        if (Model.DateFrom.HasValue || Model.DateTo.HasValue)
+        {
+            var from = Model.DateFrom?.ToString("dd-MMM-yyyy") ?? "…";
+            var to = Model.DateTo?.ToString("dd-MMM-yyyy") ?? "…";
+            return $"{from} to {to}";
+        }
+        if (Model.Month is >= 1 and <= 12)
+            return System.Globalization.CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(Model.Month.Value);
+        return "All dates";
+    }
+    string TypeLabel() => string.IsNullOrWhiteSpace(Model.CustomerType)
+        ? "All"
+        : Model.CustomerType switch
+        {
+            "monthly" => "Monthly",
+            "credit" => "Credit",
+            "walkin" => "Walk-in",
+            _ => Model.CustomerType
+        };
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"]</title>
+    <style>
+        :root {
+            --ink: #0f172a;
+            --muted: #64748b;
+            --line: #cbd5e1;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            color: var(--ink);
+            margin: 0;
+            background: #e2e8f0;
+        }
+
+        .toolbar {
+            width: 210mm;
+            margin: 12px auto 0;
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+        }
+
+        .toolbar button {
+            border: 1px solid #94a3b8;
+            background: #0f172a;
+            color: #fff;
+            border-radius: 4px;
+            padding: 0.4rem 0.9rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+
+        .toolbar button.secondary {
+            background: #fff;
+            color: #0f172a;
+        }
+
+        .sheet {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 12px auto;
+            padding: 10mm 12mm 12mm;
+            background: #fff;
+            box-shadow: 0 1px 8px rgba(15, 23, 42, 0.12);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.25rem;
+        }
+
+        .sub {
+            margin-top: 0.15rem;
+            color: var(--muted);
+            font-size: 0.8rem;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            border-bottom: 2px solid var(--ink);
+            padding-bottom: 0.5rem;
+            margin-bottom: 0.65rem;
+        }
+
+        .meta {
+            text-align: right;
+            font-size: 0.8rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.75rem;
+        }
+
+        th, td {
+            border: 1px solid var(--line);
+            padding: 0.18rem 0.35rem;
+            vertical-align: middle;
+            text-align: left;
+            line-height: 1.25;
+        }
+
+        th {
+            background: #f8fafc;
+            font-size: 0.65rem;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
+
+        td.num, th.num {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        tfoot td {
+            font-weight: 700;
+            background: #f8fafc;
+        }
+
+        .empty {
+            padding: 1rem 0;
+            color: var(--muted);
+        }
+
+        .footer {
+            margin-top: 0.75rem;
+            color: var(--muted);
+            font-size: 0.72rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        @@page { size: A4 portrait; margin: 8mm; }
+
+        @@media print {
+            body { background: #fff; }
+            .toolbar { display: none !important; }
+            .sheet {
+                width: auto;
+                min-height: auto;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+            }
+            tr { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button type="button" class="secondary" onclick="window.close()">Close</button>
+        <button type="button" onclick="window.print()">Print</button>
+    </div>
+    <div class="sheet">
+        <div class="header">
+            <div>
+                <h1>Sales Report</h1>
+                <div class="sub">Period: @PeriodLabel() · Type: @TypeLabel()</div>
+            </div>
+            <div class="meta">
+                <div>Printed @Model.PrintedAt.ToString("dd-MMM-yyyy HH:mm")</div>
+                <div>@Model.Rows.Count sale(s)</div>
+            </div>
+        </div>
+
+        @if (Model.Rows.Count == 0)
+        {
+            <p class="empty">No sales found for the selected filters.</p>
+        }
+        else
+        {
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:11%">Date</th>
+                        <th style="width:18%">Invoice No</th>
+                        <th style="width:26%">Customer</th>
+                        <th style="width:10%">Type</th>
+                        <th class="num" style="width:11%">Net</th>
+                        <th class="num" style="width:11%">Paid</th>
+                        <th style="width:13%">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        <td>@row.InvoiceDate.ToString("yyyy-MM-dd")</td>
+                        <td>@row.InvoiceNo</td>
+                        <td>@row.CustomerName</td>
+                        <td>@row.CustomerType</td>
+                        <td class="num">@row.NetAmount.ToString("N2")</td>
+                        <td class="num">@row.PaidAmount.ToString("N2")</td>
+                        <td>@row.InvoiceStatus</td>
+                    </tr>
+                }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="4">Totals</td>
+                        <td class="num">@Model.TotalNet.ToString("N2")</td>
+                        <td class="num">@Model.TotalPaid.ToString("N2")</td>
+                        <td class="num">Bal @Model.TotalBalance.ToString("N2")</td>
+                    </tr>
+                </tfoot>
+            </table>
+            <div class="footer">
+                <span>End of report</span>
+                <span>@Model.Rows.Count line(s)</span>
+            </div>
+        }
+    </div>
+</body>
+</html>

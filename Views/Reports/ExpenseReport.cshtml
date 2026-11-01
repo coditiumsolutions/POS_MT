@@ -1,0 +1,77 @@
+@model ExpenseReportViewModel
+@{
+    ViewData["Title"] = "Expense Report";
+}
+
+<div class="expense-report-page">
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+        <span class="expense-report-heading">Expense Report</span>
+    </div>
+
+    <form method="get" asp-action="ExpenseReport" class="bg-white border rounded p-3 mb-3">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-3 col-sm-6">
+                <label class="form-label" for="DateFrom">Start Date</label>
+                <input type="date"
+                       class="form-control"
+                       id="DateFrom"
+                       name="dateFrom"
+                       value="@Model.DateFrom.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <label class="form-label" for="DateTo">End Date</label>
+                <input type="date"
+                       class="form-control"
+                       id="DateTo"
+                       name="dateTo"
+                       value="@Model.DateTo.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-md-auto col-sm-6">
+                <label class="form-label d-none d-md-block">&nbsp;</label>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm px-4">Apply</button>
+                    <a class="btn btn-outline-secondary btn-sm px-4" asp-action="ExpenseReport">Reset</a>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-4 col-sm-6">
+            <div class="bg-white border rounded p-3 h-100 expense-report-card">
+                <div class="expense-report-title">Expenses</div>
+                <div class="expense-report-value">@Model.ExpenseTotal.ToString("N2")</div>
+                <div class="expense-report-meta mt-1">@Model.ExpenseCount record(s)</div>
+            </div>
+        </div>
+        <div class="col-md-4 col-sm-6">
+            <div class="bg-white border rounded p-3 h-100 expense-report-card">
+                <div class="expense-report-title">Employee Payments</div>
+                <div class="expense-report-value">@Model.EmployeePaymentTotal.ToString("N2")</div>
+                <div class="expense-report-meta mt-1">@Model.EmployeePaymentCount record(s)</div>
+            </div>
+        </div>
+        <div class="col-md-4 col-sm-6">
+            <div class="bg-white border rounded p-3 h-100 expense-report-card">
+                <div class="expense-report-title">Customer Invoices</div>
+                <div class="expense-report-value">@Model.CustomerInvoiceTotal.ToString("N2")</div>
+                <div class="expense-report-meta mt-1">@Model.CustomerInvoiceCount record(s)</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-6 col-sm-6">
+            <div class="bg-white border rounded p-3 h-100 expense-report-card">
+                <div class="expense-report-title">Total Outflow (Expenses + Employee Payments)</div>
+                <div class="expense-report-value">@Model.TotalOutflow.ToString("N2")</div>
+            </div>
+        </div>
+        <div class="col-md-6 col-sm-6">
+            <div class="bg-white border rounded p-3 h-100 expense-report-card">
+                <div class="expense-report-title">Net Position (Invoices − Outflow)</div>
+                <div class="expense-report-value">@Model.NetPosition.ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -45,4 +45,30 @@ public class ExpensesController : Controller {
     TempData["Success"]="Expense updated."; return RedirectToAction(nameof(Index));
   }
   public async Task<IActionResult> Details(int id, CancellationToken ct){ var e=await _db.Expenses.AsNoTracking().FirstOrDefaultAsync(x=>x.Uid==id,ct); return e is null?NotFound():View(e);} 
+
+  [HttpPost, ValidateAntiForgeryToken]
+  public async Task<IActionResult> Delete(int id, DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
+  {
+    var e = await _db.Expenses.FindAsync([id], ct);
+    if (e is null)
+    {
+      TempData["Error"] = "Expense was not found.";
+      return RedirectToAction(nameof(Index), new { dateFrom, dateTo });
+    }
+
+    var expenseNo = e.ExpenseNo;
+    try
+    {
+      _db.Expenses.Remove(e);
+      await _db.SaveChangesAsync(ct);
+      await _audit.WriteAsync("Delete", "Expenses", id.ToString(), $"Deleted expense {expenseNo}", ct);
+      TempData["Success"] = $"Expense {expenseNo} deleted.";
+    }
+    catch (DbUpdateException)
+    {
+      TempData["Error"] = $"Cannot delete expense {expenseNo} because other records still use it.";
+    }
+
+    return RedirectToAction(nameof(Index), new { dateFrom, dateTo });
+  }
 }

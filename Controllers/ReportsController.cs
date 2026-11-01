@@ -124,6 +124,129 @@ public class ReportsController : Controller
     }
 
     [HttpGet]
+    public async Task<IActionResult> TerminalReport(
+        DateTime? dateFrom,
+        DateTime? dateTo,
+        string? branch,
+        string? terminal,
+        CancellationToken ct)
+    {
+        EnsureReportsNav();
+        ViewData["Title"] = "Terminal Report";
+
+        var today = DateTime.Today;
+        var from = (dateFrom ?? today).Date;
+        var toInclusive = (dateTo ?? today).Date;
+        if (toInclusive < from)
+            (from, toInclusive) = (toInclusive, from);
+        var toExclusive = toInclusive.AddDays(1);
+
+        var selectedBranch = string.IsNullOrWhiteSpace(branch) || branch == "All" ? null : branch.Trim();
+        var selectedTerminal = string.IsNullOrWhiteSpace(terminal) || terminal == "All" ? null : terminal.Trim();
+
+        var branchNames = await _db.Branches.AsNoTracking()
+            .Where(b => b.IsActive)
+            .OrderBy(b => b.BranchName)
+            .Select(b => b.BranchName)
+            .ToListAsync(ct);
+        var terminalNames = await _db.Terminals.AsNoTracking()
+            .Where(t => t.IsActive)
+            .OrderBy(t => t.TerminalName)
+            .Select(t => t.TerminalName)
+            .ToListAsync(ct);
+
+        var query = _db.SalesInvoices.AsNoTracking()
+            .Where(i => i.InvoiceDate >= from
+                        && i.InvoiceDate < toExclusive
+                        && i.InvoiceStatus != "Cancelled");
+
+        if (selectedBranch is not null)
+            query = query.Where(i => i.Branch == selectedBranch);
+
+        if (selectedTerminal is not null)
+            query = query.Where(i => i.Terminal == selectedTerminal);
+
+        var rows = await query
+            .GroupBy(i => new
+            {
+                Branch = string.IsNullOrWhiteSpace(i.Branch) ? "Unassigned" : i.Branch!.Trim(),
+                Terminal = string.IsNullOrWhiteSpace(i.Terminal) ? "Unassigned" : i.Terminal!.Trim()
+            })
+            .Select(g => new TerminalDailyReportRowViewModel
+            {
+                BranchName = g.Key.Branch,
+                TerminalName = g.Key.Terminal,
+                InvoiceCount = g.Count(),
+                TotalNetAmount = g.Sum(x => x.NetAmount),
+                TotalPaidAmount = g.Sum(x => x.PaidAmount)
+            })
+            .OrderBy(x => x.BranchName)
+            .ThenByDescending(x => x.InvoiceCount)
+            .ThenBy(x => x.TerminalName)
+            .ToListAsync(ct);
+
+        return View(new TerminalDailyReportViewModel
+        {
+            DateFrom = from,
+            DateTo = toInclusive,
+            Branch = selectedBranch ?? "All",
+            Terminal = selectedTerminal ?? "All",
+            Branches = BuildAllOptionList(branchNames, selectedBranch),
+            Terminals = BuildAllOptionList(terminalNames, selectedTerminal),
+            Rows = rows,
+            TotalInvoices = rows.Sum(x => x.InvoiceCount),
+            TotalNetAmount = rows.Sum(x => x.TotalNetAmount),
+            TotalPaidAmount = rows.Sum(x => x.TotalPaidAmount)
+        });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExpenseReport(DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
+    {
+        EnsureReportsNav();
+        ViewData["Title"] = "Expense Report";
+
+        var today = DateTime.Today;
+        var from = (dateFrom ?? new DateTime(today.Year, today.Month, 1)).Date;
+        var toInclusive = (dateTo ?? today).Date;
+        if (toInclusive < from)
+        {
+            (from, toInclusive) = (toInclusive, from);
+        }
+
+        var toExclusive = toInclusive.AddDays(1);
+
+        var expenseQuery = _db.Expenses.AsNoTracking()
+            .Where(e => e.ExpenseDate >= from && e.ExpenseDate < toExclusive);
+        var expenseCount = await expenseQuery.CountAsync(ct);
+        var expenseTotal = await expenseQuery.SumAsync(e => (decimal?)e.Amount, ct) ?? 0m;
+
+        var employeePayQuery = _db.EmployeePayments.AsNoTracking()
+            .Where(p => p.PaymentDate >= from && p.PaymentDate < toExclusive);
+        var employeePaymentCount = await employeePayQuery.CountAsync(ct);
+        var employeePaymentTotal = await employeePayQuery.SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
+
+        var invoiceQuery = _db.SalesInvoices.AsNoTracking()
+            .Where(i => i.InvoiceDate >= from
+                        && i.InvoiceDate < toExclusive
+                        && i.InvoiceStatus != "Cancelled");
+        var customerInvoiceCount = await invoiceQuery.CountAsync(ct);
+        var customerInvoiceTotal = await invoiceQuery.SumAsync(i => (decimal?)i.NetAmount, ct) ?? 0m;
+
+        return View(new ExpenseReportViewModel
+        {
+            DateFrom = from,
+            DateTo = toInclusive,
+            ExpenseCount = expenseCount,
+            ExpenseTotal = expenseTotal,
+            EmployeePaymentCount = employeePaymentCount,
+            EmployeePaymentTotal = employeePaymentTotal,
+            CustomerInvoiceCount = customerInvoiceCount,
+            CustomerInvoiceTotal = customerInvoiceTotal
+        });
+    }
+
+    [HttpGet]
     public async Task<IActionResult> DailyReport(DateTime? date, string? saleType, CancellationToken ct)
     {
         EnsureReportsNav();
@@ -236,6 +359,21 @@ public class ReportsController : Controller
         new SelectListItem { Value = "Cash", Text = "Cash", Selected = selectedSaleType == "Cash" },
         new SelectListItem { Value = "Walk-in", Text = "Walk-in", Selected = selectedSaleType == "Walk-in" }
     ];
+
+    private static IEnumerable<SelectListItem> BuildAllOptionList(IEnumerable<string> values, string? selected)
+    {
+        var selectedValue = string.IsNullOrWhiteSpace(selected) ? "All" : selected.Trim();
+        yield return new SelectListItem { Value = "All", Text = "All", Selected = selectedValue == "All" };
+        foreach (var value in values)
+        {
+            yield return new SelectListItem
+            {
+                Value = value,
+                Text = value,
+                Selected = string.Equals(value, selectedValue, StringComparison.OrdinalIgnoreCase)
+            };
+        }
+    }
 
     private static string NormalizeSaleType(string? saleType)
     {

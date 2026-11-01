@@ -74,7 +74,7 @@
                 </div>
                 <div class="col-md-2">
                     <label class="form-label" for="Quantity">Quantity</label>
-                    <input type="number" step="0.1" min="0.1" name="Quantity" id="Quantity" class="form-control" value="1" required />
+                    <input type="number" step="0.01" min="0.01" name="Quantity" id="Quantity" class="form-control" value="1" required />
                 </div>
                 <div class="col-md-2">
                     <label class="form-label" for="UnitPrice">Unit Price</label>
@@ -85,9 +85,14 @@
                     <input type="number" step="0.01" min="0" name="DeliveryCharges" id="DeliveryCharges" class="form-control" value="0" required />
                 </div>
                 <div class="col-md-2">
+                    <label class="form-label" for="ItemTotal">Item Total</label>
+                    <input type="text" id="ItemTotal" class="form-control" value="0" readonly tabindex="-1" />
+                </div>
+                <div class="col-md-12 col-lg-2">
                     <button type="submit" class="btn btn-primary w-100">Add Item</button>
                 </div>
             </form>
+            <p class="small text-muted mb-0 mt-2">Item Total = (Quantity × Unit Price) + Delivery Charges</p>
         </div>
 
         <div class="table-responsive bg-white border rounded p-2">
@@ -100,7 +105,7 @@
                         <th class="text-end">Qty</th>
                         <th class="text-end">Unit Price</th>
                         <th class="text-end">Delivery Charges</th>
-                        <th class="text-end">Line Total</th>
+                        <th class="text-end">Item Total</th>
                         <th style="width:90px"></th>
                     </tr>
                 </thead>
@@ -119,10 +124,10 @@
                             <td>@item.ProductCode</td>
                             <td>@item.ProductName</td>
                             <td>@(string.IsNullOrWhiteSpace(item.BrandName) ? "—" : item.BrandName)</td>
-                            <td class="text-end">@item.Quantity.ToString("N1")</td>
+                            <td class="text-end">@item.Quantity.ToString("0.##")</td>
                             <td class="text-end">@item.UnitPrice.ToString("N2")</td>
                             <td class="text-end">@item.DeliveryCharges.ToString("N2")</td>
-                            <td class="text-end">@item.LineTotal.ToString("N2")</td>
+                            <td class="text-end fw-semibold">@item.ItemTotal.ToString("N0")</td>
                             <td>
                                 <form asp-action="DeleteMonthlySupplyItem" method="post" class="d-inline">
                                     @Html.AntiForgeryToken()
@@ -152,15 +157,37 @@
         (function () {
             const prices = @Html.Raw(priceJson);
             const productSelect = document.getElementById('ProductUid');
+            const qty = document.getElementById('Quantity');
             const unitPrice = document.getElementById('UnitPrice');
-            if (!productSelect || !unitPrice) return;
+            const delivery = document.getElementById('DeliveryCharges');
+            const itemTotal = document.getElementById('ItemTotal');
+            if (!productSelect || !unitPrice || !qty || !delivery || !itemTotal) return;
+
+            function num(el) {
+                const v = Number(String(el.value || '').replace(',', '.'));
+                return Number.isFinite(v) ? v : 0;
+            }
+
+            function syncItemTotal() {
+                const total = (num(qty) * num(unitPrice)) + num(delivery);
+                itemTotal.value = String(Math.round(total));
+            }
 
             productSelect.addEventListener('change', function () {
                 const key = productSelect.value;
                 if (key && prices[key] != null) {
                     unitPrice.value = Number(prices[key]).toFixed(2);
                 }
+                syncItemTotal();
             });
+
+            ['input', 'change'].forEach(function (evt) {
+                qty.addEventListener(evt, syncItemTotal);
+                unitPrice.addEventListener(evt, syncItemTotal);
+                delivery.addEventListener(evt, syncItemTotal);
+            });
+
+            syncItemTotal();
         })();
     </script>
 }

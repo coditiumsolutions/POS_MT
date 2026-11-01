@@ -54,7 +54,9 @@ public class EmployeesController : Controller
             .ToDictionaryAsync(x => x.EmployeeUid, x => x.Total, ct);
 
         var deductions = await _db.EmployeeDeductions.AsNoTracking()
-            .Where(x => x.IsActive)
+            .Where(x => x.IsActive
+                        && (x.PeriodMonth == null
+                            || (x.PeriodMonth == month && x.PeriodYear == year)))
             .GroupBy(x => x.EmployeeUid)
             .Select(g => new { EmployeeUid = g.Key, Total = g.Sum(x => x.Amount) })
             .ToDictionaryAsync(x => x.EmployeeUid, x => x.Total, ct);
@@ -182,13 +184,17 @@ public class EmployeesController : Controller
         var deductions = await _db.EmployeeDeductions.AsNoTracking()
             .Where(x => x.EmployeeUid == id)
             .OrderByDescending(x => x.IsActive)
+            .ThenByDescending(x => x.PeriodYear)
+            .ThenByDescending(x => x.PeriodMonth)
             .ThenBy(x => x.Title)
             .Select(x => new EmployeeSalaryLineViewModel
             {
                 Uid = x.Uid,
                 Title = x.Title,
                 Amount = x.Amount,
-                IsActive = x.IsActive
+                IsActive = x.IsActive,
+                PeriodMonth = x.PeriodMonth,
+                PeriodYear = x.PeriodYear
             })
             .ToListAsync(ct);
 
@@ -209,7 +215,11 @@ public class EmployeesController : Controller
             .ToListAsync(ct);
 
         var totalAllow = allowances.Where(x => x.IsActive).Sum(x => x.Amount);
-        var totalDeduct = deductions.Where(x => x.IsActive).Sum(x => x.Amount);
+        var totalDeduct = deductions
+            .Where(x => x.IsActive
+                        && (x.PeriodMonth == null
+                            || (x.PeriodMonth == periodMonth && x.PeriodYear == periodYear)))
+            .Sum(x => x.Amount);
         var net = e.TotalSalary + totalAllow - totalDeduct;
         var paid = payments.Sum(x => x.Amount);
 
@@ -277,14 +287,41 @@ public class EmployeesController : Controller
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> AddDeduction(int employeeUid, string title, decimal amount, CancellationToken ct)
+    public async Task<IActionResult> AddDeduction(
+        int employeeUid,
+        string title,
+        decimal amount,
+        int? periodMonth,
+        int? periodYear,
+        int? returnMonth,
+        int? returnYear,
+        CancellationToken ct)
     {
         EnsureNav();
         await _schema.EnsureSchemaAsync(ct);
+        var viewMonth = returnMonth is >= 1 and <= 12 ? returnMonth.Value : DateTime.Now.Month;
+        var viewYear = returnYear is >= 2000 and <= 2100 ? returnYear.Value : DateTime.Now.Year;
+
         if (employeeUid <= 0 || string.IsNullOrWhiteSpace(title) || amount <= 0)
         {
             TempData["Error"] = "Enter a valid deduction title and amount.";
-            return RedirectToAction(nameof(Details), new { id = employeeUid });
+            return RedirectToAction(nameof(Details), new { id = employeeUid, month = viewMonth, year = viewYear });
+        }
+
+        // periodMonth null/0 = All Months (applies every salary period).
+        var allMonths = periodMonth is null or 0;
+        int? storeMonth = null;
+        int? storeYear = null;
+        if (!allMonths)
+        {
+            if (periodMonth is < 1 or > 12 || periodYear is null or < 2000 or > 2100)
+            {
+                TempData["Error"] = "Select a valid month and year, or All Months.";
+                return RedirectToAction(nameof(Details), new { id = employeeUid, month = viewMonth, year = viewYear });
+            }
+
+            storeMonth = periodMonth;
+            storeYear = periodYear;
         }
 
         _db.EmployeeDeductions.Add(new EmployeeDeduction
@@ -292,18 +329,23 @@ public class EmployeesController : Controller
             EmployeeUid = employeeUid,
             Title = title.Trim(),
             Amount = Math.Round(amount, 2),
+            PeriodMonth = storeMonth,
+            PeriodYear = storeYear,
             IsActive = true,
             CreatedDate = DateTime.Now
         });
         await _db.SaveChangesAsync(ct);
+        var periodText = allMonths
+            ? "All Months"
+            : $"{CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(storeMonth!.Value)} {storeYear}";
         await _audit.WriteAsync("Create", "EmployeeDeductions", employeeUid.ToString(),
-            $"Added deduction '{title.Trim()}' amount {amount:N2}", ct);
-        TempData["Success"] = "Deduction added.";
-        return RedirectToAction(nameof(Details), new { id = employeeUid });
+            $"Added deduction '{title.Trim()}' amount {amount:N2} for {periodText}", ct);
+        TempData["Success"] = $"Deduction added for {periodText}.";
+        return RedirectToAction(nameof(Details), new { id = employeeUid, month = viewMonth, year = viewYear });
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> RemoveDeduction(int id, int employeeUid, CancellationToken ct)
+    public async Task<IActionResult> RemoveDeduction(int id, int employeeUid, int? month, int? year, CancellationToken ct)
     {
         EnsureNav();
         await _schema.EnsureSchemaAsync(ct);
@@ -311,13 +353,13 @@ public class EmployeesController : Controller
         if (row is null)
         {
             TempData["Error"] = "Deduction not found.";
-            return RedirectToAction(nameof(Details), new { id = employeeUid });
+            return RedirectToAction(nameof(Details), new { id = employeeUid, month, year });
         }
 
         row.IsActive = false;
         await _db.SaveChangesAsync(ct);
         TempData["Success"] = "Deduction deactivated.";
-        return RedirectToAction(nameof(Details), new { id = employeeUid });
+        return RedirectToAction(nameof(Details), new { id = employeeUid, month, year });
     }
 
     [HttpPost, ValidateAntiForgeryToken]

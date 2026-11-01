@@ -381,42 +381,38 @@ public sealed class InventoryLedgerService : IInventoryLedgerService
         CancellationToken cancellationToken)
     {
         var inv = await GetOrCreateInventoryAsync(productUid, warehouseUid, now, cancellationToken);
-        var available = Math.Max(0, inv.CurrentQuantity);
-        var deduct = Math.Min(requestedQty, available);
-        var shortfall = requestedQty - deduct;
+        var availableBefore = inv.CurrentQuantity;
+        var deduct = requestedQty;
 
-        if (deduct > 0)
+        // Always deduct full sale qty — allow negative stock (e.g. available 10, sell 50 → −40).
+        inv.QuantityOut += deduct;
+        inv.CurrentQuantity -= deduct;
+        inv.LastSalePrice = unitCost;
+        inv.LastStockDate = now;
+        inv.UpdatedDate = now;
+
+        _db.InventoryTransactions.Add(new InventoryTransaction
         {
-            inv.QuantityOut += deduct;
-            inv.CurrentQuantity -= deduct;
-            inv.LastSalePrice = unitCost;
-            inv.LastStockDate = now;
-            inv.UpdatedDate = now;
+            TransactionDate = now,
+            ProductUid = productUid,
+            WarehouseUid = warehouseUid,
+            TransactionType = TxSale,
+            ReferenceUid = referenceUid,
+            ReferenceNo = referenceNo,
+            QuantityIn = 0,
+            QuantityOut = deduct,
+            BalanceQuantity = inv.CurrentQuantity,
+            UnitCost = unitCost,
+            Remarks = $"Sale {referenceNo}",
+            UserUid = userUid,
+            TerminalUid = terminalUid,
+            CreatedDate = now
+        });
 
-            _db.InventoryTransactions.Add(new InventoryTransaction
-            {
-                TransactionDate = now,
-                ProductUid = productUid,
-                WarehouseUid = warehouseUid,
-                TransactionType = TxSale,
-                ReferenceUid = referenceUid,
-                ReferenceNo = referenceNo,
-                QuantityIn = 0,
-                QuantityOut = deduct,
-                BalanceQuantity = inv.CurrentQuantity,
-                UnitCost = unitCost,
-                Remarks = $"Sale {referenceNo}",
-                UserUid = userUid,
-                TerminalUid = terminalUid,
-                CreatedDate = now
-            });
-        }
-
-        if (shortfall > 0)
+        if (availableBefore < requestedQty)
         {
-            // Fail closed — do not oversell or silently clamp stock to zero.
-            throw new InvalidOperationException(
-                $"Insufficient stock for '{productName}'. Requested {requestedQty:0.###}, available {available:0.###}.");
+            result.ShortageNotes.Add(
+                $"{productName} short {requestedQty - Math.Max(0, availableBefore):0.###} (requested {requestedQty:0.###}, available {availableBefore:0.###}, balance {inv.CurrentQuantity:0.###})");
         }
     }
 

@@ -1,0 +1,102 @@
+@model TerminalDailyReportViewModel
+@{
+    ViewData["Title"] = "Terminal Report";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+    <span class="sales-invoices-heading">Terminal Report</span>
+</div>
+
+<form method="get" asp-action="TerminalReport" class="bg-white border rounded p-3 mb-3">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-2 col-sm-6">
+            <label class="form-label" for="DateFrom">Start Date</label>
+            <input type="date"
+                   class="form-control"
+                   id="DateFrom"
+                   name="dateFrom"
+                   value="@Model.DateFrom.ToString("yyyy-MM-dd")" />
+        </div>
+        <div class="col-md-2 col-sm-6">
+            <label class="form-label" for="DateTo">End Date</label>
+            <input type="date"
+                   class="form-control"
+                   id="DateTo"
+                   name="dateTo"
+                   value="@Model.DateTo.ToString("yyyy-MM-dd")" />
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <label class="form-label" for="Branch">Branch</label>
+            <select asp-for="Branch" asp-items="Model.Branches" class="form-select" id="Branch" name="branch"></select>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <label class="form-label" for="Terminal">Terminal</label>
+            <select asp-for="Terminal" asp-items="Model.Terminals" class="form-select" id="Terminal" name="terminal"></select>
+        </div>
+        <div class="col-md-auto col-sm-6">
+            <label class="form-label d-none d-md-block">&nbsp;</label>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm px-4">Apply</button>
+                <a class="btn btn-outline-secondary btn-sm px-4" asp-action="TerminalReport">Reset</a>
+            </div>
+        </div>
+    </div>
+</form>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-4 col-sm-6">
+        <div class="bg-white border rounded p-3 h-100">
+            <div class="text-muted small">Invoices</div>
+            <div class="fs-4 fw-semibold">@Model.TotalInvoices</div>
+        </div>
+    </div>
+    <div class="col-md-4 col-sm-6">
+        <div class="bg-white border rounded p-3 h-100">
+            <div class="text-muted small">Total Net Sale</div>
+            <div class="fs-4 fw-semibold text-success">@Model.TotalNetAmount.ToString("N2")</div>
+        </div>
+    </div>
+    <div class="col-md-4 col-sm-6">
+        <div class="bg-white border rounded p-3 h-100">
+            <div class="text-muted small">Total Paid</div>
+            <div class="fs-4 fw-semibold">@Model.TotalPaidAmount.ToString("N2")</div>
+        </div>
+    </div>
+</div>
+
+<div class="table-responsive bg-white border rounded p-2">
+    <table class="table table-striped table-hover w-100 mb-0">
+        <thead>
+            <tr>
+                <th>Branch</th>
+                <th>Terminal</th>
+                <th class="text-end">Invoices</th>
+                <th class="text-end">Net Amount</th>
+                <th class="text-end">Paid Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+        @if (Model.Rows.Count == 0)
+        {
+            <tr>
+                <td colspan="5" class="text-muted text-center py-4">
+                    No sales invoices for @Model.DateFrom.ToString("dd MMM yyyy") – @Model.DateTo.ToString("dd MMM yyyy").
+                </td>
+            </tr>
+        }
+        else
+        {
+            foreach (var row in Model.Rows)
+            {
+                <tr>
+                    <td>@row.BranchName</td>
+                    <td>@row.TerminalName</td>
+                    <td class="text-end">@row.InvoiceCount</td>
+                    <td class="text-end">@row.TotalNetAmount.ToString("N2")</td>
+                    <td class="text-end">@row.TotalPaidAmount.ToString("N2")</td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+</div>

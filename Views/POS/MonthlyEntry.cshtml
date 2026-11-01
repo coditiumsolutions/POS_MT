@@ -90,34 +90,21 @@
     <section class="pos-sale-panel monthly-entry-items-panel">
         <div class="pos-sale-panel-header pos-sale-panel-header--search">
             <h2 class="pos-sale-panel-title mb-0">Items</h2>
-            <input type="search" id="productSearch" class="form-control form-control-sm" placeholder="Search items..." />
+            <div class="pos-items-filters">
+                <select id="posCategorySelect" class="form-select form-select-sm pos-category-select" aria-label="Product category">
+                    <option value="">All categories</option>
+                    @foreach (var cat in Model.Categories)
+                    {
+                        <option value="@cat.Uid">@cat.CategoryName</option>
+                    }
+                </select>
+                <input type="search" id="productSearch" class="form-control form-control-sm" placeholder="Search items..." />
+            </div>
             <button type="button" id="btnCancelEdit" class="btn btn-outline-secondary btn-sm d-none">Cancel Edit</button>
         </div>
 
         @if (Model.UseCardLayout)
         {
-            <div class="pos-category-toolbar pos-category-tiles" id="posCategoryToolbar" role="group" aria-label="Product categories">
-                @{
-                    var catTone = 0;
-                }
-                <button type="button"
-                        class="btn btn-sm btn-outline-secondary pos-category-btn pos-cat-tone-@(catTone++ % 12) active"
-                        data-category-uid="">
-                    <span class="pos-cat-accent" aria-hidden="true"></span>
-                    <span class="pos-cat-icon" aria-hidden="true"><i class="bi bi-grid-fill"></i></span>
-                    <span class="pos-cat-label">All Items</span>
-                </button>
-                @foreach (var cat in Model.Categories)
-                {
-                    <button type="button"
-                            class="btn btn-sm btn-outline-secondary pos-category-btn pos-cat-tone-@(catTone++ % 12)"
-                            data-category-uid="@cat.Uid">
-                        <span class="pos-cat-accent" aria-hidden="true"></span>
-                        <span class="pos-cat-icon" aria-hidden="true"><i class="bi @ItemIcon(cat.CategoryName)"></i></span>
-                        <span class="pos-cat-label">@cat.CategoryName</span>
-                    </button>
-                }
-            </div>
             <div class="pos-product-cards" id="productsTable">
                 @foreach (var item in Model.Products)
                 {
@@ -165,7 +152,8 @@
                                 <option value="@p.Uid"
                                         data-price="@p.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)"
                                         data-code="@p.ProductCode"
-                                        data-name="@p.ProductName">
+                                        data-name="@p.ProductName"
+                                        data-category-uid="@(p.CategoryUid?.ToString() ?? "")">
                                     @p.ProductName
                                 </option>
                             }
@@ -183,7 +171,8 @@
                                 <option value="@p.Uid"
                                         data-price="@p.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)"
                                         data-code="@p.ProductCode"
-                                        data-name="@p.ProductName">
+                                        data-name="@p.ProductName"
+                                        data-category-uid="@(p.CategoryUid?.ToString() ?? "")">
                                     @p.ProductName (@p.ProductCode)
                                 </option>
                             }
@@ -280,7 +269,7 @@
     const btnCreateSalesInvoice = document.getElementById('btnCreateSalesInvoice');
     const productSearch = document.getElementById('productSearch');
     const productsTable = document.getElementById('productsTable');
-    const categoryToolbar = document.getElementById('posCategoryToolbar');
+    const categorySelect = document.getElementById('posCategorySelect');
 
     function todayInputValue() {
         const d = new Date();
@@ -344,16 +333,36 @@
     }
 
     function filterProducts() {
-        if (!productsTable) return;
         const q = (productSearch?.value || '').trim().toLowerCase();
-        productsTable.querySelectorAll('.credit-product-card').forEach(function (card) {
-            const name = (card.getAttribute('data-name') || '').toLowerCase();
-            const code = (card.getAttribute('data-code') || '').toLowerCase();
-            const cat = card.getAttribute('data-category-uid') || '';
-            const matchCat = !activeCategoryUid || cat === activeCategoryUid;
-            const matchText = !q || name.indexOf(q) !== -1 || code.indexOf(q) !== -1;
-            card.style.display = matchCat && matchText ? '' : 'none';
-        });
+        if (productsTable) {
+            productsTable.querySelectorAll('.credit-product-card').forEach(function (card) {
+                const name = (card.getAttribute('data-name') || '').toLowerCase();
+                const code = (card.getAttribute('data-code') || '').toLowerCase();
+                const cat = card.getAttribute('data-category-uid') || '';
+                const matchCat = !activeCategoryUid || cat === activeCategoryUid;
+                const matchText = !q || name.indexOf(q) !== -1 || code.indexOf(q) !== -1;
+                card.style.display = matchCat && matchText ? '' : 'none';
+            });
+        }
+        if (entryProduct) {
+            Array.from(entryProduct.options).forEach(function (opt, idx) {
+                if (idx === 0 && !opt.value) {
+                    opt.hidden = false;
+                    return;
+                }
+                const name = (opt.getAttribute('data-name') || opt.textContent || '').toLowerCase();
+                const code = (opt.getAttribute('data-code') || '').toLowerCase();
+                const cat = opt.getAttribute('data-category-uid') || '';
+                const matchCat = !activeCategoryUid || cat === activeCategoryUid;
+                const matchText = !q || name.indexOf(q) !== -1 || code.indexOf(q) !== -1;
+                opt.hidden = !(matchCat && matchText);
+            });
+            const selected = entryProduct.selectedOptions[0];
+            if (selected && selected.hidden) {
+                entryProduct.value = '';
+                syncSelectedProductLabel();
+            }
+        }
     }
 
     entryQty.addEventListener('input', recalcTotal);
@@ -389,14 +398,9 @@
         productSearch.addEventListener('input', filterProducts);
     }
 
-    if (categoryToolbar) {
-        categoryToolbar.addEventListener('click', function (e) {
-            const btn = e.target.closest('.pos-category-btn');
-            if (!btn) return;
-            categoryToolbar.querySelectorAll('.pos-category-btn').forEach(function (b) {
-                b.classList.toggle('active', b === btn);
-            });
-            activeCategoryUid = btn.getAttribute('data-category-uid') || '';
+    if (categorySelect) {
+        categorySelect.addEventListener('change', function () {
+            activeCategoryUid = (categorySelect.value || '').trim();
             filterProducts();
         });
     }

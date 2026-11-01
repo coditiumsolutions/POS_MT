@@ -53,14 +53,6 @@
         <button type="submit" class="btn btn-primary" id="monthlySupplyContinueBtn" disabled>
             Open Items for Selected Customers
         </button>
-        <button type="submit"
-                class="btn btn-outline-dark"
-                id="monthlySupplyPrintBtn"
-                formaction="@Url.Action("PrintMonthlyDeliveryList", "POS")"
-                formtarget="_blank"
-                title="Print names, locations, and items for the person delivering. Uses checked customers, or everyone with items for this date.">
-            <i class="bi bi-printer" aria-hidden="true"></i> Print delivery list
-        </button>
         <a class="btn btn-outline-secondary" asp-action="Index">Back</a>
         <div class="ms-auto" style="min-width: 220px;">
             <label class="form-label small text-muted mb-1 visually-hidden" for="monthlySupplyFilter">Filter</label>

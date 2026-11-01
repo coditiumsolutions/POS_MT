@@ -35,7 +35,8 @@ public static class NavigationCatalog
         [
             new("Cash POS", "POS", "Cash", IconClass: "bi-cash-stack"),
             new("Credit POS", "POS", "Credit", IconClass: "bi-calendar-month"),
-            new("Monthly Supply", "POS", "MonthlySupply", IconClass: "bi-calendar2-check")
+            new("Monthly Supply", "POS", "MonthlySupply", IconClass: "bi-calendar2-check"),
+            new("Yogurt Production", "YogurtProduction", IconClass: "bi-cup-straw")
         ]),
         new("Customers", "Customers",
         [
@@ -43,12 +44,6 @@ public static class NavigationCatalog
             new("All Customers", "Customers", IconClass: "bi-people"),
             new("Add Payment", "CustomerPayments", "Create", IconClass: "bi-cash-coin"),
             new("All Payments", "CustomerPayments", IconClass: "bi-wallet2")
-        ]),
-        new("Reports", "Reports",
-        [
-            new("Sales Report", "Reports", "TotalSale", IconClass: "bi-graph-up-arrow"),
-            new("Daily Report", "Reports", "DailyReport", IconClass: "bi-calendar-day"),
-            new("Slow / Dead Stock", "StockMovement", IconClass: "bi-hourglass-split", NavArea: "Reports")
         ]),
         new("Employees", "Employees",
         [
@@ -64,7 +59,8 @@ public static class NavigationCatalog
             new("Purchases", "PurchaseInvoices", IconClass: "bi-cart-plus"),
             new("Sales", "SalesInvoices", IconClass: "bi-receipt"),
             new("Expenses", "Expenses", IconClass: "bi-credit-card"),
-            new("Employees", "Employees", IconClass: "bi-person-badge")
+            new("Employees", "Employees", IconClass: "bi-person-badge"),
+            new("Reports", "Reports", "TotalSale", IconClass: "bi-graph-up")
         ])
     ];
 
@@ -98,6 +94,13 @@ public static class NavigationCatalog
         [
             new("All Sales", "SalesInvoices", IconClass: "bi-receipt"),
             new("All Sale Items", "SalesInvoiceDetails", IconClass: "bi-list-ul")
+        ]),
+        new("Reports", "Reports",
+        [
+            new("Sales Report", "Reports", "TotalSale", IconClass: "bi-graph-up-arrow"),
+            new("Daily Report", "Reports", "DailyReport", IconClass: "bi-calendar-day"),
+            new("Terminal Report", "Reports", "TerminalReport", IconClass: "bi-display"),
+            new("Financial Summary", "Reports", "ExpenseReport", IconClass: "bi-cash-stack")
         ])
     ];
 

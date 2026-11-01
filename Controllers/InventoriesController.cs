@@ -12,12 +12,50 @@ public class InventoriesController : Controller {
   }
   public async Task<IActionResult> Index(CancellationToken ct){
     EnsureInventoriesNav();
-    var rows = await (from i in _db.Inventories.AsNoTracking()
-      join p in _db.Products.AsNoTracking() on i.ProductUid equals p.Uid into pj from p in pj.DefaultIfEmpty()
-      join w in _db.Warehouses.AsNoTracking() on i.WarehouseUid equals w.Uid into wj from w in wj.DefaultIfEmpty()
-      orderby i.Uid descending
-      select new InventoryListItemViewModel { Uid=i.Uid, ProductName=p!=null?p.ProductName:i.ProductUid.ToString(), WarehouseName=w!=null?w.WarehouseName:i.WarehouseUid.ToString(), CurrentQuantity=i.CurrentQuantity, AverageCost=i.AverageCost, LastPurchasePrice=i.LastPurchasePrice, LastSalePrice=i.LastSalePrice }).ToListAsync(ct);
-    return View(rows);
+    return View(await LoadInventoryBalanceRowsAsync(orderByUidDesc: true, ct));
+  }
+
+  /// <summary>Printable Inventory Balance: Product Name, Branch, Current Quantity.</summary>
+  [HttpGet]
+  public async Task<IActionResult> PrintBalance(CancellationToken ct)
+  {
+    EnsureInventoriesNav();
+    var rows = await LoadInventoryBalanceRowsAsync(orderByUidDesc: false, ct);
+    var model = new InventoryBalancePrintViewModel
+    {
+      PrintedAt = DateTime.Now,
+      Rows = rows
+        .OrderBy(x => x.ProductName, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(x => x.BranchName, StringComparer.OrdinalIgnoreCase)
+        .ToList()
+    };
+    return View(model);
+  }
+
+  private async Task<List<InventoryListItemViewModel>> LoadInventoryBalanceRowsAsync(bool orderByUidDesc, CancellationToken ct)
+  {
+    var query =
+      from i in _db.Inventories.AsNoTracking()
+      join p in _db.Products.AsNoTracking() on i.ProductUid equals p.Uid into pj
+      from p in pj.DefaultIfEmpty()
+      join w in _db.Warehouses.AsNoTracking() on i.WarehouseUid equals w.Uid into wj
+      from w in wj.DefaultIfEmpty()
+      join b in _db.Branches.AsNoTracking() on w.BranchUid equals b.Uid into bj
+      from b in bj.DefaultIfEmpty()
+      select new InventoryListItemViewModel
+      {
+        Uid = i.Uid,
+        ProductName = p != null ? p.ProductName : i.ProductUid.ToString(),
+        BranchName = b != null ? b.BranchName : (w != null ? w.WarehouseName : "—"),
+        CurrentQuantity = i.CurrentQuantity,
+        AverageCost = i.AverageCost,
+        LastPurchasePrice = i.LastPurchasePrice,
+        LastSalePrice = i.LastSalePrice
+      };
+
+    return orderByUidDesc
+      ? await query.OrderByDescending(x => x.Uid).ToListAsync(ct)
+      : await query.ToListAsync(ct);
   }
   public async Task<IActionResult> Create(CancellationToken ct){ EnsureInventoriesNav(); await LoadLookups(ct); return View(new InventoryFormViewModel()); }
   [HttpPost, ValidateAntiForgeryToken]

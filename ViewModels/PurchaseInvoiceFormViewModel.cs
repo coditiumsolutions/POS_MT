@@ -9,19 +9,20 @@ public sealed class PurchaseInvoiceFormViewModel
     [Required, StringLength(50), Display(Name = "Purchase Invoice No")]
     public string PurchaseInvoiceNo { get; set; } = string.Empty;
 
-    [StringLength(100), Display(Name = "Vendor Invoice No")]
-    public string? VendorInvoiceNo { get; set; }
+    [Required(ErrorMessage = "Vendor Invoice No is required."), StringLength(100), Display(Name = "Vendor Invoice No")]
+    public string VendorInvoiceNo { get; set; } = string.Empty;
 
     [Display(Name = "Purchase Date")]
     public DateTime PurchaseDate { get; set; } = DateTime.Now;
 
-    [Display(Name = "Branch")]
+    [Required(ErrorMessage = "Branch is required."), Display(Name = "Branch")]
     public int? BranchUid { get; set; }
 
+    /// <summary>Resolved from Branch on save; not shown on the create form.</summary>
     [Display(Name = "Warehouse")]
     public int? WarehouseUid { get; set; }
 
-    [Required, Display(Name = "Vendor")]
+    [Range(1, int.MaxValue, ErrorMessage = "Vendor is required."), Display(Name = "Vendor")]
     public int VendorUid { get; set; }
 
     [Display(Name = "Sub Total")]
@@ -54,7 +55,7 @@ public sealed class PurchaseInvoiceFormViewModel
     [StringLength(500)]
     public string? Remarks { get; set; }
 
-    /// <summary>Optional receive lines — each increases warehouse inventory on create.</summary>
+    /// <summary>Receive lines — at least one required on create.</summary>
     public List<PurchaseInvoiceLineFormViewModel> Lines { get; set; } = [];
 }
 
@@ -68,4 +69,10 @@ public sealed class PurchaseInvoiceLineFormViewModel
 
     [Display(Name = "Unit Cost")]
     public decimal UnitCost { get; set; }
+}
+
+public sealed class PurchaseProductOptionViewModel
+{
+    public int Uid { get; set; }
+    public string Label { get; set; } = string.Empty;
 }

@@ -106,6 +106,10 @@
     <button type="button" id="btnPrintInvoice" class="btn btn-sm btn-outline-dark" disabled>
         <i class="bi bi-printer" aria-hidden="true"></i> Print Invoice
     </button>
+    <button type="button" id="btnSalesReport" class="btn btn-sm btn-outline-dark"
+            title="Print all sales for the selected dates / filters">
+        <i class="bi bi-printer" aria-hidden="true"></i> Sales Report
+    </button>
 </div>
 
 <form id="cancelInvoiceForm" method="post" class="d-none">
@@ -165,15 +169,18 @@
             const cancelUrlBase = '@Url.Action("Cancel", "SalesInvoices")';
             const deleteUrlBase = '@Url.Action("Delete", "SalesInvoices")';
             const printUrlBase = '@Url.Action("Print", "SalesInvoices")';
+            const salesReportUrl = '@Url.Action("SalesReport", "SalesInvoices")';
 
             const btnEdit = document.getElementById('btnEditInvoice');
             const btnView = document.getElementById('btnViewInvoice');
             const btnCancel = document.getElementById('btnCancelInvoice');
             const btnDelete = document.getElementById('btnDeleteInvoice');
             const btnPrint = document.getElementById('btnPrintInvoice');
+            const btnSalesReport = document.getElementById('btnSalesReport');
             const cancelForm = document.getElementById('cancelInvoiceForm');
             const deleteForm = document.getElementById('deleteInvoiceForm');
             const table = document.getElementById('crudTable');
+            const filterForm = document.getElementById('salesInvoicesFilterForm');
 
             let selectedUid = null;
             let selectedStatus = '';
@@ -249,6 +256,17 @@
                 }
             });
 
+            if (btnSalesReport && filterForm) {
+                btnSalesReport.addEventListener('click', function () {
+                    const params = new URLSearchParams(new FormData(filterForm));
+                    const url = salesReportUrl + '?' + params.toString();
+                    const w = window.open(url, '_blank', 'width=980,height=720');
+                    if (!w) {
+                        alert('Pop-up blocked. Allow pop-ups to open the sales report.');
+                    }
+                });
+            }
+
             updateActions();
 
             posDataTable('#crudTable', {
@@ -256,7 +274,7 @@
                 columnDefs: [{ orderable: false, targets: 0 }]
             });
 
-            const form = document.getElementById('salesInvoicesFilterForm');
+            const form = filterForm;
             const type = document.getElementById('customerType');
             const month = document.getElementById('month');
             if (!form || !type || !month) return;

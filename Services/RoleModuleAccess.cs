@@ -31,6 +31,7 @@ public static class RoleModuleAccess
             ["EmployeePayments"] = [AppRoles.Administrator, AppRoles.Manager],
             ["Reports"] = [AppRoles.Administrator, AppRoles.Manager],
             ["POS"] = [AppRoles.Administrator, AppRoles.Manager, AppRoles.Cashier],
+            ["YogurtProduction"] = [AppRoles.Administrator, AppRoles.Manager, AppRoles.Cashier],
             ["Customers"] = [AppRoles.Administrator, AppRoles.Manager, AppRoles.Cashier],
             ["CustomerPayments"] = [AppRoles.Administrator, AppRoles.Manager, AppRoles.Cashier],
             ["SalesInvoices"] = [AppRoles.Administrator, AppRoles.Manager, AppRoles.Cashier, AppRoles.Viewer],

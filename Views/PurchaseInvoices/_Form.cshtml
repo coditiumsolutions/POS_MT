@@ -1,94 +1,144 @@
 ﻿@model PurchaseInvoiceFormViewModel
-<div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
-<div class="invoice-meta-grid invoice-meta-form">
-    <div class="invoice-meta-row">
-        <label asp-for="PurchaseInvoiceNo" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="PurchaseInvoiceNo" class="form-control form-control-sm invoice-meta-input" />
-            <span asp-validation-for="PurchaseInvoiceNo" class="text-danger"></span>
-        </div>
-        <label asp-for="VendorInvoiceNo" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="VendorInvoiceNo" class="form-control form-control-sm invoice-meta-input" />
+@{
+    var vendorInvoiceNoReadonly = ViewBag.VendorInvoiceNoReadonly as bool? == true;
+    var productOptions = ViewBag.ProductOptions as IEnumerable<PurchaseProductOptionViewModel>
+                         ?? Enumerable.Empty<PurchaseProductOptionViewModel>();
+}
+<div asp-validation-summary="All" class="text-danger mb-2"></div>
+
+<div class="product-tabs" id="purchaseInvoiceTabs">
+    <div class="product-tab-buttons" role="tablist" aria-label="Purchase invoice form tabs">
+        <button type="button"
+                class="product-tab-btn active"
+                data-tab="basic"
+                role="tab"
+                aria-selected="true"
+                aria-controls="purchase-panel-basic">
+            Invoice Details
+        </button>
+        <button type="button"
+                class="product-tab-btn"
+                data-tab="other"
+                role="tab"
+                aria-selected="false"
+                aria-controls="purchase-panel-other">
+            Other Details
+        </button>
+    </div>
+
+    <div class="product-tab-panel active"
+         id="purchase-panel-basic"
+         data-panel="basic"
+         role="tabpanel">
+        <div class="invoice-meta-grid invoice-meta-form">
+            <div class="invoice-meta-row">
+                <label asp-for="PurchaseInvoiceNo" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="PurchaseInvoiceNo" class="form-control form-control-sm invoice-meta-input" />
+                    <span asp-validation-for="PurchaseInvoiceNo" class="text-danger"></span>
+                </div>
+                <label asp-for="PurchaseDate" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="PurchaseDate" class="form-control form-control-sm invoice-meta-input" type="datetime-local" />
+                </div>
+            </div>
+            <div class="invoice-meta-row">
+                <label asp-for="VendorUid" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <select asp-for="VendorUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Vendors">
+                        <option value="">-- Select --</option>
+                    </select>
+                    <span asp-validation-for="VendorUid" class="text-danger"></span>
+                </div>
+                <label asp-for="BranchUid" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <select asp-for="BranchUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Branches">
+                        <option value="">-- Select --</option>
+                    </select>
+                    <span asp-validation-for="BranchUid" class="text-danger"></span>
+                </div>
+            </div>
+            <div class="invoice-meta-row">
+                <label asp-for="VendorInvoiceNo" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    @if (vendorInvoiceNoReadonly)
+                    {
+                        <input asp-for="VendorInvoiceNo" class="form-control form-control-sm invoice-meta-input" readonly />
+                    }
+                    else
+                    {
+                        <input asp-for="VendorInvoiceNo" class="form-control form-control-sm invoice-meta-input" />
+                    }
+                    <span asp-validation-for="VendorInvoiceNo" class="text-danger"></span>
+                </div>
+                <div class="invoice-meta-title"></div>
+                <div class="invoice-meta-field"></div>
+            </div>
         </div>
     </div>
-    <div class="invoice-meta-row">
-        <label asp-for="PurchaseDate" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="PurchaseDate" class="form-control form-control-sm invoice-meta-input" type="datetime-local" />
-        </div>
-        <label asp-for="VendorUid" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <select asp-for="VendorUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Vendors"></select>
-            <span asp-validation-for="VendorUid" class="text-danger"></span>
-        </div>
-    </div>
-    <div class="invoice-meta-row">
-        <label asp-for="BranchUid" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <select asp-for="BranchUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Branches">
-                <option value="">-- Select --</option>
-            </select>
-        </div>
-        <label asp-for="WarehouseUid" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <select asp-for="WarehouseUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Warehouses">
-                <option value="">-- Select --</option>
-            </select>
-        </div>
-    </div>
-    <div class="invoice-meta-row">
-        <label asp-for="SubTotal" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="SubTotal" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-        <label asp-for="DiscountAmount" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="DiscountAmount" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-    </div>
-    <div class="invoice-meta-row">
-        <label asp-for="TaxAmount" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="TaxAmount" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-        <label asp-for="OtherCharges" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="OtherCharges" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-    </div>
-    <div class="invoice-meta-row">
-        <label asp-for="NetAmount" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="NetAmount" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-        <label asp-for="PaidAmount" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="PaidAmount" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-    </div>
-    <div class="invoice-meta-row">
-        <label asp-for="BalanceAmount" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="BalanceAmount" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-        <label asp-for="PaymentStatus" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="PaymentStatus" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-    </div>
-    <div class="invoice-meta-row">
-        <label asp-for="InvoiceStatus" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field">
-            <input asp-for="InvoiceStatus" class="form-control form-control-sm invoice-meta-input" />
-        </div>
-        <div class="invoice-meta-title"></div>
-        <div class="invoice-meta-field"></div>
-    </div>
-    <div class="invoice-meta-row">
-        <label asp-for="Remarks" class="invoice-meta-title"></label>
-        <div class="invoice-meta-field invoice-meta-field-span">
-            <textarea asp-for="Remarks" class="form-control form-control-sm invoice-meta-input" rows="2"></textarea>
+
+    <div class="product-tab-panel"
+         id="purchase-panel-other"
+         data-panel="other"
+         role="tabpanel"
+         hidden>
+        <div class="invoice-meta-grid invoice-meta-form">
+            <div class="invoice-meta-row">
+                <label asp-for="SubTotal" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="SubTotal" class="form-control form-control-sm invoice-meta-input" />
+                </div>
+                <label asp-for="DiscountAmount" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="DiscountAmount" class="form-control form-control-sm invoice-meta-input" />
+                </div>
+            </div>
+            <div class="invoice-meta-row">
+                <label asp-for="TaxAmount" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="TaxAmount" class="form-control form-control-sm invoice-meta-input" />
+                </div>
+                <label asp-for="OtherCharges" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="OtherCharges" class="form-control form-control-sm invoice-meta-input" />
+                </div>
+            </div>
+            <div class="invoice-meta-row">
+                <label asp-for="NetAmount" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="NetAmount" class="form-control form-control-sm invoice-meta-input" />
+                </div>
+                <label asp-for="PaidAmount" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="PaidAmount" class="form-control form-control-sm invoice-meta-input" />
+                </div>
+            </div>
+            <div class="invoice-meta-row">
+                <label asp-for="BalanceAmount" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="BalanceAmount" class="form-control form-control-sm invoice-meta-input" />
+                </div>
+                <label asp-for="PaymentStatus" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="PaymentStatus" class="form-control form-control-sm invoice-meta-input" />
+                    <span asp-validation-for="PaymentStatus" class="text-danger"></span>
+                </div>
+            </div>
+            <div class="invoice-meta-row">
+                <label asp-for="InvoiceStatus" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <input asp-for="InvoiceStatus" class="form-control form-control-sm invoice-meta-input" />
+                    <span asp-validation-for="InvoiceStatus" class="text-danger"></span>
+                </div>
+                <div class="invoice-meta-title"></div>
+                <div class="invoice-meta-field"></div>
+            </div>
+            <div class="invoice-meta-row">
+                <label asp-for="Remarks" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field invoice-meta-field-span">
+                    <textarea asp-for="Remarks" class="form-control form-control-sm invoice-meta-input" rows="2"></textarea>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -134,9 +184,10 @@
     <h2 class="invoice-meta-section-title">@(Model.Uid == 0 ? "Receive into inventory" : "Add items into inventory")</h2>
     <p class="text-muted small mb-2">
         @(Model.Uid == 0
-            ? "Add product lines to increase warehouse stock. Warehouse is required when lines are filled."
-            : "Add more product lines below. Each saved line increases warehouse stock. Warehouse is required when lines are filled.")
+            ? "Add at least one product line (product, quantity, unit cost). Stock posts to the branch warehouse automatically."
+            : "Add more product lines below. Each saved line increases stock for the branch warehouse.")
     </p>
+    <span asp-validation-for="Lines" class="text-danger d-block mb-2"></span>
     <div class="table-responsive">
         <table class="table table-sm table-bordered align-middle mb-0">
             <thead>
@@ -149,10 +200,13 @@
             <tbody>
             @for (var i = 0; i < Model.Lines.Count; i++)
             {
+                var selectedProductUid = Model.Lines[i].ProductUid;
                 <tr>
                     <td>
-                        <select asp-for="Lines[i].ProductUid" class="form-select form-select-sm" asp-items="ViewBag.Products">
-                            <option value="">-- Select --</option>
+                        <select asp-for="Lines[i].ProductUid"
+                                class="form-select form-select-sm"
+                                asp-items="@(new SelectList(productOptions, "Uid", "Label", selectedProductUid))">
+                            <option value="">-- Select product --</option>
                         </select>
                     </td>
                     <td>
@@ -167,3 +221,35 @@
         </table>
     </div>
 </section>
+
+<script>
+(function () {
+    var root = document.getElementById('purchaseInvoiceTabs');
+    if (!root) return;
+    var buttons = root.querySelectorAll('.product-tab-btn');
+    var panels = root.querySelectorAll('.product-tab-panel');
+
+    function activate(tabName) {
+        buttons.forEach(function (btn) {
+            var on = btn.getAttribute('data-tab') === tabName;
+            btn.classList.toggle('active', on);
+            btn.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        panels.forEach(function (panel) {
+            var on = panel.getAttribute('data-panel') === tabName;
+            panel.classList.toggle('active', on);
+            if (on) {
+                panel.removeAttribute('hidden');
+            } else {
+                panel.setAttribute('hidden', 'hidden');
+            }
+        });
+    }
+
+    buttons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            activate(btn.getAttribute('data-tab'));
+        });
+    });
+})();
+</script>

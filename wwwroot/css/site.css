@@ -95,7 +95,7 @@ body {
 }
 
 .pos-top-link {
-  color: #0f172a;
+  color: DarkViolet;
   text-decoration: none;
   font-weight: 600;
   font-size: 0.92rem;
@@ -106,11 +106,11 @@ body {
 }
 
 .pos-top-link:hover {
-  color: var(--pos-accent);
+  color: DarkViolet;
 }
 
 .pos-top-link.active {
-  color: var(--pos-accent);
+  color: DarkViolet;
 }
 
 .pos-top-dropdown {
@@ -129,7 +129,7 @@ body {
 .pos-top-twistee {
   border: 0;
   background: transparent;
-  color: #0f172a;
+  color: DarkViolet;
   padding: 0.1rem 0.2rem;
   line-height: 1;
   cursor: pointer;
@@ -141,7 +141,7 @@ body {
 .pos-top-twistee:hover,
 .pos-top-dropdown.active .pos-top-twistee,
 .pos-top-dropdown.open .pos-top-twistee {
-  color: var(--pos-accent);
+  color: DarkViolet;
 }
 
 .pos-top-twistee i {
@@ -169,7 +169,7 @@ body {
 .pos-top-dropdown-item {
   display: block;
   padding: 0.4rem 0.85rem;
-  color: #0f172a;
+  color: DarkViolet;
   text-decoration: none;
   font-weight: 600;
   font-size: 0.9rem;
@@ -178,7 +178,7 @@ body {
 
 .pos-top-dropdown-item:hover {
   background: #f8fafc;
-  color: var(--pos-accent);
+  color: DarkViolet;
 }
 
 .pos-home-link {
@@ -356,8 +356,8 @@ button.pos-top-dropdown-item {
 
 button.pos-top-dropdown-item.active,
 .pos-top-dropdown-item.active {
-  background: #ecfdf5;
-  color: #0f766e;
+  background: #f5eefc;
+  color: DarkViolet;
 }
 
 .pos-body {
@@ -1189,7 +1189,7 @@ a.pos-nav-link:hover {
 
 .pos-sale-layout {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.05fr);
   gap: 1rem;
   align-items: stretch;
   min-height: calc(100vh - 160px);
@@ -1197,7 +1197,25 @@ a.pos-nav-link:hover {
 }
 
 .pos-sale-layout--cards {
-  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.8fr);
+  grid-template-columns: minmax(260px, 1.15fr) minmax(280px, 1fr);
+}
+
+.pos-items-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.pos-category-select {
+  flex: 0 1 42%;
+  min-width: 7.5rem;
+  max-width: 14rem;
+}
+
+.pos-items-filters #productSearch {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .pos-sale-panel {
@@ -1223,7 +1241,8 @@ a.pos-nav-link:hover {
   justify-content: stretch;
 }
 
-.pos-sale-panel-header--search .form-control {
+.pos-sale-panel-header--search .form-control,
+.pos-sale-panel-header--search .form-select {
   width: 100%;
   flex: 1 1 auto;
 }
@@ -1605,6 +1624,17 @@ a.pos-nav-link:hover {
   color: #1d4ed8;
 }
 
+.pos-line-input,
+.pos-price-input {
+  width: 5.5rem;
+  text-align: right;
+  font-weight: 600;
+  padding-left: 0.25rem;
+  padding-right: 0.35rem;
+  color: #1d4ed8;
+  display: inline-block;
+}
+
 .pos-qty-controls {
   display: inline-flex;
   align-items: center;
@@ -1692,6 +1722,17 @@ a.pos-nav-link:hover {
 
 .monthly-entry-layout .pos-sale-panel:last-child {
   min-height: 520px;
+}
+
+.monthly-entry-items-panel .pos-sale-panel-header--search {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.monthly-entry-items-panel .pos-items-filters {
+  flex: 1 1 14rem;
+  min-width: 12rem;
 }
 
 .monthly-entry-layout--cards .monthly-entry-items-panel {
@@ -2123,29 +2164,23 @@ a.btn.btn-primary.daily-report-filter-btn:focus {
 }
 
 .monthly-supply-grid {
-  border-collapse: separate;
-  border-spacing: 0 0.4rem;
+  border-collapse: collapse;
+  font-size: 0.975rem;
+}
+
+.monthly-supply-grid > :not(caption) > * > * {
+  border-bottom-width: 0;
+}
+
+.monthly-supply-grid thead th {
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: 2px solid #2563eb !important;
 }
 
 .monthly-supply-customer-row {
   cursor: pointer;
-  --ms-row-border: #0d9488;
-}
-
-#monthlySupplyTable tbody tr.monthly-supply-customer-row:nth-child(8n + 1) {
-  --ms-row-border: #0d9488; /* teal */
-}
-
-#monthlySupplyTable tbody tr.monthly-supply-customer-row:nth-child(8n + 3) {
-  --ms-row-border: #2563eb; /* blue */
-}
-
-#monthlySupplyTable tbody tr.monthly-supply-customer-row:nth-child(8n + 5) {
-  --ms-row-border: #d97706; /* amber */
-}
-
-#monthlySupplyTable tbody tr.monthly-supply-customer-row:nth-child(8n + 7) {
-  --ms-row-border: #db2777; /* rose */
 }
 
 #monthlySupplyTable tbody tr.monthly-supply-customer-row > td {
@@ -2155,26 +2190,18 @@ a.btn.btn-primary.daily-report-filter-btn:focus {
   --bs-table-bg-type: transparent;
   --bs-table-bg-state: transparent;
   box-shadow: none;
-  border-top: 1.5px solid var(--ms-row-border);
-  border-bottom: 1.5px solid var(--ms-row-border);
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: 1.5px solid #2563eb !important;
   vertical-align: middle;
-}
-
-#monthlySupplyTable tbody tr.monthly-supply-customer-row > td:first-child {
-  border-left: 3px solid var(--ms-row-border);
-  border-top-left-radius: 0.35rem;
-  border-bottom-left-radius: 0.35rem;
-}
-
-#monthlySupplyTable tbody tr.monthly-supply-customer-row > td:last-child {
-  border-right: 1.5px solid var(--ms-row-border);
-  border-top-right-radius: 0.35rem;
-  border-bottom-right-radius: 0.35rem;
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
 }
 
 #monthlySupplyTable.table-hover > tbody > tr.monthly-supply-customer-row:hover > * {
   --bs-table-accent-bg: transparent;
-  background-color: #fff !important;
+  background-color: #eff6ff !important;
   color: inherit;
 }
 
@@ -2230,8 +2257,7 @@ a.btn.btn-primary.daily-report-filter-btn:focus {
 }
 
 .monthly-supply-customer-row.monthly-supply-row-expanded > td {
-  background-color: #fff !important;
-  box-shadow: inset 0 0 0 1px var(--ms-row-border);
+  background-color: #eff6ff !important;
 }
 
 .monthly-supply-customer-row.monthly-supply-row-expanded .monthly-supply-twistee {
@@ -2505,4 +2531,92 @@ a.btn.btn-primary.daily-report-filter-btn:focus {
 .inventory-grid.table-hover > tbody > tr:hover > * {
   --bs-table-accent-bg: transparent;
   background-color: #eff6ff;
+}
+
+/* Expense Report — titles black, values/fields DarkViolet */
+.expense-report-page .expense-report-heading,
+.expense-report-page .form-label,
+.expense-report-page .expense-report-title {
+  color: #000000 !important;
+  font-weight: 700;
+}
+
+.expense-report-page .expense-report-heading {
+  font-size: 1.4rem;
+  line-height: 1.25;
+}
+
+.expense-report-page .form-label,
+.expense-report-page .expense-report-title {
+  font-size: 1.05rem;
+  line-height: 1.3;
+}
+
+.expense-report-page .form-control,
+.expense-report-page .form-control:focus {
+  color: #9400d3 !important;
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.expense-report-page input[type="date"] {
+  color-scheme: light;
+  color: #9400d3 !important;
+}
+
+.expense-report-page .expense-report-value {
+  color: #9400d3 !important;
+  font-weight: 700;
+  font-size: 1.85rem;
+  line-height: 1.2;
+}
+
+.expense-report-page .expense-report-meta {
+  color: #9400d3 !important;
+  font-weight: 600;
+  font-size: 0.98rem;
+}
+
+.expense-report-page .expense-report-card {
+  border: 1px solid #d8b4fe !important;
+  box-shadow: 0 2px 8px rgba(148, 0, 211, 0.08);
+}
+
+/* Employee Details — titles black, fields blue */
+.employee-details-page .page-heading,
+.employee-details-page .form-label,
+.employee-details-page .employee-details-title,
+.employee-details-page h2 {
+  color: #000000 !important;
+  font-weight: 700;
+}
+
+.employee-details-page .employee-details-meta,
+.employee-details-page .employee-details-value,
+.employee-details-page .form-control,
+.employee-details-page .form-select,
+.employee-details-page .form-control:focus,
+.employee-details-page .form-select:focus,
+.employee-details-page table tbody td {
+  color: #0000ff !important;
+  font-weight: 600;
+}
+
+.employee-details-page .employee-details-value {
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+.employee-details-page .employee-details-meta {
+  font-size: 1rem;
+}
+
+.employee-details-page .employee-details-title {
+  font-size: 0.95rem;
+  margin-bottom: 0.25rem;
+}
+
+.employee-details-page table thead th {
+  color: #000000 !important;
+  font-weight: 700;
 }

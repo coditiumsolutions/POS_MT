@@ -103,11 +103,17 @@ public class POSController : Controller
     /// </summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> PrintMonthlyDeliveryList(DateTime supplyDate, int[]? selectedCustomerUids, CancellationToken ct)
+    public async Task<IActionResult> PrintMonthlyDeliveryList(
+        DateTime supplyDate,
+        int[]? selectedCustomerUids,
+        string? area,
+        CancellationToken ct)
     {
-        _navContext.SetArea("POS");
+        // Opened from Customers Index (area-wise delivery list).
+        _navContext.SetArea("Customers");
         var day = supplyDate == default ? DateTime.Today : supplyDate.Date;
         var selected = selectedCustomerUids?.Where(x => x > 0).Distinct().ToList() ?? [];
+        var areaFilter = string.IsNullOrWhiteSpace(area) ? null : area.Trim();
 
         var query = _db.Customers.AsNoTracking()
             .Where(x => x.IsActive
@@ -118,6 +124,10 @@ public class POSController : Controller
         if (selected.Count > 0)
         {
             query = query.Where(x => selected.Contains(x.Uid));
+        }
+        else if (areaFilter is not null)
+        {
+            query = query.Where(x => x.Area != null && x.Area == areaFilter);
         }
 
         var customers = await query
@@ -165,6 +175,7 @@ public class POSController : Controller
             {
                 CustomerCode = customer.CustomerCode,
                 CustomerName = customer.CustomerName,
+                Area = customer.Area?.Trim() ?? string.Empty,
                 Location = FormatDeliveryLocation(customer),
                 Phone = string.IsNullOrWhiteSpace(phone) ? null : phone,
                 Items = items
@@ -177,6 +188,7 @@ public class POSController : Controller
             SupplyDate = day,
             PrintedAt = DateTime.Now,
             SelectedOnly = selected.Count > 0,
+            AreaFilter = areaFilter,
             Customers = rows
         });
     }
@@ -200,7 +212,7 @@ public class POSController : Controller
             parts.Add(customer.Address.Trim());
         }
 
-        return parts.Count == 0 ? "�" : string.Join(", ", parts);
+        return parts.Count == 0 ? "—" : string.Join(", ", parts);
     }
 
     [HttpGet]
@@ -493,11 +505,13 @@ public class POSController : Controller
             userUid = parsedUserId;
         }
 
-        var branchUid = await _db.Branches.AsNoTracking()
-            .Where(x => x.IsActive)
-            .OrderBy(x => x.Uid)
-            .Select(x => (int?)x.Uid)
-            .FirstOrDefaultAsync(ct);
+        var (msBranchName, branchUid) = await ResolveSessionBranchAsync(ct);
+        if (branchUid is null or <= 0)
+            branchUid = await _db.Branches.AsNoTracking()
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.Uid)
+                .Select(x => (int?)x.Uid)
+                .FirstOrDefaultAsync(ct);
 
         var paymentMethodUid = await _db.PaymentMethods.AsNoTracking()
             .Where(x => x.IsActive)
@@ -570,15 +584,19 @@ public class POSController : Controller
                         invoiceNo = $"POS-MS-{supplyDay:yyyyMM}-{customer.CustomerCode}-{Random.Shared.Next(10, 99)}";
                     }
 
+                    var (msTerminalName, msTerminalUid) = await ResolveSessionTerminalAsync(ct);
                     invoice = new SalesInvoice
                     {
                         ClientTransactionId = Guid.NewGuid(),
                         InvoiceNo = invoiceNo,
                         InvoiceDate = monthStart,
                         BranchUid = branchUid,
+                        Branch = msBranchName,
                         CustomerUid = customer.Uid,
                         UserUid = userUid,
                         PaymentMethodUid = paymentMethodUid,
+                        TerminalUid = msTerminalUid,
+                        Terminal = msTerminalName,
                         SubTotal = 0,
                         DiscountAmount = 0,
                         TaxAmount = 0,
@@ -1031,7 +1049,7 @@ public class POSController : Controller
         }
 
         var unitPrice = request.UnitPrice > 0 ? request.UnitPrice : product.SalePrice;
-        var quantity = request.Quantity < 0.1m ? 0.1m : request.Quantity;
+        var quantity = request.Quantity < 0.01m ? 0.01m : request.Quantity;
 
         var deliveryCharges = request.DeliveryCharges < 0 ? 0 : request.DeliveryCharges;
 
@@ -1075,7 +1093,7 @@ public class POSController : Controller
             return RedirectToAction(nameof(MonthlySupply), new { openCustomer = request.CustomerUid });
         }
 
-        var quantity = request.Quantity < 0.1m ? 0.1m : request.Quantity;
+        var quantity = request.Quantity < 0.01m ? 0.01m : request.Quantity;
         row.Quantity = quantity;
         row.UnitPrice = request.UnitPrice < 0 ? 0 : request.UnitPrice;
         row.DeliveryCharges = request.DeliveryCharges < 0 ? 0 : request.DeliveryCharges;
@@ -1455,11 +1473,13 @@ public class POSController : Controller
             userUid = parsedUserId;
         }
 
-        var branchUid = await _db.Branches.AsNoTracking()
-            .Where(x => x.IsActive)
-            .OrderBy(x => x.Uid)
-            .Select(x => (int?)x.Uid)
-            .FirstOrDefaultAsync(ct);
+        var (mBranchName, branchUid) = await ResolveSessionBranchAsync(ct);
+        if (branchUid is null or <= 0)
+            branchUid = await _db.Branches.AsNoTracking()
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.Uid)
+                .Select(x => (int?)x.Uid)
+                .FirstOrDefaultAsync(ct);
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
@@ -1572,14 +1592,18 @@ public class POSController : Controller
                     invoiceNo = $"POS-M-{DateTime.Now:yyyyMMddHHmmssfff}-{Random.Shared.Next(10, 99)}";
                 }
 
+                var (mTerminalName, mTerminalUid) = await ResolveSessionTerminalAsync(ct);
                 invoice = new SalesInvoice
                 {
                     ClientTransactionId = Guid.NewGuid(),
                     InvoiceNo = invoiceNo,
                     InvoiceDate = entryDate,
                     BranchUid = branchUid,
+                    Branch = mBranchName,
                     CustomerUid = customer.Uid,
                     UserUid = userUid,
+                    TerminalUid = mTerminalUid,
+                    Terminal = mTerminalName,
                     SubTotal = 0,
                     DiscountAmount = 0,
                     TaxAmount = 0,
@@ -1993,17 +2017,21 @@ public class POSController : Controller
             .Select(x => (int?)x.Uid)
             .FirstOrDefaultAsync(ct);
 
-        var branchUid = await _db.Branches.AsNoTracking()
-            .Where(x => x.IsActive)
-            .OrderBy(x => x.Uid)
-            .Select(x => (int?)x.Uid)
-            .FirstOrDefaultAsync(ct);
-
         int? userUid = null;
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (int.TryParse(userIdClaim, out var parsedUserId))
         {
             userUid = parsedUserId;
+        }
+
+        var (branchName, branchUid) = await ResolveSessionBranchAsync(ct);
+        if (string.IsNullOrWhiteSpace(branchName) || branchUid is null or <= 0)
+        {
+            return BadRequest(new PosCheckoutResultViewModel
+            {
+                Success = false,
+                Message = "Branch is required. Assign a Branch to your user before selling."
+            });
         }
 
         var clientTxId = request.ClientTransactionId is Guid g && g != Guid.Empty
@@ -2082,12 +2110,15 @@ public class POSController : Controller
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
-        var sessionBranch = HttpContext.Session.GetString(AccountController.SessionBranchKey);
-        var sessionTerminal = HttpContext.Session.GetString(AccountController.SessionTerminalNameKey);
-        if (string.IsNullOrWhiteSpace(sessionBranch))
-            sessionBranch = User.FindFirstValue("Branch");
-        if (string.IsNullOrWhiteSpace(sessionTerminal))
-            sessionTerminal = User.FindFirstValue("TerminalName");
+        var (terminalName, terminalUid) = await ResolveSessionTerminalAsync(ct);
+        if (string.IsNullOrWhiteSpace(terminalName))
+        {
+            return BadRequest(new PosCheckoutResultViewModel
+            {
+                Success = false,
+                Message = "Terminal is required. Assign a Terminal to your user before selling."
+            });
+        }
 
         var invoice = new SalesInvoice
         {
@@ -2095,11 +2126,12 @@ public class POSController : Controller
             InvoiceNo = invoiceNo,
             InvoiceDate = DateTime.Now,
             BranchUid = branchUid,
-            Branch = string.IsNullOrWhiteSpace(sessionBranch) ? null : sessionBranch.Trim(),
+            Branch = branchName,
             CustomerUid = customerUid,
             UserUid = userUid,
             PaymentMethodUid = paymentMethodUid,
-            Terminal = string.IsNullOrWhiteSpace(sessionTerminal) ? null : sessionTerminal.Trim(),
+            TerminalUid = terminalUid,
+            Terminal = terminalName,
             SubTotal = subTotal,
             DiscountAmount = discountAmount,
             TaxAmount = 0,
@@ -2154,7 +2186,7 @@ public class POSController : Controller
             try
             {
                 var stockResult = await _inventory.ApplySaleAsync(
-                    invoice.Uid, invoice.InvoiceNo, stockLines, warehouseUid: null, branchUid, userUid, terminalUid: null, ct);
+                    invoice.Uid, invoice.InvoiceNo, stockLines, warehouseUid: null, branchUid, userUid, terminalUid, ct);
                 if (stockResult.HasShortages)
                 {
                     invoice.Remarks = _inventory.MergeShortageRemarks(invoice.Remarks, stockResult);
@@ -2226,10 +2258,25 @@ public class POSController : Controller
             })
             .ToListAsync(ct);
 
-        var stockByProduct = await _db.Inventories.AsNoTracking()
-            .GroupBy(x => x.ProductUid)
-            .Select(g => new { ProductUid = g.Key, Qty = g.Sum(x => x.CurrentQuantity) })
-            .ToDictionaryAsync(x => x.ProductUid, x => x.Qty, ct);
+        // Show stock for the logged-in branch warehouse only (same warehouse used on sale deduct).
+        Dictionary<int, decimal> stockByProduct = new();
+        try
+        {
+            var (_, branchUid) = await ResolveSessionBranchAsync(ct);
+            var warehouseUid = await _inventory.ResolveWarehouseUidAsync(null, branchUid, ct);
+            // SQLite cannot Sum decimal server-side — load quantities then aggregate in memory.
+            var invRows = await _db.Inventories.AsNoTracking()
+                .Where(x => x.WarehouseUid == warehouseUid)
+                .Select(x => new { x.ProductUid, x.CurrentQuantity })
+                .ToListAsync(ct);
+            stockByProduct = invRows
+                .GroupBy(x => x.ProductUid)
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.CurrentQuantity));
+        }
+        catch (InvalidOperationException)
+        {
+            // No warehouse — leave stock at 0 on cards.
+        }
 
         foreach (var product in products)
         {
@@ -2269,6 +2316,42 @@ public class POSController : Controller
             Products = products,
             Categories = categories
         });
+    }
+
+    private async Task<(string? TerminalName, int? TerminalUid)> ResolveSessionTerminalAsync(CancellationToken ct)
+    {
+        var sessionTerminal = HttpContext.Session.GetString(AccountController.SessionTerminalNameKey);
+        if (string.IsNullOrWhiteSpace(sessionTerminal))
+            sessionTerminal = User.FindFirstValue("TerminalName");
+
+        if (string.IsNullOrWhiteSpace(sessionTerminal))
+            return (null, null);
+
+        var name = sessionTerminal.Trim();
+        var terminalUid = await _db.Terminals.AsNoTracking()
+            .Where(t => t.IsActive && t.TerminalName == name)
+            .Select(t => (int?)t.Uid)
+            .FirstOrDefaultAsync(ct);
+
+        return (name, terminalUid);
+    }
+
+    private async Task<(string? BranchName, int? BranchUid)> ResolveSessionBranchAsync(CancellationToken ct)
+    {
+        var sessionBranch = HttpContext.Session.GetString(AccountController.SessionBranchKey);
+        if (string.IsNullOrWhiteSpace(sessionBranch))
+            sessionBranch = User.FindFirstValue("Branch");
+
+        if (string.IsNullOrWhiteSpace(sessionBranch))
+            return (null, null);
+
+        var name = sessionBranch.Trim();
+        var branchUid = await _db.Branches.AsNoTracking()
+            .Where(b => b.IsActive && b.BranchName == name)
+            .Select(b => (int?)b.Uid)
+            .FirstOrDefaultAsync(ct);
+
+        return (name, branchUid);
     }
 
     private async Task<int?> ResolveWalkInCustomerUidAsync(CancellationToken ct)

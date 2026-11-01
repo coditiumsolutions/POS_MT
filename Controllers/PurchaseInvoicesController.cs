@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using POS_MT.Data;
 using POS_MT.Interfaces;
 using POS_MT.Models;
+using POS_MT.Services;
 using POS_MT.ViewModels;
 
 namespace POS_MT.Controllers;
@@ -15,17 +16,20 @@ public class PurchaseInvoicesController : Controller
     private readonly POSDbContext _db;
     private readonly IAuditService _audit;
     private readonly IInventoryLedgerService _inventory;
+    private readonly IYogurtRecipeService _yogurtRecipe;
     private readonly INavContextService _navContext;
 
     public PurchaseInvoicesController(
         POSDbContext db,
         IAuditService audit,
         IInventoryLedgerService inventory,
+        IYogurtRecipeService yogurtRecipe,
         INavContextService navContext)
     {
         _db = db;
         _audit = audit;
         _inventory = inventory;
+        _yogurtRecipe = yogurtRecipe;
         _navContext = navContext;
     }
 
@@ -36,7 +40,17 @@ public class PurchaseInvoicesController : Controller
         ViewBag.Branches = new SelectList(await _db.Branches.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.BranchName).ToListAsync(ct), "Uid", "BranchName");
         ViewBag.Warehouses = new SelectList(await _db.Warehouses.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.WarehouseName).ToListAsync(ct), "Uid", "WarehouseName");
         ViewBag.Vendors = new SelectList(await _db.Vendors.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.VendorName).ToListAsync(ct), "Uid", "VendorName");
-        ViewBag.Products = new SelectList(await _db.Products.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.ProductName).ToListAsync(ct), "Uid", "ProductName");
+
+        // Plain list (not a shared SelectList) — reused SelectList in line loops mutates Selected and shows wrong options.
+        ViewBag.ProductOptions = await _db.Products.AsNoTracking()
+            .Where(x => x.IsActive)
+            .OrderBy(x => x.ProductName)
+            .Select(x => new PurchaseProductOptionViewModel
+            {
+                Uid = x.Uid,
+                Label = x.ProductCode + " — " + x.ProductName
+            })
+            .ToListAsync(ct);
     }
 
     public async Task<IActionResult> Index(DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
@@ -62,10 +76,13 @@ public class PurchaseInvoicesController : Controller
     {
         EnsurePurchasesNav();
         await LoadLookups(ct);
+        ViewBag.VendorInvoiceNoReadonly = true;
+        var now = DateTime.Now;
         return View(new PurchaseInvoiceFormViewModel
         {
-            PurchaseDate = DateTime.Now,
-            PurchaseInvoiceNo = $"PI-{DateTime.Now:yyyyMMddHHmmss}",
+            PurchaseDate = now,
+            PurchaseInvoiceNo = $"PI-{now:yyyyMMddHHmmss}",
+            VendorInvoiceNo = await GenerateNextVendorInvoiceNoAsync(now, ct),
             Lines = Enumerable.Range(0, 5).Select(_ => new PurchaseInvoiceLineFormViewModel()).ToList()
         });
     }
@@ -74,6 +91,14 @@ public class PurchaseInvoicesController : Controller
     public async Task<IActionResult> Create(PurchaseInvoiceFormViewModel model, CancellationToken ct)
     {
         EnsurePurchasesNav();
+        ViewBag.VendorInvoiceNoReadonly = true;
+
+        // Always assign the next Ven+ddMMyyyy.n number on create (auto).
+        model.VendorInvoiceNo = await GenerateNextVendorInvoiceNoAsync(
+            model.PurchaseDate == default ? DateTime.Now : model.PurchaseDate, ct);
+
+        ValidatePurchaseRequiredFields(model, requireReceiveLines: true);
+
         var invalidLines = (model.Lines ?? [])
             .Where(x => x.ProductUid is > 0 && (x.Quantity <= 0 || x.UnitCost < 0))
             .ToList();
@@ -83,9 +108,6 @@ public class PurchaseInvoicesController : Controller
         var receiveLines = (model.Lines ?? [])
             .Where(x => x.ProductUid is > 0 && x.Quantity > 0 && x.UnitCost >= 0)
             .ToList();
-
-        if (receiveLines.Count > 0 && model.WarehouseUid is null or <= 0)
-            ModelState.AddModelError(nameof(model.WarehouseUid), "Select a warehouse when receiving stock lines.");
 
         var allowedStatus = new[] { "Completed", "Draft", "Cancelled" };
         var allowedPay = new[] { "Unpaid", "Partial", "Paid" };
@@ -161,6 +183,7 @@ public class PurchaseInvoicesController : Controller
             });
         }
 
+        string? yogurtMsg = null;
         if (movements.Count > 0)
         {
             await _db.SaveChangesAsync(ct);
@@ -169,6 +192,9 @@ public class PurchaseInvoicesController : Controller
             e.WarehouseUid ??= warehouseUid;
             await _inventory.ApplyPurchaseAsync(e.Uid, e.PurchaseInvoiceNo, warehouseUid, movements, e.UserUid, e.TerminalUid, ct);
             await _db.SaveChangesAsync(ct);
+
+            yogurtMsg = await ApplyYogurtMilkConsumptionAsync(
+                movements, warehouseUid, e.BranchUid, e.UserUid, e.TerminalUid, e.PurchaseInvoiceNo, ct);
         }
 
         await _audit.WriteAsync("Create", "PurchaseInvoices", e.Uid.ToString(),
@@ -177,6 +203,7 @@ public class PurchaseInvoicesController : Controller
 
         TempData["Success"] = movements.Count > 0
             ? $"Purchase invoice created and {movements.Count} product(s) added to inventory."
+              + (string.IsNullOrEmpty(yogurtMsg) ? "" : " " + yogurtMsg)
             : "Purchase invoice created.";
         return RedirectToAction(nameof(Index));
     }
@@ -211,8 +238,7 @@ public class PurchaseInvoicesController : Controller
             .Where(x => x.ProductUid is > 0 && x.Quantity > 0)
             .ToList();
 
-        if (receiveLines.Count > 0 && model.WarehouseUid is null or <= 0)
-            ModelState.AddModelError(nameof(model.WarehouseUid), "Select a warehouse when receiving stock lines.");
+        ValidatePurchaseRequiredFields(model, requireReceiveLines: false);
 
         if (!ModelState.IsValid)
         {
@@ -270,6 +296,7 @@ public class PurchaseInvoicesController : Controller
             });
         }
 
+        string? yogurtMsg = null;
         if (movements.Count > 0)
         {
             if (e.SubTotal <= 0)
@@ -290,6 +317,9 @@ public class PurchaseInvoicesController : Controller
             await _inventory.ApplyPurchaseAsync(
                 e.Uid, e.PurchaseInvoiceNo, warehouseUid, movements, e.UserUid, e.TerminalUid, ct,
                 allowAdditional: true);
+
+            yogurtMsg = await ApplyYogurtMilkConsumptionAsync(
+                movements, warehouseUid, e.BranchUid, e.UserUid, e.TerminalUid, e.PurchaseInvoiceNo, ct);
         }
 
         await _db.SaveChangesAsync(ct);
@@ -299,6 +329,7 @@ public class PurchaseInvoicesController : Controller
 
         TempData["Success"] = movements.Count > 0
             ? $"Purchase invoice updated and {movements.Count} product(s) added to inventory."
+              + (string.IsNullOrEmpty(yogurtMsg) ? "" : " " + yogurtMsg)
             : "Purchase invoice updated.";
         return RedirectToAction(nameof(Index));
     }
@@ -391,6 +422,53 @@ public class PurchaseInvoicesController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    /// <summary>
+    /// Format: VEN-ddMMyyyy-n (VEN-03112026-1, VEN-03112026-2, …).
+    /// </summary>
+    private async Task<string> GenerateNextVendorInvoiceNoAsync(DateTime date, CancellationToken ct)
+    {
+        var day = date == default ? DateTime.Now : date;
+        var prefix = $"VEN-{day:ddMMyyyy}-";
+        var existing = await _db.PurchaseInvoices.AsNoTracking()
+            .Where(x => x.VendorInvoiceNo != null && x.VendorInvoiceNo.StartsWith(prefix))
+            .Select(x => x.VendorInvoiceNo!)
+            .ToListAsync(ct);
+
+        var max = 0;
+        foreach (var no in existing)
+        {
+            var suffix = no.Length > prefix.Length ? no[prefix.Length..] : string.Empty;
+            if (int.TryParse(suffix, out var n) && n > max)
+                max = n;
+        }
+
+        return $"{prefix}{max + 1}";
+    }
+
+    private void ValidatePurchaseRequiredFields(PurchaseInvoiceFormViewModel model, bool requireReceiveLines)
+    {
+        if (model.VendorUid <= 0)
+            ModelState.AddModelError(nameof(model.VendorUid), "Vendor is required.");
+
+        if (model.BranchUid is null or <= 0)
+            ModelState.AddModelError(nameof(model.BranchUid), "Branch is required.");
+
+        if (string.IsNullOrWhiteSpace(model.VendorInvoiceNo))
+            ModelState.AddModelError(nameof(model.VendorInvoiceNo), "Vendor Invoice No is required.");
+
+        if (requireReceiveLines)
+        {
+            var receiveLines = (model.Lines ?? [])
+                .Where(x => x.ProductUid is > 0 && x.Quantity > 0 && x.UnitCost >= 0)
+                .ToList();
+            if (receiveLines.Count == 0)
+            {
+                ModelState.AddModelError(nameof(model.Lines),
+                    "Add at least one item in Receive into inventory (select product, quantity, and unit cost).");
+            }
+        }
+    }
+
     private static void EnsureLineRows(PurchaseInvoiceFormViewModel model)
     {
         model.Lines ??= [];
@@ -398,11 +476,61 @@ public class PurchaseInvoicesController : Controller
             model.Lines.Add(new PurchaseInvoiceLineFormViewModel());
     }
 
+    /// <summary>
+    /// Fresh Yogurt receipt consumes milk (40 milk : 32 yogurt) at the same warehouse and posts a Shop sales invoice.
+    /// </summary>
+    private async Task<string?> ApplyYogurtMilkConsumptionAsync(
+        IReadOnlyList<InventoryLineMovement> movements,
+        int warehouseUid,
+        int? branchUid,
+        int? userUid,
+        int? terminalUid,
+        string purchaseInvoiceNo,
+        CancellationToken ct)
+    {
+        var yogurtQty = movements
+            .Where(m => YogurtRecipeService.IsFreshYogurtProduct(m.ProductName) && m.Quantity > 0)
+            .Sum(m => m.Quantity);
+        if (yogurtQty <= 0)
+            return null;
+
+        string? branchName = null;
+        if (branchUid is > 0)
+        {
+            branchName = await _db.Branches.AsNoTracking()
+                .Where(b => b.Uid == branchUid)
+                .Select(b => b.BranchName)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        string? terminalName = null;
+        if (terminalUid is > 0)
+        {
+            terminalName = await _db.Terminals.AsNoTracking()
+                .Where(t => t.Uid == terminalUid)
+                .Select(t => t.TerminalName)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        var result = await _yogurtRecipe.ConsumeMilkForReceivedYogurtAsync(
+            yogurtQty,
+            warehouseUid,
+            branchUid,
+            branchName,
+            userUid,
+            terminalUid,
+            terminalName,
+            purchaseInvoiceNo,
+            ct);
+
+        return result.Message;
+    }
+
     private static PurchaseInvoiceFormViewModel ToForm(PurchaseInvoice e) => new()
     {
         Uid = e.Uid,
         PurchaseInvoiceNo = e.PurchaseInvoiceNo,
-        VendorInvoiceNo = e.VendorInvoiceNo,
+        VendorInvoiceNo = e.VendorInvoiceNo ?? string.Empty,
         PurchaseDate = e.PurchaseDate,
         BranchUid = e.BranchUid,
         WarehouseUid = e.WarehouseUid,
@@ -422,7 +550,7 @@ public class PurchaseInvoicesController : Controller
     private static PurchaseInvoice ToEntity(PurchaseInvoiceFormViewModel m) => new()
     {
         PurchaseInvoiceNo = m.PurchaseInvoiceNo.Trim(),
-        VendorInvoiceNo = m.VendorInvoiceNo,
+        VendorInvoiceNo = string.IsNullOrWhiteSpace(m.VendorInvoiceNo) ? null : m.VendorInvoiceNo.Trim(),
         PurchaseDate = m.PurchaseDate,
         BranchUid = m.BranchUid,
         WarehouseUid = m.WarehouseUid,
@@ -442,7 +570,7 @@ public class PurchaseInvoicesController : Controller
     private static void Apply(PurchaseInvoice e, PurchaseInvoiceFormViewModel m)
     {
         e.PurchaseInvoiceNo = m.PurchaseInvoiceNo.Trim();
-        e.VendorInvoiceNo = m.VendorInvoiceNo;
+        e.VendorInvoiceNo = string.IsNullOrWhiteSpace(m.VendorInvoiceNo) ? null : m.VendorInvoiceNo.Trim();
         e.PurchaseDate = m.PurchaseDate;
         e.BranchUid = m.BranchUid;
         e.WarehouseUid = m.WarehouseUid;

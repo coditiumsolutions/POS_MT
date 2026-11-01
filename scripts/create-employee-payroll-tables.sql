@@ -42,11 +42,22 @@ BEGIN
         [EmployeeUID] INT NOT NULL,
         [Title] NVARCHAR(150) NOT NULL,
         [Amount] DECIMAL(18,2) NOT NULL CONSTRAINT DF_EmployeeDeductions_Amount DEFAULT (0),
+        [PeriodMonth] INT NULL,
+        [PeriodYear] INT NULL,
         [IsActive] BIT NOT NULL CONSTRAINT DF_EmployeeDeductions_IsActive DEFAULT (1),
         [CreatedDate] DATETIME2(0) NOT NULL CONSTRAINT DF_EmployeeDeductions_CreatedDate DEFAULT (sysdatetime())
     );
     CREATE INDEX IX_EmployeeDeductions_EmployeeUID ON dbo.EmployeeDeductions([EmployeeUID]);
+    CREATE INDEX IX_EmployeeDeductions_EmployeePeriod ON dbo.EmployeeDeductions([EmployeeUID], [PeriodYear], [PeriodMonth]);
 END
+GO
+
+IF OBJECT_ID(N'dbo.EmployeeDeductions', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.EmployeeDeductions', N'PeriodMonth') IS NULL
+    ALTER TABLE dbo.EmployeeDeductions ADD [PeriodMonth] INT NULL;
+GO
+
+IF OBJECT_ID(N'dbo.EmployeeDeductions', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.EmployeeDeductions', N'PeriodYear') IS NULL
+    ALTER TABLE dbo.EmployeeDeductions ADD [PeriodYear] INT NULL;
 GO
 
 IF OBJECT_ID(N'dbo.EmployeePayments', N'U') IS NULL

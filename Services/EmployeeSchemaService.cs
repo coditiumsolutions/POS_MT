@@ -56,10 +56,14 @@ public sealed class EmployeeSchemaService : IEmployeeSchemaService
                         EmployeeUID INTEGER NOT NULL,
                         Title TEXT NOT NULL,
                         Amount REAL NOT NULL DEFAULT 0,
+                        PeriodMonth INTEGER NULL,
+                        PeriodYear INTEGER NULL,
                         IsActive INTEGER NOT NULL DEFAULT 1,
                         CreatedDate TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                     );
                     """, cancellationToken);
+                await EnsureSqliteColumnAsync("EmployeeDeductions", "PeriodMonth", "INTEGER NULL", cancellationToken);
+                await EnsureSqliteColumnAsync("EmployeeDeductions", "PeriodYear", "INTEGER NULL", cancellationToken);
                 await _db.Database.ExecuteSqlRawAsync("""
                     CREATE TABLE IF NOT EXISTS EmployeePayments (
                         uid INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -123,11 +127,23 @@ public sealed class EmployeeSchemaService : IEmployeeSchemaService
                             [EmployeeUID] INT NOT NULL,
                             [Title] NVARCHAR(150) NOT NULL,
                             [Amount] DECIMAL(18,2) NOT NULL CONSTRAINT DF_EmployeeDeductions_Amount DEFAULT (0),
+                            [PeriodMonth] INT NULL,
+                            [PeriodYear] INT NULL,
                             [IsActive] BIT NOT NULL CONSTRAINT DF_EmployeeDeductions_IsActive DEFAULT (1),
                             [CreatedDate] DATETIME2(0) NOT NULL CONSTRAINT DF_EmployeeDeductions_CreatedDate DEFAULT (sysdatetime())
                         );
                         CREATE INDEX IX_EmployeeDeductions_EmployeeUID ON dbo.EmployeeDeductions([EmployeeUID]);
+                        CREATE INDEX IX_EmployeeDeductions_EmployeePeriod ON dbo.EmployeeDeductions([EmployeeUID], [PeriodYear], [PeriodMonth]);
                     END
+                    """, cancellationToken);
+
+                await _db.Database.ExecuteSqlRawAsync("""
+                    IF OBJECT_ID(N'dbo.EmployeeDeductions', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.EmployeeDeductions', N'PeriodMonth') IS NULL
+                        ALTER TABLE dbo.EmployeeDeductions ADD [PeriodMonth] INT NULL;
+                    """, cancellationToken);
+                await _db.Database.ExecuteSqlRawAsync("""
+                    IF OBJECT_ID(N'dbo.EmployeeDeductions', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.EmployeeDeductions', N'PeriodYear') IS NULL
+                        ALTER TABLE dbo.EmployeeDeductions ADD [PeriodYear] INT NULL;
                     """, cancellationToken);
 
                 await _db.Database.ExecuteSqlRawAsync("""
@@ -158,5 +174,37 @@ public sealed class EmployeeSchemaService : IEmployeeSchemaService
         }
 
         _checked = true;
+    }
+
+    private async Task EnsureSqliteColumnAsync(string table, string column, string sqliteType, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var cmd = _db.Database.GetDbConnection().CreateCommand();
+            if (cmd.Connection!.State != System.Data.ConnectionState.Open)
+                await cmd.Connection.OpenAsync(cancellationToken);
+            cmd.CommandText = $"PRAGMA table_info({table})";
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+                    return;
+            }
+        }
+        catch
+        {
+            return;
+        }
+
+        try
+        {
+            await _db.Database.ExecuteSqlRawAsync(
+                $"ALTER TABLE {table} ADD COLUMN {column} {sqliteType}",
+                cancellationToken);
+        }
+        catch
+        {
+            // Column may already exist.
+        }
     }
 }

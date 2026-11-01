@@ -23,6 +23,21 @@ public sealed class SalesInvoiceIndexViewModel
     public List<SalesInvoiceListItemViewModel> Rows { get; set; } = [];
 }
 
+public sealed class SalesReportPrintViewModel
+{
+    public DateTime PrintedAt { get; set; }
+    public string? CustomerType { get; set; }
+    public int? Month { get; set; }
+    public DateTime? DateFrom { get; set; }
+    public DateTime? DateTo { get; set; }
+    public string? Search { get; set; }
+    public IReadOnlyList<SalesInvoiceListItemViewModel> Rows { get; set; } = [];
+
+    public decimal TotalNet => Rows.Sum(x => x.NetAmount);
+    public decimal TotalPaid => Rows.Sum(x => x.PaidAmount);
+    public decimal TotalBalance => Rows.Sum(x => x.NetAmount - x.PaidAmount);
+}
+
 public sealed class SalesInvoiceDetailListItemViewModel
 {
     public int DetailUid { get; set; }

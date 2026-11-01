@@ -1,0 +1,105 @@
+@model YogurtProductionViewModel
+@{
+    ViewData["Title"] = "Yogurt Production";
+}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h1 class="page-heading mb-1">Yogurt Production</h1>
+        <p class="text-muted mb-0">
+            Recipe: <strong>40 kg milk → 32 kg Fresh Yogurt</strong>
+            (milk needed = yogurt × @(Model.MilkPerYogurtKg.ToString("0.####"))).
+        </p>
+    </div>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success">@TempData["Success"]</div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
+
+<div asp-validation-summary="All" class="text-danger mb-2"></div>
+
+<div class="row g-3">
+    <div class="col-lg-7">
+        <form asp-action="Produce" method="post" class="bg-white border rounded p-3" id="yogurtProductionForm">
+            @Html.AntiForgeryToken()
+            <div class="invoice-meta-grid invoice-meta-form">
+                <div class="invoice-meta-row">
+                    <label asp-for="YogurtQuantity" class="invoice-meta-title"></label>
+                    <div class="invoice-meta-field">
+                        <input asp-for="YogurtQuantity"
+                               id="yogurtQty"
+                               class="form-control form-control-sm invoice-meta-input"
+                               min="0.001"
+                               step="0.001"
+                               inputmode="decimal" />
+                        <span asp-validation-for="YogurtQuantity" class="text-danger"></span>
+                    </div>
+                    <span class="invoice-meta-title">Milk required</span>
+                    <div class="invoice-meta-field">
+                        <input type="text"
+                               id="milkQtyDisplay"
+                               class="form-control form-control-sm invoice-meta-input"
+                               readonly
+                               value="@(Model.MilkQuantity > 0 ? Model.MilkQuantity.ToString("0.###") : "")" />
+                    </div>
+                </div>
+            </div>
+            <p class="small text-muted mt-2 mb-3">
+                Example: 32 kg yogurt uses 40 kg milk · 16 kg yogurt uses 20 kg milk.
+                Milk stock can go negative (e.g. available 10 − 40 = −30). Sales invoice customer: <strong>Shop</strong>.
+            </p>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary"
+                        onclick="return confirm('Produce yogurt? Deducts milk (may go negative), adds yogurt, creates sales invoice for Shop.');">
+                    Produce &amp; Create Sales Invoice
+                </button>
+                <a class="btn btn-outline-secondary" asp-controller="POS" asp-action="Cash">Back to Cash POS</a>
+            </div>
+        </form>
+    </div>
+    <div class="col-lg-5">
+        <div class="bg-white border rounded p-3">
+            <h2 class="h6 text-uppercase text-muted mb-3">Current stock</h2>
+            <dl class="row mb-0 small">
+                <dt class="col-5">Branch</dt>
+                <dd class="col-7">@(Model.BranchName ?? "—")</dd>
+                <dt class="col-5">Warehouse</dt>
+                <dd class="col-7">@(Model.WarehouseHint ?? "—")</dd>
+                <dt class="col-5">Milk product</dt>
+                <dd class="col-7">@(Model.MilkProductName ?? "Not found")</dd>
+                <dt class="col-5">Milk available</dt>
+                <dd class="col-7"><strong>@Model.MilkAvailable.ToString("0.###")</strong> kg</dd>
+                <dt class="col-5">Yogurt product</dt>
+                <dd class="col-7">@(Model.YogurtProductName ?? "Not found")</dd>
+                <dt class="col-5">Yogurt available</dt>
+                <dd class="col-7"><strong>@Model.YogurtAvailable.ToString("0.###")</strong> kg</dd>
+            </dl>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            var ratio = @Model.MilkPerYogurtKg.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var yogurt = document.getElementById('yogurtQty');
+            var milk = document.getElementById('milkQtyDisplay');
+            if (!yogurt || !milk) return;
+            function sync() {
+                var y = Number(String(yogurt.value || '').replace(',', '.'));
+                if (!Number.isFinite(y) || y <= 0) {
+                    milk.value = '';
+                    return;
+                }
+                milk.value = (Math.round(y * ratio * 1000) / 1000).toString();
+            }
+            yogurt.addEventListener('input', sync);
+            sync();
+        })();
+    </script>
+}

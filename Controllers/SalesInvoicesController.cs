@@ -25,7 +25,21 @@ public class SalesInvoicesController : Controller {
   {
     EnsureSalesInvoiceNav();
     ViewData["Title"] = "Sales Invoices";
+    var list = await QuerySalesInvoiceListAsync(customerType, month, dateFrom, dateTo, search, ct);
+    return View(new SalesInvoiceIndexViewModel
+    {
+      CustomerType = customerType,
+      Month = month is >= 1 and <= 12 ? month : null,
+      DateFrom = dateFrom?.Date,
+      DateTo = dateTo?.Date,
+      Search = search,
+      Rows = list
+    });
+  }
 
+  private async Task<List<SalesInvoiceListItemViewModel>> QuerySalesInvoiceListAsync(
+    string? customerType, int? month, DateTime? dateFrom, DateTime? dateTo, string? search, CancellationToken ct)
+  {
     var fromDay = dateFrom?.Date;
     var toExclusive = dateTo?.Date.AddDays(1);
 
@@ -85,7 +99,7 @@ public class SalesInvoicesController : Controller {
         (x.c != null && x.c.CustomerCode.Contains(term)));
     }
 
-    var list = await query
+    return await query
       .OrderByDescending(x => x.inv.InvoiceDate)
       .ThenByDescending(x => x.inv.Uid)
       .Select(x => new SalesInvoiceListItemViewModel
@@ -109,17 +123,27 @@ public class SalesInvoicesController : Controller {
         InvoiceStatus = x.inv.InvoiceStatus,
         PaymentStatus = x.inv.PaymentStatus
       }).ToListAsync(ct);
+  }
 
-    return View(new SalesInvoiceIndexViewModel
+  /// <summary>Printable sales report for the same filters as Index (dates, type, month).</summary>
+  [HttpGet]
+  public async Task<IActionResult> SalesReport(string? customerType, int? month, DateTime? dateFrom, DateTime? dateTo, string? search, CancellationToken ct)
+  {
+    EnsureSalesInvoiceNav();
+    var list = await QuerySalesInvoiceListAsync(customerType, month, dateFrom, dateTo, search, ct);
+    var model = new SalesReportPrintViewModel
     {
+      PrintedAt = DateTime.Now,
       CustomerType = customerType,
       Month = month is >= 1 and <= 12 ? month : null,
-      DateFrom = fromDay,
+      DateFrom = dateFrom?.Date,
       DateTo = dateTo?.Date,
       Search = search,
       Rows = list
-    });
+    };
+    return View(model);
   }
+
   public async Task<IActionResult> Create(CancellationToken ct){ EnsureSalesInvoiceNav(); await LoadLookups(ct); return View(new SalesInvoiceFormViewModel{InvoiceDate=DateTime.Now, InvoiceNo=$"SI-{DateTime.Now:yyyyMMddHHmmss}"}); }
   [HttpPost, ValidateAntiForgeryToken]
   public async Task<IActionResult> Create(SalesInvoiceFormViewModel model, CancellationToken ct){

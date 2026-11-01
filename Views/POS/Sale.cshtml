@@ -54,45 +54,18 @@
 <div id="posAlert" class="alert d-none mb-2" role="alert"></div>
 
 <div class="pos-sale-layout @(Model.UseCardLayout ? "pos-sale-layout--cards" : "")">
-    <section class="pos-sale-panel">
+    <section class="pos-sale-panel pos-sale-panel--items">
         <div class="pos-sale-panel-header pos-sale-panel-header--search">
-            <input type="search" id="productSearch" class="form-control form-control-sm" placeholder="Search items..." />
-        </div>
-        <div class="pos-category-toolbar @(Model.UseCardLayout ? "pos-category-tiles" : "")" id="posCategoryToolbar" role="group" aria-label="Product categories">
-            @{
-                var catTone = 0;
-            }
-            <button type="button"
-                    class="btn btn-sm btn-outline-secondary pos-category-btn @(Model.UseCardLayout ? $"pos-cat-tone-{catTone++ % 12} active" : "active")"
-                    data-category-uid="">
-                @if (Model.UseCardLayout)
-                {
-                    <span class="pos-cat-accent" aria-hidden="true"></span>
-                    <span class="pos-cat-icon" aria-hidden="true"><i class="bi bi-grid-fill"></i></span>
-                    <span class="pos-cat-label">All Items</span>
-                }
-                else
-                {
-                    @:All
-                }
-            </button>
-            @foreach (var cat in Model.Categories)
-            {
-                <button type="button"
-                        class="btn btn-sm btn-outline-secondary pos-category-btn @(Model.UseCardLayout ? $"pos-cat-tone-{catTone++ % 12}" : null)"
-                        data-category-uid="@cat.Uid">
-                    @if (Model.UseCardLayout)
+            <div class="pos-items-filters">
+                <select id="posCategorySelect" class="form-select form-select-sm pos-category-select" aria-label="Product category">
+                    <option value="">All categories</option>
+                    @foreach (var cat in Model.Categories)
                     {
-                        <span class="pos-cat-accent" aria-hidden="true"></span>
-                        <span class="pos-cat-icon" aria-hidden="true"><i class="bi @ItemIcon(cat.CategoryName)"></i></span>
-                        <span class="pos-cat-label">@cat.CategoryName</span>
+                        <option value="@cat.Uid">@cat.CategoryName</option>
                     }
-                    else
-                    {
-                        @cat.CategoryName
-                    }
-                </button>
-            }
+                </select>
+                <input type="search" id="productSearch" class="form-control form-control-sm" placeholder="Search items..." />
+            </div>
         </div>
         @if (Model.UseCardLayout)
         {
@@ -162,9 +135,9 @@
         }
     </section>
 
-    <section class="pos-sale-panel">
+    <section class="pos-sale-panel pos-sale-panel--basket">
         <div class="pos-sale-panel-header">
-            <h2 class="pos-sale-panel-title">Basket</h2>
+            <h2 class="pos-sale-panel-title" id="basketPanelTitle">Basket</h2>
             <div class="pos-sale-toolbar">
                 <button type="button" id="btnPrintReceipt" class="btn btn-outline-secondary btn-sm d-none" hidden>
                     <i class="bi bi-printer" aria-hidden="true"></i> Print Receipt
@@ -251,16 +224,18 @@
     const cardLayout = productsTable?.classList.contains('pos-product-cards') === true;
     const basketBody = document.getElementById('basketBody');
     const basketEmptyRow = document.getElementById('basketEmptyRow');
+    const basketPanelTitle = document.getElementById('basketPanelTitle');
     const basketTotalEl = document.getElementById('basketTotal');
     const basketNetEl = document.getElementById('basketNet');
     const basketDiscountEl = document.getElementById('basketDiscount');
     const basketCustomerGivenEl = document.getElementById('basketCustomerGiven');
     const basketChangeEl = document.getElementById('basketChange');
     const btnClear = document.getElementById('btnClearBasket');
+    let lastAddedStock = null;
     const btnPrint = document.getElementById('btnPrintReceipt');
     const btnPay = document.getElementById('btnPay');
     const searchInput = document.getElementById('productSearch');
-    const categoryToolbar = document.getElementById('posCategoryToolbar');
+    const categorySelect = document.getElementById('posCategorySelect');
     const alertBox = document.getElementById('posAlert');
     let activeCategoryUid = '';
 
@@ -357,6 +332,24 @@
         });
     }
 
+    function formatStockQty(n) {
+        const v = Number(n);
+        if (!Number.isFinite(v)) return '0';
+        if (Number.isInteger(v)) return String(v);
+        return String(Math.round(v * 1000) / 1000);
+    }
+
+    function updateBasketTitle(availableQty) {
+        if (!basketPanelTitle) return;
+        if (basket.size === 0 || availableQty == null || !Number.isFinite(Number(availableQty))) {
+            basketPanelTitle.textContent = 'Basket';
+            lastAddedStock = null;
+            return;
+        }
+        lastAddedStock = Number(availableQty);
+        basketPanelTitle.textContent = 'Basket - Quantity ' + formatStockQty(lastAddedStock);
+    }
+
     function addSelected() {
         const row = getSelectedRow();
         if (!row) return;
@@ -364,12 +357,17 @@
         const code = row.getAttribute('data-code');
         const name = row.getAttribute('data-name');
         const price = parseFloat(row.getAttribute('data-price'));
+        const stockRaw = parseFloat(row.getAttribute('data-stock'));
+        const stock = Number.isFinite(stockRaw) ? stockRaw : 0;
         if (basket.has(uid)) {
-            basket.get(uid).qty += 1;
+            const existing = basket.get(uid);
+            existing.qty += 1;
+            existing.stock = stock;
         } else {
-            basket.set(uid, { uid, code, name, price, qty: 1 });
+            basket.set(uid, { uid, code, name, price, qty: 1, stock });
         }
         hideAlert();
+        updateBasketTitle(stock);
         renderBasket();
     }
 
@@ -377,26 +375,25 @@
         if (basket.size === 0) return;
         if (!confirm('Clear all items from the basket?')) return;
         basket.clear();
+        updateBasketTitle(null);
         renderBasket();
     });
 
     searchInput.addEventListener('input', applyProductFilters);
 
-    if (categoryToolbar) {
-        categoryToolbar.addEventListener('click', function (e) {
-            const btn = e.target.closest('.pos-category-btn');
-            if (!btn) return;
-            categoryToolbar.querySelectorAll('.pos-category-btn').forEach(function (b) {
-                b.classList.remove('active');
-            });
-            btn.classList.add('active');
-            activeCategoryUid = btn.getAttribute('data-category-uid') || '';
+    if (categorySelect) {
+        categorySelect.addEventListener('change', function () {
+            activeCategoryUid = (categorySelect.value || '').trim();
             applyProductFilters();
         });
     }
 
     function roundQty(n) {
         return Math.round(n * 1000) / 1000;
+    }
+
+    function roundMoney(n) {
+        return Math.round(n * 100) / 100;
     }
 
     function formatQty(n) {
@@ -409,6 +406,21 @@
         const n = Number(String(raw || '').replace(',', '.').trim());
         if (!Number.isFinite(n) || n <= 0) return null;
         return roundQty(n);
+    }
+
+    function parseAmountInput(raw) {
+        const n = Number(String(raw || '').replace(',', '.').trim());
+        if (!Number.isFinite(n) || n <= 0) return null;
+        return roundMoney(n);
+    }
+
+    function qtyFromAmount(amount, price) {
+        if (!price || price <= 0) return null;
+        return roundQty(amount / price);
+    }
+
+    function amountFromQty(qty, price) {
+        return roundMoney(qty * price);
     }
 
     basketBody.addEventListener('click', function (e) {
@@ -431,23 +443,49 @@
     });
 
     basketBody.addEventListener('change', function (e) {
-        const input = e.target.closest('.pos-qty-input');
-        if (!input) return;
+        const qtyInput = e.target.closest('.pos-qty-input');
+        const lineInput = e.target.closest('.pos-line-input');
+        const priceInput = e.target.closest('.pos-price-input');
+        if (!qtyInput && !lineInput && !priceInput) return;
+
+        const input = qtyInput || lineInput || priceInput;
         const uid = input.getAttribute('data-uid');
         const item = basket.get(uid);
         if (!item) return;
 
-        const qty = parseQtyInput(input.value);
-        if (qty == null) {
-            basket.delete(uid);
+        if (priceInput) {
+            const price = parseAmountInput(priceInput.value);
+            if (price == null) {
+                priceInput.value = money(item.price);
+                return;
+            }
+            item.price = price;
+        } else if (lineInput) {
+            // Enter Line (money) → qty = line ÷ unit price
+            const line = parseAmountInput(lineInput.value);
+            if (line == null) {
+                basket.delete(uid);
+            } else {
+                const qty = qtyFromAmount(line, item.price);
+                if (qty == null || qty <= 0) {
+                    basket.delete(uid);
+                } else {
+                    item.qty = qty;
+                }
+            }
         } else {
-            item.qty = qty;
+            const qty = parseQtyInput(qtyInput.value);
+            if (qty == null) {
+                basket.delete(uid);
+            } else {
+                item.qty = qty;
+            }
         }
         renderBasket();
     });
 
     basketBody.addEventListener('keydown', function (e) {
-        const input = e.target.closest('.pos-qty-input');
+        const input = e.target.closest('.pos-qty-input, .pos-line-input, .pos-price-input');
         if (!input) return;
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -456,7 +494,7 @@
     });
 
     basketBody.addEventListener('focusin', function (e) {
-        const input = e.target.closest('.pos-qty-input');
+        const input = e.target.closest('.pos-qty-input, .pos-line-input, .pos-price-input');
         if (!input) return;
         requestAnimationFrame(function () { input.select(); });
     });
@@ -474,6 +512,7 @@
 
         if (basket.size === 0) {
             basketEmptyRow.style.display = '';
+            updateBasketTitle(null);
             if (basketDiscountEl) basketDiscountEl.value = '0.00';
             if (basketCustomerGivenEl) basketCustomerGivenEl.value = '';
             syncTotalsDisplay(0);
@@ -484,21 +523,29 @@
         let total = 0;
 
         basket.forEach(function (item) {
-            const line = item.price * item.qty;
+            const line = amountFromQty(item.qty, item.price);
             total += line;
             const tr = document.createElement('tr');
             tr.innerHTML =
                 '<td><div class="fw-semibold">' + escapeHtml(item.name) + '</div>' +
                 '<div class="small text-muted">' + escapeHtml(item.code) + '</div></td>' +
-                '<td class="text-end">' + money(item.price) + '</td>' +
+                '<td class="text-end">' +
+                '<input type="number" class="form-control form-control-sm pos-price-input" data-uid="' + item.uid +
+                '" min="0.01" step="0.01" inputmode="decimal" value="' + Number(item.price).toFixed(2) +
+                '" title="Edit unit price" />' +
+                '</td>' +
                 '<td class="text-center">' +
                 '<div class="pos-qty-controls">' +
                 '<button type="button" class="btn btn-sm btn-outline-secondary" data-action="dec" data-uid="' + item.uid + '" title="Decrease"><i class="bi bi-dash-lg"></i></button>' +
                 '<input type="number" class="form-control form-control-sm pos-qty-input" data-uid="' + item.uid +
-                '" min="0.001" step="0.001" inputmode="decimal" value="' + formatQty(item.qty) + '" title="Enter fraction e.g. 0.5 or 0.25" />' +
+                '" min="0.001" step="0.001" inputmode="decimal" value="' + formatQty(item.qty) + '" title="Enter quantity e.g. 0.5 or 0.25" />' +
                 '<button type="button" class="btn btn-sm btn-outline-secondary" data-action="inc" data-uid="' + item.uid + '" title="Increase"><i class="bi bi-plus-lg"></i></button>' +
                 '</div></td>' +
-                '<td class="text-end fw-semibold">' + money(line) + '</td>' +
+                '<td class="text-end">' +
+                '<input type="number" class="form-control form-control-sm pos-line-input" data-uid="' + item.uid +
+                '" min="0.01" step="0.01" inputmode="decimal" value="' + line.toFixed(2) +
+                '" title="Enter line total — qty = line ÷ price (e.g. 120 at 240 = 0.5)" />' +
+                '</td>' +
                 '<td class="text-center">' +
                 '<button type="button" class="btn btn-sm btn-outline-danger" data-action="remove" data-uid="' + item.uid + '" title="Remove"><i class="bi bi-x-lg"></i></button>' +
                 '</td>';
