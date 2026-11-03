@@ -1,10 +1,27 @@
 ﻿@model UserFormViewModel
-<div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
+@using Microsoft.AspNetCore.Mvc.Rendering
+@{
+    var terminals = ViewBag.Terminals as IEnumerable<SelectListItem>;
+    var hasTerminals = terminals?.Any(t => !string.IsNullOrWhiteSpace(t.Value)) == true;
+}
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="alert alert-danger mb-3" role="alert">
+        <div class="fw-semibold mb-1">Could not save user. Fix the following:</div>
+        <div asp-validation-summary="All" class="mb-0"></div>
+    </div>
+}
+@if (!hasTerminals)
+{
+    <div class="alert alert-warning mb-3" role="alert">
+        No active terminals found. Create a terminal first, then add the user.
+    </div>
+}
 <div class="invoice-meta-grid invoice-meta-form">
     <div class="invoice-meta-row">
         <label asp-for="UserName" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <input asp-for="UserName" class="form-control form-control-sm invoice-meta-input" />
+            <input asp-for="UserName" class="form-control form-control-sm invoice-meta-input" autocomplete="username" />
             <span asp-validation-for="UserName" class="text-danger"></span>
         </div>
         <label asp-for="FullName" class="invoice-meta-title"></label>
@@ -16,12 +33,14 @@
     <div class="invoice-meta-row">
         <label asp-for="Password" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <input asp-for="Password" class="form-control form-control-sm invoice-meta-input" />
-            <span class="form-text">Leave blank on edit to keep current password.</span>
+            <input asp-for="Password" class="form-control form-control-sm invoice-meta-input" autocomplete="new-password" />
+            <span class="form-text">Create: min 6 chars with a letter and a number. Edit: leave blank to keep current.</span>
+            <span asp-validation-for="Password" class="text-danger d-block"></span>
         </div>
         <label asp-for="MobileNo" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
             <input asp-for="MobileNo" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="MobileNo" class="text-danger"></span>
         </div>
     </div>
     <div class="invoice-meta-row">
@@ -45,10 +64,11 @@
         <label asp-for="UserType" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
             <input asp-for="UserType" class="form-control form-control-sm invoice-meta-input" />
+            <span asp-validation-for="UserType" class="text-danger"></span>
         </div>
         <label asp-for="TerminalName" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <select asp-for="TerminalName" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Terminals" required>
+            <select asp-for="TerminalName" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Terminals">
                 <option value="">-- Select terminal --</option>
             </select>
             <span asp-validation-for="TerminalName" class="text-danger"></span>

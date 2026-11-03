@@ -95,6 +95,20 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var salesInvoiceSchema = scope.ServiceProvider.GetRequiredService<ISalesInvoiceSchemaService>();
+        await salesInvoiceSchema.EnsureSchemaAsync();
+    }
+    catch (Exception ex)
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+        logger.LogWarning(ex, "Could not ensure SalesInvoices stamp columns at startup.");
+    }
+}
+
 app.UseForwardedHeaders();
 
 if (!app.Environment.IsDevelopment())

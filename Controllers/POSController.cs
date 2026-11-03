@@ -58,6 +58,13 @@ public class POSController : Controller
         return await SalePage("Cash", ct);
     }
 
+    /// <summary>Second POS shell — same checkout as Cash POS; draggable items/basket split.</summary>
+    [HttpGet]
+    public async Task<IActionResult> Interface2(CancellationToken ct)
+    {
+        return await SalePage("Cash", ct, pageTitle: "Interface-II", enablePanelToggle: true);
+    }
+
     /// <summary>Open Credit POS draft lines. Finalized invoices use <see cref="MonthlyFinalRemarkPrefix"/>.</summary>
     private const string MonthlyRemark = "Monthly POS Draft";
     private const string MonthlyFinalRemarkPrefix = "Monthly POS Invoice";
@@ -498,12 +505,8 @@ public class POSController : Controller
             return RedirectToAction(nameof(MonthlySupply));
         }
 
-        int? userUid = null;
-        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (int.TryParse(userIdClaim, out var parsedUserId))
-        {
-            userUid = parsedUserId;
-        }
+        await EnsureSalesInvoiceStampColumnsAsync(ct);
+        var (userUid, userName) = await ResolveSessionUserAsync(ct);
 
         var (msBranchName, branchUid) = await ResolveSessionBranchAsync(ct);
         if (branchUid is null or <= 0)
@@ -594,6 +597,7 @@ public class POSController : Controller
                         Branch = msBranchName,
                         CustomerUid = customer.Uid,
                         UserUid = userUid,
+                        UserName = userName,
                         PaymentMethodUid = paymentMethodUid,
                         TerminalUid = msTerminalUid,
                         Terminal = msTerminalName,
@@ -705,6 +709,10 @@ public class POSController : Controller
                     invoice.Remarks = _inventory.MergeShortageRemarks(invoice.Remarks, stockResult);
                 invoice.UpdatedDate = DateTime.Now;
                 invoice.UserUid ??= userUid;
+                if (string.IsNullOrWhiteSpace(invoice.UserName))
+                    invoice.UserName = userName;
+                if (string.IsNullOrWhiteSpace(invoice.Branch))
+                    invoice.Branch = msBranchName;
                 await _db.SaveChangesAsync(ct);
 
                 var advanceNote = advanceApplied > 0 ? $", advance applied {advanceApplied:N2}" : "";
@@ -1466,12 +1474,8 @@ public class POSController : Controller
 
         var entryDate = request.EntryDate.Date;
         var lineTotal = Math.Round(request.UnitPrice * request.Quantity, 2);
-        int? userUid = null;
-        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (int.TryParse(userIdClaim, out var parsedUserId))
-        {
-            userUid = parsedUserId;
-        }
+        await EnsureSalesInvoiceStampColumnsAsync(ct);
+        var (userUid, userName) = await ResolveSessionUserAsync(ct);
 
         var (mBranchName, branchUid) = await ResolveSessionBranchAsync(ct);
         if (branchUid is null or <= 0)
@@ -1602,6 +1606,7 @@ public class POSController : Controller
                     Branch = mBranchName,
                     CustomerUid = customer.Uid,
                     UserUid = userUid,
+                    UserName = userName,
                     TerminalUid = mTerminalUid,
                     Terminal = mTerminalName,
                     SubTotal = 0,
@@ -1971,6 +1976,10 @@ public class POSController : Controller
             });
         }
 
+        // Must run before any SalesInvoices SELECT/INSERT (EF maps UserName/Branch/Terminal).
+        await EnsureCustomerGivenColumnsAsync(ct);
+        await EnsureSalesInvoiceStampColumnsAsync(ct);
+
         var mode = string.Equals(request.Mode, "Monthly", StringComparison.OrdinalIgnoreCase)
             || string.Equals(request.Mode, "Credit", StringComparison.OrdinalIgnoreCase)
             ? "Monthly"
@@ -2017,11 +2026,14 @@ public class POSController : Controller
             .Select(x => (int?)x.Uid)
             .FirstOrDefaultAsync(ct);
 
-        int? userUid = null;
-        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (int.TryParse(userIdClaim, out var parsedUserId))
+        var (userUid, userName) = await ResolveSessionUserAsync(ct);
+        if (string.IsNullOrWhiteSpace(userName))
         {
-            userUid = parsedUserId;
+            return BadRequest(new PosCheckoutResultViewModel
+            {
+                Success = false,
+                Message = "User is required. Sign in again before selling."
+            });
         }
 
         var (branchName, branchUid) = await ResolveSessionBranchAsync(ct);
@@ -2106,8 +2118,6 @@ public class POSController : Controller
 
         }
 
-        await EnsureCustomerGivenColumnsAsync(ct);
-
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
         var (terminalName, terminalUid) = await ResolveSessionTerminalAsync(ct);
@@ -2129,6 +2139,7 @@ public class POSController : Controller
             Branch = branchName,
             CustomerUid = customerUid,
             UserUid = userUid,
+            UserName = userName,
             PaymentMethodUid = paymentMethodUid,
             TerminalUid = terminalUid,
             Terminal = terminalName,
@@ -2238,10 +2249,14 @@ public class POSController : Controller
         });
     }
 
-    private async Task<IActionResult> SalePage(string mode, CancellationToken ct)
+    private async Task<IActionResult> SalePage(
+        string mode,
+        CancellationToken ct,
+        string? pageTitle = null,
+        bool enablePanelToggle = false)
     {
         _navContext.SetArea("POS");
-        ViewData["Title"] = $"{mode} POS";
+        ViewData["Title"] = string.IsNullOrWhiteSpace(pageTitle) ? $"{mode} POS" : pageTitle.Trim();
 
         var products = await _db.Products.AsNoTracking()
             .Where(x => x.IsActive)
@@ -2312,10 +2327,34 @@ public class POSController : Controller
         return View("Sale", new PosSaleViewModel
         {
             Mode = mode,
+            PageTitle = string.IsNullOrWhiteSpace(pageTitle) ? null : pageTitle.Trim(),
             UseCardLayout = SetupController.IsCardLayout(layout),
+            EnablePanelToggle = enablePanelToggle,
             Products = products,
             Categories = categories
         });
+    }
+
+    private async Task<(int? UserUid, string? UserName)> ResolveSessionUserAsync(CancellationToken ct)
+    {
+        int? userUid = null;
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (int.TryParse(userIdClaim, out var parsedUserId))
+            userUid = parsedUserId;
+
+        var userName = User.Identity?.Name
+            ?? User.FindFirstValue(ClaimTypes.Name)
+            ?? User.FindFirstValue("UserName");
+
+        if (string.IsNullOrWhiteSpace(userName) && userUid is int uid)
+        {
+            userName = await _db.Users.AsNoTracking()
+                .Where(u => u.Uid == uid)
+                .Select(u => u.UserName)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        return (userUid, string.IsNullOrWhiteSpace(userName) ? null : userName.Trim());
     }
 
     private async Task<(string? TerminalName, int? TerminalUid)> ResolveSessionTerminalAsync(CancellationToken ct)
@@ -2403,6 +2442,48 @@ public class POSController : Controller
             IF COL_LENGTH(N'dbo.SalesInvoices', N'ChangeGivenAmount') IS NULL
                 ALTER TABLE dbo.SalesInvoices ADD [ChangeGivenAmount] DECIMAL(18, 2) NULL;
             """, ct);
+    }
+
+    private bool _salesInvoiceStampColumnsReady;
+
+    private async Task EnsureSalesInvoiceStampColumnsAsync(CancellationToken ct)
+    {
+        if (_salesInvoiceStampColumnsReady)
+            return;
+
+        try
+        {
+            if (_db.Database.IsSqlite())
+            {
+                await EnsureSqliteColumnAsync("SalesInvoices", "UserName",
+                    "ALTER TABLE SalesInvoices ADD COLUMN UserName TEXT NULL", ct);
+                await EnsureSqliteColumnAsync("SalesInvoices", "Branch",
+                    "ALTER TABLE SalesInvoices ADD COLUMN Branch TEXT NULL", ct);
+                await EnsureSqliteColumnAsync("SalesInvoices", "Terminal",
+                    "ALTER TABLE SalesInvoices ADD COLUMN Terminal TEXT NULL", ct);
+            }
+            else
+            {
+                await _db.Database.ExecuteSqlRawAsync("""
+                    IF COL_LENGTH(N'dbo.SalesInvoices', N'UserName') IS NULL
+                        ALTER TABLE dbo.SalesInvoices ADD [UserName] NVARCHAR(100) NULL;
+                    """, ct);
+                await _db.Database.ExecuteSqlRawAsync("""
+                    IF COL_LENGTH(N'dbo.SalesInvoices', N'Branch') IS NULL
+                        ALTER TABLE dbo.SalesInvoices ADD [Branch] NVARCHAR(150) NULL;
+                    """, ct);
+                await _db.Database.ExecuteSqlRawAsync("""
+                    IF COL_LENGTH(N'dbo.SalesInvoices', N'Terminal') IS NULL
+                        ALTER TABLE dbo.SalesInvoices ADD [Terminal] NVARCHAR(100) NULL;
+                    """, ct);
+            }
+
+            _salesInvoiceStampColumnsReady = true;
+        }
+        catch
+        {
+            // Concurrent startup/pay may race; next call retries until columns exist.
+        }
     }
 
     private async Task EnsureSqliteColumnAsync(string table, string column, string alterSql, CancellationToken ct)

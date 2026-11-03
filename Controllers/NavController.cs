@@ -42,6 +42,11 @@ public class NavController : Controller
             return RedirectToAction("Index", "Employees");
         }
 
+        if (string.Equals(area.Key, "Adjustments", StringComparison.OrdinalIgnoreCase))
+        {
+            return RedirectToAction("Index", "SalesReturns");
+        }
+
         if (string.Equals(area.Key, "SalesInvoice", StringComparison.OrdinalIgnoreCase)
             || string.Equals(area.Key, "Invoices", StringComparison.OrdinalIgnoreCase))
         {

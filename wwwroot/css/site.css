@@ -1200,6 +1200,75 @@ a.pos-nav-link:hover {
   grid-template-columns: minmax(260px, 1.15fr) minmax(280px, 1fr);
 }
 
+/* Interface-II: drag the splitter to set items/basket widths */
+.pos-sale-layout--interface2 {
+  --pos-items-pct: 80%;
+  --pos-basket-pct: 20%;
+  grid-template-columns: minmax(0, var(--pos-items-pct)) 0.7rem minmax(0, var(--pos-basket-pct));
+}
+
+.pos-sale-layout--cards.pos-sale-layout--interface2 {
+  grid-template-columns: minmax(0, var(--pos-items-pct)) 0.7rem minmax(0, var(--pos-basket-pct));
+}
+
+.pos-panel-splitter {
+  align-self: stretch;
+  width: 0.7rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background:
+    linear-gradient(#cbd5e1, #cbd5e1) center / 2px 100% no-repeat,
+    transparent;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  z-index: 2;
+}
+
+.pos-panel-splitter:hover,
+.pos-panel-splitter:focus-visible,
+.pos-sale-layout--resizing .pos-panel-splitter {
+  background:
+    linear-gradient(#0f766e, #0f766e) center / 3px 100% no-repeat,
+    rgba(15, 118, 110, 0.08);
+  outline: none;
+}
+
+body.pos-panel-splitter-active {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+body.pos-panel-splitter-active * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+.pos-sale-layout--interface2 .pos-sale-panel--items,
+.pos-sale-layout--interface2 .pos-sale-panel--basket {
+  min-width: 0;
+}
+
+/* Interface-II: keep totals mid-panel (not pinned under empty basket space) */
+.pos-sale-layout--interface2 .pos-sale-panel--basket .pos-sale-table-wrap {
+  flex: 0 1 auto;
+  max-height: 42%;
+  min-height: 7rem;
+}
+
+.pos-sale-layout--interface2 .pos-sale-panel--basket .pos-sale-totals {
+  flex: 0 0 auto;
+  margin-top: 0.35rem;
+  margin-bottom: auto;
+}
+
+.pos-sale-layout--interface2 .pos-sale-panel--basket .pos-price-input {
+  width: 100%;
+  max-width: 6.5rem;
+}
+
 .pos-items-filters {
   display: flex;
   align-items: center;
@@ -1787,9 +1856,15 @@ a.pos-nav-link:hover {
 @media (max-width: 992px) {
   .pos-sale-layout,
   .pos-sale-layout--cards,
+  .pos-sale-layout--interface2,
+  .pos-sale-layout--cards.pos-sale-layout--interface2,
   .monthly-entry-layout {
     grid-template-columns: 1fr;
     min-height: 0;
+  }
+
+  .pos-panel-splitter {
+    display: none;
   }
 }
 

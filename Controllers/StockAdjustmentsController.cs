@@ -14,12 +14,16 @@ public class StockAdjustmentsController : Controller
 {
     private readonly POSDbContext _db;
     private readonly IAuditService _audit;
+    private readonly INavContextService _navContext;
 
-    public StockAdjustmentsController(POSDbContext db, IAuditService audit)
+    public StockAdjustmentsController(POSDbContext db, IAuditService audit, INavContextService navContext)
     {
         _db = db;
         _audit = audit;
+        _navContext = navContext;
     }
+
+    private void EnsureNav() => _navContext.SetArea("Adjustments");
 
     private async Task LoadLookups(CancellationToken ct)
     {
@@ -34,11 +38,16 @@ public class StockAdjustmentsController : Controller
             "Uid", "ProductName");
     }
 
-    public async Task<IActionResult> Index(CancellationToken ct) =>
-        View(await _db.StockAdjustments.AsNoTracking().OrderByDescending(x => x.AdjustmentDate).ToListAsync(ct));
+    public async Task<IActionResult> Index(CancellationToken ct)
+    {
+        EnsureNav();
+        ViewData["Title"] = "Stock Adjustment";
+        return View(await _db.StockAdjustments.AsNoTracking().OrderByDescending(x => x.AdjustmentDate).ToListAsync(ct));
+    }
 
     public async Task<IActionResult> Create(CancellationToken ct)
     {
+        EnsureNav();
         await LoadLookups(ct);
         return View(new StockAdjustmentFormViewModel
         {
@@ -50,6 +59,7 @@ public class StockAdjustmentsController : Controller
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(StockAdjustmentFormViewModel model, CancellationToken ct)
     {
+        EnsureNav();
         if (model.ProductUid <= 0)
             ModelState.AddModelError(nameof(model.ProductUid), "Product is required.");
         if (model.Quantity <= 0)
@@ -164,6 +174,7 @@ public class StockAdjustmentsController : Controller
 
     public async Task<IActionResult> Edit(int id, CancellationToken ct)
     {
+        EnsureNav();
         var e = await _db.StockAdjustments.FindAsync([id], ct);
         if (e is null) return NotFound();
         if (e.Status == "Cancelled")
@@ -189,6 +200,7 @@ public class StockAdjustmentsController : Controller
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(int id, StockAdjustmentFormViewModel model, CancellationToken ct)
     {
+        EnsureNav();
         if (id != model.Uid) return BadRequest();
         if (!ModelState.IsValid)
         {
@@ -214,6 +226,7 @@ public class StockAdjustmentsController : Controller
 
     public async Task<IActionResult> Details(int id, CancellationToken ct)
     {
+        EnsureNav();
         var e = await _db.StockAdjustments.AsNoTracking().FirstOrDefaultAsync(x => x.Uid == id, ct);
         return e is null ? NotFound() : View(e);
     }

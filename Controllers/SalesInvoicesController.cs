@@ -48,6 +48,7 @@ public class SalesInvoicesController : Controller {
       join c in _db.Customers.AsNoTracking() on inv.CustomerUid equals c.Uid into cj
       from c in cj.DefaultIfEmpty()
       where inv.InvoiceStatus != SalesReturnsController.ReturnStatus
+            && inv.InvoiceStatus != WastageController.WastageStatus
       select new { inv, c };
 
     if (string.Equals(customerType, "walkin", StringComparison.OrdinalIgnoreCase))

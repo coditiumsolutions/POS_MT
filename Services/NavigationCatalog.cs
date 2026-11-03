@@ -34,6 +34,7 @@ public static class NavigationCatalog
         new("POS", "POS",
         [
             new("Cash POS", "POS", "Cash", IconClass: "bi-cash-stack"),
+            new("Interface-II", "POS", "Interface2", IconClass: "bi-grid-3x3-gap"),
             new("Credit POS", "POS", "Credit", IconClass: "bi-calendar-month"),
             new("Monthly Supply", "POS", "MonthlySupply", IconClass: "bi-calendar2-check"),
             new("Yogurt Production", "YogurtProduction", IconClass: "bi-cup-straw")
@@ -50,6 +51,12 @@ public static class NavigationCatalog
             new("All Employees", "Employees", IconClass: "bi-people"),
             new("Add Employee", "Employees", "Create", IconClass: "bi-person-plus"),
             new("Salary Payments", "EmployeePayments", IconClass: "bi-cash-coin")
+        ]),
+        new("Adjustments", "Adjustments",
+        [
+            new("Item Return", "SalesReturns", IconClass: "bi-arrow-return-left"),
+            new("Wastage", "Wastage", IconClass: "bi-trash"),
+            new("Stock Adjustment", "StockAdjustments", IconClass: "bi-arrow-left-right")
         ]),
         new("AllModules", "All Modules",
         [
@@ -99,7 +106,7 @@ public static class NavigationCatalog
         [
             new("Sales Report", "Reports", "TotalSale", IconClass: "bi-graph-up-arrow"),
             new("Daily Report", "Reports", "DailyReport", IconClass: "bi-calendar-day"),
-            new("Terminal Report", "Reports", "TerminalReport", IconClass: "bi-display"),
+            new("Branch / Terminal / User", "Reports", "TerminalReport", IconClass: "bi-display"),
             new("Financial Summary", "Reports", "ExpenseReport", IconClass: "bi-cash-stack")
         ])
     ];
@@ -115,7 +122,7 @@ public static class NavigationCatalog
         new("Inventory", "Stock levels and adjustments",
         [
             new("Inventory", "bi-boxes", "Inventories"),
-            new("Stock Adjustments", "bi-arrow-left-right", "StockAdjustments")
+            new("Adjustments", "bi-arrow-return-left", "SalesReturns")
         ]),
         new("Sales & Purchases", "Trading partners, invoices, and payments",
         [
@@ -123,7 +130,6 @@ public static class NavigationCatalog
             new("Customers", "bi-people", "Customers"),
             new("Purchases", "bi-cart-plus", "PurchaseInvoices"),
             new("Sales", "bi-receipt", "SalesInvoices"),
-            new("Sales Returns", "bi-arrow-return-left", "SalesReturns"),
             new("Customer Payments", "bi-cash-coin", "CustomerPayments"),
             new("Vendor Payments", "bi-wallet2", "VendorPayments")
         ]),

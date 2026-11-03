@@ -22,7 +22,10 @@ public sealed class PosCategoryItemViewModel
 public sealed class PosSaleViewModel
 {
     public string Mode { get; set; } = "Cash";
+    public string? PageTitle { get; set; }
     public bool UseCardLayout { get; set; }
+    /// <summary>Interface-II: draggable splitter between items and basket panels.</summary>
+    public bool EnablePanelToggle { get; set; }
     public List<PosProductItemViewModel> Products { get; set; } = [];
     public List<PosCategoryItemViewModel> Categories { get; set; } = [];
 }

@@ -1,9 +1,20 @@
 @model UserFormViewModel
 @{ ViewData["Title"] = "Edit User"; }
 <h1 class="page-heading invoice-details-heading mb-3">Edit User</h1>
-<form asp-action="Edit" method="post" class="bg-white border rounded p-3">
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success">@TempData["Success"]</div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
+<form asp-action="Edit" method="post" class="bg-white border rounded p-3" novalidate>
     @Html.AntiForgeryToken()
     <input type="hidden" asp-for="Uid" />
     <partial name="_Form" />
     <partial name="_CrudFormActions" />
 </form>
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

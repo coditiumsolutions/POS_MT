@@ -39,6 +39,10 @@ public partial class SalesInvoice
     [Column("UserUID")]
     public int? UserUid { get; set; }
 
+    /// <summary>Username from signed-in user session (e.g. shahid).</summary>
+    [StringLength(100)]
+    public string? UserName { get; set; }
+
     [Column("TerminalUID")]
     public int? TerminalUid { get; set; }
 

@@ -31,12 +31,12 @@ public class SalesReturnsController : Controller
         _navContext = navContext;
     }
 
-    private void EnsureNav() => _navContext.SetArea("AllModules");
+    private void EnsureNav() => _navContext.SetArea("Adjustments");
 
     public async Task<IActionResult> Index(CancellationToken ct)
     {
         EnsureNav();
-        ViewData["Title"] = "Sales Returns";
+        ViewData["Title"] = "Item Return";
 
         var list = await _db.SalesInvoices.AsNoTracking()
             .Where(x => x.InvoiceStatus == ReturnStatus)
@@ -176,23 +176,55 @@ public class SalesReturnsController : Controller
             });
         }
 
-        var branchUid = await _db.Branches.AsNoTracking()
-            .Where(x => x.IsActive)
-            .OrderBy(x => x.Uid)
-            .Select(x => (int?)x.Uid)
-            .FirstOrDefaultAsync(ct);
-
         int? userUid = null;
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (int.TryParse(userIdClaim, out var parsedUserId))
             userUid = parsedUserId;
+        var userName = User.Identity?.Name
+            ?? User.FindFirstValue(ClaimTypes.Name)
+            ?? User.FindFirstValue("UserName");
+        if (string.IsNullOrWhiteSpace(userName) && userUid is int uid)
+        {
+            userName = await _db.Users.AsNoTracking()
+                .Where(u => u.Uid == uid)
+                .Select(u => u.UserName)
+                .FirstOrDefaultAsync(ct);
+        }
 
-        var sessionBranch = HttpContext.Session.GetString(AccountController.SessionBranchKey);
-        var sessionTerminal = HttpContext.Session.GetString(AccountController.SessionTerminalNameKey);
-        if (string.IsNullOrWhiteSpace(sessionBranch))
-            sessionBranch = User.FindFirstValue("Branch");
-        if (string.IsNullOrWhiteSpace(sessionTerminal))
-            sessionTerminal = User.FindFirstValue("TerminalName");
+        var sessionBranch = HttpContext.Session.GetString(AccountController.SessionBranchKey)
+                            ?? User.FindFirstValue("Branch");
+        var sessionTerminal = HttpContext.Session.GetString(AccountController.SessionTerminalNameKey)
+                              ?? User.FindFirstValue("TerminalName");
+
+        // Resolve branch warehouse from signed-in branch so returned qty lands on the correct inventory.
+        int? branchUid = null;
+        if (!string.IsNullOrWhiteSpace(sessionBranch))
+        {
+            var branchName = sessionBranch.Trim();
+            branchUid = await _db.Branches.AsNoTracking()
+                .Where(b => b.IsActive && b.BranchName == branchName)
+                .Select(b => (int?)b.Uid)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        if (branchUid is null or <= 0)
+        {
+            branchUid = await _db.Branches.AsNoTracking()
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.Uid)
+                .Select(x => (int?)x.Uid)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        int? terminalUid = null;
+        if (!string.IsNullOrWhiteSpace(sessionTerminal))
+        {
+            var terminalName = sessionTerminal.Trim();
+            terminalUid = await _db.Terminals.AsNoTracking()
+                .Where(t => t.IsActive && t.TerminalName == terminalName)
+                .Select(t => (int?)t.Uid)
+                .FirstOrDefaultAsync(ct);
+        }
 
         var returnValue = request.Items.Sum(x => Math.Round(x.UnitPrice * x.Quantity, 2));
         var netAmount = -Math.Abs(returnValue);
@@ -214,12 +246,15 @@ public class SalesReturnsController : Controller
 
         var invoice = new SalesInvoice
         {
+            ClientTransactionId = Guid.NewGuid(),
             InvoiceNo = returnNo,
             InvoiceDate = DateTime.Now,
             BranchUid = branchUid,
             Branch = string.IsNullOrWhiteSpace(sessionBranch) ? null : sessionBranch.Trim(),
             CustomerUid = walkInUid,
             UserUid = userUid,
+            UserName = string.IsNullOrWhiteSpace(userName) ? null : userName.Trim(),
+            TerminalUid = terminalUid,
             Terminal = string.IsNullOrWhiteSpace(sessionTerminal) ? null : sessionTerminal.Trim(),
             SubTotal = netAmount,
             DiscountAmount = 0,
@@ -255,7 +290,8 @@ public class SalesReturnsController : Controller
                 TaxPercent = 0,
                 TaxAmount = 0,
                 LineTotal = lineTotal,
-                CostPrice = product.PurchasePrice
+                CostPrice = product.PurchasePrice,
+                Remarks = "Sales return — stock restored"
             });
             stockLines.Add(new InventoryLineMovement
             {
@@ -270,9 +306,11 @@ public class SalesReturnsController : Controller
 
         try
         {
+            // Adds returned qty back into branch warehouse inventory (e.g. Yogurt return 5 → +5 stock).
             await _inventory.ApplyReturnAsync(
                 invoice.Uid, invoice.InvoiceNo, stockLines,
-                warehouseUid: null, branchUid, userUid, terminalUid: null, ct);
+                warehouseUid: null, branchUid, userUid, terminalUid, ct);
+            await _db.SaveChangesAsync(ct);
         }
         catch (InvalidOperationException ex)
         {

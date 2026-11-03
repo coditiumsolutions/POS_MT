@@ -50,14 +50,8 @@ public class UsersController : Controller
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(UserFormViewModel model, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(model.Password))
-            ModelState.AddModelError(nameof(model.Password), "Password is required.");
-        else if (!AppRoles.IsPasswordStrongEnough(model.Password, out var pwdError))
-            ModelState.AddModelError(nameof(model.Password), pwdError);
-        if (string.IsNullOrWhiteSpace(model.TerminalName))
-            ModelState.AddModelError(nameof(model.TerminalName), "Terminal is required.");
-        if (!AppRoles.IsKnown(model.RoleName))
-            ModelState.AddModelError(nameof(model.RoleName), "Select a valid role.");
+        NormalizeOptionalFields(model);
+        ValidateUserForm(model, requirePassword: true);
 
         if (!ModelState.IsValid)
         {
@@ -65,7 +59,8 @@ public class UsersController : Controller
             return View(model);
         }
 
-        if (await _db.Users.AnyAsync(x => x.UserName == model.UserName, ct))
+        var userName = model.UserName.Trim();
+        if (await _db.Users.AnyAsync(x => x.UserName == userName, ct))
         {
             ModelState.AddModelError(nameof(model.UserName), "Username already exists.");
             await LoadLookupsAsync(ct);
@@ -74,22 +69,39 @@ public class UsersController : Controller
 
         var e = new User
         {
-            UserName = model.UserName.Trim(),
+            UserName = userName,
             FullName = model.FullName.Trim(),
             PasswordHash = _hash.Hash(model.Password!),
-            MobileNo = model.MobileNo,
-            Email = model.Email,
+            MobileNo = NormalizeName(model.MobileNo),
+            Email = NormalizeName(model.Email),
             RoleName = AppRoles.Normalize(model.RoleName),
-            UserType = model.UserType,
+            UserType = NormalizeName(model.UserType),
             TerminalName = NormalizeName(model.TerminalName)!,
             Branch = NormalizeName(model.Branch),
             IsActive = model.IsActive,
             CreatedDate = DateTime.Now
         };
-        _db.Users.Add(e);
-        await _db.SaveChangesAsync(ct);
-        await _audit.WriteAsync("Create", "Users", e.Uid.ToString(), $"Created user {e.UserName}", ct);
-        TempData["Success"] = "User created.";
+
+        try
+        {
+            _db.Users.Add(e);
+            await _db.SaveChangesAsync(ct);
+            await _audit.WriteAsync("Create", "Users", e.Uid.ToString(), $"Created user {e.UserName}", ct);
+        }
+        catch (DbUpdateException)
+        {
+            ModelState.AddModelError(string.Empty, "Could not save user. Username or email may already exist.");
+            await LoadLookupsAsync(ct);
+            return View(model);
+        }
+        catch (Exception)
+        {
+            ModelState.AddModelError(string.Empty, "Could not save user because of an unexpected error. Try again.");
+            await LoadLookupsAsync(ct);
+            return View(model);
+        }
+
+        TempData["Success"] = $"User '{e.UserName}' created successfully.";
         return RedirectToAction(nameof(Index));
     }
 
@@ -119,13 +131,8 @@ public class UsersController : Controller
     {
         if (id != model.Uid) return BadRequest();
 
-        if (string.IsNullOrWhiteSpace(model.TerminalName))
-            ModelState.AddModelError(nameof(model.TerminalName), "Terminal is required.");
-        if (!AppRoles.IsKnown(model.RoleName))
-            ModelState.AddModelError(nameof(model.RoleName), "Select a valid role.");
-        if (!string.IsNullOrWhiteSpace(model.Password)
-            && !AppRoles.IsPasswordStrongEnough(model.Password, out var pwdError))
-            ModelState.AddModelError(nameof(model.Password), pwdError);
+        NormalizeOptionalFields(model);
+        ValidateUserForm(model, requirePassword: false);
 
         if (!ModelState.IsValid)
         {
@@ -136,19 +143,20 @@ public class UsersController : Controller
         var e = await _db.Users.FindAsync([id], ct);
         if (e is null) return NotFound();
 
-        if (await _db.Users.AnyAsync(x => x.UserName == model.UserName && x.Uid != id, ct))
+        var userName = model.UserName.Trim();
+        if (await _db.Users.AnyAsync(x => x.UserName == userName && x.Uid != id, ct))
         {
             ModelState.AddModelError(nameof(model.UserName), "Username already exists.");
             await LoadLookupsAsync(ct);
             return View(model);
         }
 
-        e.UserName = model.UserName.Trim();
+        e.UserName = userName;
         e.FullName = model.FullName.Trim();
-        e.MobileNo = model.MobileNo;
-        e.Email = model.Email;
+        e.MobileNo = NormalizeName(model.MobileNo);
+        e.Email = NormalizeName(model.Email);
         e.RoleName = AppRoles.Normalize(model.RoleName);
-        e.UserType = model.UserType;
+        e.UserType = NormalizeName(model.UserType);
         e.TerminalName = NormalizeName(model.TerminalName)!;
         e.Branch = NormalizeName(model.Branch);
         e.IsActive = model.IsActive;
@@ -156,9 +164,25 @@ public class UsersController : Controller
         if (!string.IsNullOrWhiteSpace(model.Password))
             e.PasswordHash = _hash.Hash(model.Password);
 
-        await _db.SaveChangesAsync(ct);
-        await _audit.WriteAsync("Update", "Users", e.Uid.ToString(), $"Updated user {e.UserName}", ct);
-        TempData["Success"] = "User updated.";
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+            await _audit.WriteAsync("Update", "Users", e.Uid.ToString(), $"Updated user {e.UserName}", ct);
+        }
+        catch (DbUpdateException)
+        {
+            ModelState.AddModelError(string.Empty, "Could not update user. Username or email may already exist.");
+            await LoadLookupsAsync(ct);
+            return View(model);
+        }
+        catch (Exception)
+        {
+            ModelState.AddModelError(string.Empty, "Could not update user because of an unexpected error. Try again.");
+            await LoadLookupsAsync(ct);
+            return View(model);
+        }
+
+        TempData["Success"] = $"User '{e.UserName}' updated successfully.";
         return RedirectToAction(nameof(Index));
     }
 
@@ -202,6 +226,48 @@ public class UsersController : Controller
                 Text = x.BranchName
             })
             .ToListAsync(ct);
+    }
+
+    private void ValidateUserForm(UserFormViewModel model, bool requirePassword)
+    {
+        if (string.IsNullOrWhiteSpace(model.UserName))
+            ModelState.AddModelError(nameof(model.UserName), "Username is required.");
+        if (string.IsNullOrWhiteSpace(model.FullName))
+            ModelState.AddModelError(nameof(model.FullName), "Full name is required.");
+
+        if (requirePassword)
+        {
+            if (string.IsNullOrWhiteSpace(model.Password))
+                ModelState.AddModelError(nameof(model.Password), "Password is required.");
+            else if (!AppRoles.IsPasswordStrongEnough(model.Password, out var pwdError))
+                ModelState.AddModelError(nameof(model.Password), pwdError);
+        }
+        else if (!string.IsNullOrWhiteSpace(model.Password)
+                 && !AppRoles.IsPasswordStrongEnough(model.Password, out var pwdError))
+        {
+            ModelState.AddModelError(nameof(model.Password), pwdError);
+        }
+
+        if (string.IsNullOrWhiteSpace(model.TerminalName))
+            ModelState.AddModelError(nameof(model.TerminalName), "Terminal is required. Select an active terminal.");
+        if (!AppRoles.IsKnown(model.RoleName))
+            ModelState.AddModelError(nameof(model.RoleName), "Select a valid role.");
+    }
+
+    private void NormalizeOptionalFields(UserFormViewModel model)
+    {
+        model.UserName = model.UserName?.Trim() ?? string.Empty;
+        model.FullName = model.FullName?.Trim() ?? string.Empty;
+        model.MobileNo = NormalizeName(model.MobileNo);
+        model.Email = NormalizeName(model.Email);
+        model.UserType = NormalizeName(model.UserType);
+        model.TerminalName = model.TerminalName?.Trim() ?? string.Empty;
+        model.Branch = NormalizeName(model.Branch);
+        model.Password = string.IsNullOrWhiteSpace(model.Password) ? null : model.Password;
+
+        // Empty email should not fail [EmailAddress] binding quirks.
+        if (model.Email is null)
+            ModelState.Remove(nameof(model.Email));
     }
 
     private static string? NormalizeName(string? value) =>

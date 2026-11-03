@@ -70,6 +70,7 @@ public static class DependencyInjection
         services.AddScoped<IYogurtRecipeService, YogurtRecipeService>();
         services.AddScoped<ICustomerAdvanceService, CustomerAdvanceService>();
         services.AddScoped<IEmployeeSchemaService, EmployeeSchemaService>();
+        services.AddScoped<ISalesInvoiceSchemaService, SalesInvoiceSchemaService>();
         services.AddScoped<IOfflineSyncCatalogService, OfflineSyncCatalogService>();
         services.AddScoped<INavContextService, NavContextService>();
 

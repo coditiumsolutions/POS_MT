@@ -49,7 +49,7 @@
 <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
     <div>
         <h1 class="page-heading mb-1">New Sales Return</h1>
-        <p class="text-muted mb-0">Pick items to restock. Amount is deducted from sales totals.</p>
+        <p class="text-muted mb-0">Pick items to restock. Returned quantity is added back to inventory.</p>
     </div>
     <a class="btn btn-outline-secondary btn-sm" asp-action="Index">All Returns</a>
 </div>
@@ -444,7 +444,7 @@
 
         const total = basketTotal();
         if (!confirm('Confirm sales return?\nReturn Amount: ' + money(total) +
-            '\nStock will be restored and sales total reduced.')) return;
+            '\nReturned quantity will be added back to inventory.')) return;
 
         btnSave.disabled = true;
         hideAlert();

@@ -89,14 +89,16 @@ public class ReportsController : Controller
                 CustomerName = x.c != null ? x.c.CustomerName : "—",
                 SaleType = x.inv.InvoiceStatus == SalesReturnsController.ReturnStatus
                     ? "Return"
-                    : (x.c == null
-                        ? "—"
-                        : (x.c.CustomerCode == "C001" ||
-                           x.c.CustomerName.Contains("Walk-in") ||
-                           x.c.CustomerName.Contains("Walk-In") ||
-                           x.c.CustomerName.Contains("Walk In")
-                            ? "Walk-in"
-                            : "Monthly")),
+                    : (x.inv.InvoiceStatus == WastageController.WastageStatus
+                        ? "Wastage"
+                        : (x.c == null
+                            ? "—"
+                            : (x.c.CustomerCode == "C001" ||
+                               x.c.CustomerName.Contains("Walk-in") ||
+                               x.c.CustomerName.Contains("Walk-In") ||
+                               x.c.CustomerName.Contains("Walk In")
+                                ? "Walk-in"
+                                : "Monthly"))),
                 NetAmount = x.inv.NetAmount,
                 PaidAmount = x.inv.PaidAmount,
                 InvoiceStatus = x.inv.InvoiceStatus,
@@ -129,20 +131,22 @@ public class ReportsController : Controller
         DateTime? dateTo,
         string? branch,
         string? terminal,
+        string? user,
         CancellationToken ct)
     {
         EnsureReportsNav();
-        ViewData["Title"] = "Terminal Report";
+        ViewData["Title"] = "Branch / Terminal / User Report";
 
         var today = DateTime.Today;
-        var from = (dateFrom ?? today).Date;
+        var startDate = (dateFrom ?? today).Date;
         var toInclusive = (dateTo ?? today).Date;
-        if (toInclusive < from)
-            (from, toInclusive) = (toInclusive, from);
+        if (toInclusive < startDate)
+            (startDate, toInclusive) = (toInclusive, startDate);
         var toExclusive = toInclusive.AddDays(1);
 
         var selectedBranch = string.IsNullOrWhiteSpace(branch) || branch == "All" ? null : branch.Trim();
         var selectedTerminal = string.IsNullOrWhiteSpace(terminal) || terminal == "All" ? null : terminal.Trim();
+        var selectedUser = string.IsNullOrWhiteSpace(user) || user == "All" ? null : user.Trim();
 
         var branchNames = await _db.Branches.AsNoTracking()
             .Where(b => b.IsActive)
@@ -154,11 +158,29 @@ public class ReportsController : Controller
             .OrderBy(t => t.TerminalName)
             .Select(t => t.TerminalName)
             .ToListAsync(ct);
+        var userNames = await _db.Users.AsNoTracking()
+            .Where(u => u.IsActive)
+            .OrderBy(u => u.UserName)
+            .Select(u => u.UserName)
+            .ToListAsync(ct);
 
-        var query = _db.SalesInvoices.AsNoTracking()
-            .Where(i => i.InvoiceDate >= from
-                        && i.InvoiceDate < toExclusive
-                        && i.InvoiceStatus != "Cancelled");
+        var query =
+            from i in _db.SalesInvoices.AsNoTracking()
+            join u in _db.Users.AsNoTracking() on i.UserUid equals u.Uid into uj
+            from u in uj.DefaultIfEmpty()
+            where i.InvoiceDate >= startDate
+                  && i.InvoiceDate < toExclusive
+                  && i.InvoiceStatus != "Cancelled"
+            select new
+            {
+                i.Branch,
+                i.Terminal,
+                UserName = !string.IsNullOrWhiteSpace(i.UserName)
+                    ? i.UserName
+                    : (u != null ? u.UserName : null),
+                i.NetAmount,
+                i.PaidAmount
+            };
 
         if (selectedBranch is not null)
             query = query.Where(i => i.Branch == selectedBranch);
@@ -166,33 +188,40 @@ public class ReportsController : Controller
         if (selectedTerminal is not null)
             query = query.Where(i => i.Terminal == selectedTerminal);
 
+        if (selectedUser is not null)
+            query = query.Where(i => i.UserName == selectedUser);
+
         var rows = await query
             .GroupBy(i => new
             {
                 Branch = string.IsNullOrWhiteSpace(i.Branch) ? "Unassigned" : i.Branch!.Trim(),
-                Terminal = string.IsNullOrWhiteSpace(i.Terminal) ? "Unassigned" : i.Terminal!.Trim()
+                Terminal = string.IsNullOrWhiteSpace(i.Terminal) ? "Unassigned" : i.Terminal!.Trim(),
+                UserName = string.IsNullOrWhiteSpace(i.UserName) ? "Unassigned" : i.UserName!.Trim()
             })
             .Select(g => new TerminalDailyReportRowViewModel
             {
                 BranchName = g.Key.Branch,
                 TerminalName = g.Key.Terminal,
+                UserName = g.Key.UserName,
                 InvoiceCount = g.Count(),
                 TotalNetAmount = g.Sum(x => x.NetAmount),
                 TotalPaidAmount = g.Sum(x => x.PaidAmount)
             })
             .OrderBy(x => x.BranchName)
-            .ThenByDescending(x => x.InvoiceCount)
             .ThenBy(x => x.TerminalName)
+            .ThenBy(x => x.UserName)
             .ToListAsync(ct);
 
         return View(new TerminalDailyReportViewModel
         {
-            DateFrom = from,
+            DateFrom = startDate,
             DateTo = toInclusive,
             Branch = selectedBranch ?? "All",
             Terminal = selectedTerminal ?? "All",
+            UserName = selectedUser ?? "All",
             Branches = BuildAllOptionList(branchNames, selectedBranch),
             Terminals = BuildAllOptionList(terminalNames, selectedTerminal),
+            Users = BuildAllOptionList(userNames, selectedUser),
             Rows = rows,
             TotalInvoices = rows.Sum(x => x.InvoiceCount),
             TotalNetAmount = rows.Sum(x => x.TotalNetAmount),
