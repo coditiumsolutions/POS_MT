@@ -1,0 +1,31 @@
+/* Libre Barcode fonts (SIL Open Font License) — local copies under /fonts/barcode/ */
+
+@font-face {
+  font-family: "Libre Barcode 39";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src:
+    url("/fonts/barcode/libre-barcode-39-latin-400-normal.woff2") format("woff2"),
+    url("/fonts/barcode/libre-barcode-39-latin-400-normal.woff") format("woff");
+}
+
+@font-face {
+  font-family: "Libre Barcode 39 Text";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src:
+    url("/fonts/barcode/libre-barcode-39-text-latin-400-normal.woff2") format("woff2"),
+    url("/fonts/barcode/libre-barcode-39-text-latin-400-normal.woff") format("woff");
+}
+
+@font-face {
+  font-family: "Libre Barcode 128 Text";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src:
+    url("/fonts/barcode/libre-barcode-128-text-latin-400-normal.woff2") format("woff2"),
+    url("/fonts/barcode/libre-barcode-128-text-latin-400-normal.woff") format("woff");
+}

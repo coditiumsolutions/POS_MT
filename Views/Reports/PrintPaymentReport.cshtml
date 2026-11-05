@@ -1,0 +1,218 @@
+@model PaymentReportViewModel
+@{
+    Layout = null;
+    ViewData["Title"] = "Payment Report";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"]</title>
+    <style>
+        :root {
+            --ink: #0f172a;
+            --muted: #64748b;
+            --line: #cbd5e1;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            color: var(--ink);
+            margin: 0;
+            background: #e2e8f0;
+        }
+
+        .toolbar {
+            width: 210mm;
+            margin: 12px auto 0;
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+        }
+
+        .toolbar button {
+            border: 1px solid #94a3b8;
+            background: #0f172a;
+            color: #fff;
+            border-radius: 4px;
+            padding: 0.4rem 0.9rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+
+        .toolbar button.secondary {
+            background: #fff;
+            color: #0f172a;
+        }
+
+        .sheet {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 12px auto;
+            padding: 10mm 12mm 12mm;
+            background: #fff;
+            box-shadow: 0 1px 8px rgba(15, 23, 42, 0.12);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.25rem;
+        }
+
+        .sub {
+            margin-top: 0.15rem;
+            color: var(--muted);
+            font-size: 0.8rem;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            border-bottom: 2px solid var(--ink);
+            padding-bottom: 0.5rem;
+            margin-bottom: 0.65rem;
+        }
+
+        .meta {
+            text-align: right;
+            font-size: 0.8rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.72rem;
+        }
+
+        th, td {
+            border: 1px solid var(--line);
+            padding: 0.18rem 0.3rem;
+            vertical-align: middle;
+            text-align: left;
+            line-height: 1.25;
+        }
+
+        th {
+            background: #f8fafc;
+            font-size: 0.62rem;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
+
+        td.num, th.num {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        tfoot td {
+            font-weight: 700;
+            background: #f8fafc;
+        }
+
+        .empty {
+            padding: 1rem 0;
+            color: var(--muted);
+        }
+
+        .footer {
+            margin-top: 0.75rem;
+            color: var(--muted);
+            font-size: 0.72rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        @@page { size: A4 portrait; margin: 8mm; }
+
+        @@media print {
+            body { background: #fff; }
+            .toolbar { display: none !important; }
+            .sheet {
+                width: auto;
+                min-height: auto;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+            }
+            tr { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button type="button" class="secondary" onclick="window.close()">Close</button>
+        <button type="button" onclick="window.print()">Print</button>
+    </div>
+    <div class="sheet">
+        <div class="header">
+            <div>
+                <h1>Payment Report</h1>
+                <div class="sub">
+                    Period: @Model.DateFrom.ToString("dd-MMM-yyyy") to @Model.DateTo.ToString("dd-MMM-yyyy")
+                </div>
+            </div>
+            <div class="meta">
+                <div>Printed @Model.PrintedAt.ToString("dd-MMM-yyyy HH:mm")</div>
+                <div>@Model.PaymentCount payment(s)</div>
+            </div>
+        </div>
+
+        @if (Model.Rows.Count == 0)
+        {
+            <p class="empty">No payments found for the selected dates.</p>
+        }
+        else
+        {
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:10%">Date</th>
+                        <th style="width:12%">Payment No</th>
+                        <th style="width:20%">Customer</th>
+                        <th style="width:12%">Type</th>
+                        <th style="width:12%">Invoice</th>
+                        <th style="width:10%">Method</th>
+                        <th class="num" style="width:8%">Amount</th>
+                        <th class="num" style="width:8%">Invoice</th>
+                        <th class="num" style="width:8%">Advance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        <td>@row.PaymentDate.ToString("dd-MMM-yyyy")</td>
+                        <td>@row.PaymentNo</td>
+                        <td>@row.CustomerName</td>
+                        <td>@row.PaymentType</td>
+                        <td>@(row.InvoiceNo ?? "—")</td>
+                        <td>@(string.IsNullOrWhiteSpace(row.PaymentMethod) ? "—" : row.PaymentMethod)</td>
+                        <td class="num">@row.Amount.ToString("N2")</td>
+                        <td class="num">@row.AppliedToInvoiceAmount.ToString("N2")</td>
+                        <td class="num">@row.AdvanceAmount.ToString("N2")</td>
+                    </tr>
+                }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="6">Total</td>
+                        <td class="num">@Model.TotalAmount.ToString("N2")</td>
+                        <td class="num">@Model.TotalAppliedToInvoice.ToString("N2")</td>
+                        <td class="num">@Model.TotalAdvance.ToString("N2")</td>
+                    </tr>
+                </tfoot>
+            </table>
+        }
+
+        <div class="footer">
+            <span>Customer payments for selected period</span>
+            <span>Total @Model.TotalAmount.ToString("N2")</span>
+        </div>
+    </div>
+</body>
+</html>

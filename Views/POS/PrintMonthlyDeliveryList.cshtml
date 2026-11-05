@@ -2,7 +2,6 @@
 @{
     Layout = null;
     ViewData["Title"] = $"Delivery list {Model.SupplyDate:dd-MMM-yyyy}";
-    var itemCount = Model.Customers.Sum(x => x.Items.Count);
     var areaGroups = Model.CustomersByArea.ToList();
 }
 <!DOCTYPE html>
@@ -211,32 +210,27 @@
         {
             @foreach (var areaGroup in areaGroups)
             {
-                var areaItemCount = areaGroup.Sum(x => x.Items.Count);
                 <div class="area-block">
                     <div class="area-title">
                         Area: @areaGroup.Key
-                        <span class="area-meta">· @areaGroup.Count() customer@(areaGroup.Count() == 1 ? "" : "s") · @areaItemCount item line@(areaItemCount == 1 ? "" : "s")</span>
+                        <span class="area-meta">· @areaGroup.Count() customer@(areaGroup.Count() == 1 ? "" : "s")</span>
                     </div>
                     <table>
                         <thead>
                             <tr>
-                                <th style="width:28%">Customer</th>
-                                <th style="width:32%">Location</th>
-                                <th>Items to deliver</th>
+                                <th style="width:50%">Customer</th>
+                                <th style="width:50%">Area</th>
                             </tr>
                         </thead>
                         <tbody>
                         @foreach (var customer in areaGroup)
                         {
-                            var itemsText = string.Join(", ", customer.Items.Select(item =>
-                                $"{item.ProductName} ({item.ProductCode}) × {item.Quantity.ToString("0.###")}"));
                             <tr>
                                 <td>
                                     <div class="name">@customer.CustomerName</div>
                                     <div class="muted">@customer.CustomerCode@(string.IsNullOrWhiteSpace(customer.Phone) ? "" : " · " + customer.Phone)</div>
                                 </td>
-                                <td>@customer.Location</td>
-                                <td class="items">@itemsText</td>
+                                <td>@(string.IsNullOrWhiteSpace(customer.Area) ? "—" : customer.Area)</td>
                             </tr>
                         }
                         </tbody>
@@ -245,9 +239,7 @@
             }
             <p class="muted" style="margin-top:0.6rem">
                 @areaGroups.Count area@(areaGroups.Count == 1 ? "" : "s") ·
-                @Model.Customers.Count customer@(Model.Customers.Count == 1 ? "" : "s") ·
-                @itemCount item line@(itemCount == 1 ? "" : "s").
-                Skipped products are left off this list.
+                @Model.Customers.Count customer@(Model.Customers.Count == 1 ? "" : "s").
             </p>
         }
 

@@ -1271,9 +1271,64 @@ body.pos-panel-splitter-active * {
 
 .pos-items-filters {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
+  flex-wrap: wrap;
   gap: 0.5rem;
   width: 100%;
+}
+
+.pos-barcode-scan-wrap {
+  width: min(100%, 22rem);
+}
+
+/* Barcode POS (no splitter): narrow scan column + wide basket */
+.pos-sale-layout--barcode-only:not(.pos-sale-layout--interface2) {
+  grid-template-columns: minmax(16rem, 28%) minmax(0, 1fr);
+}
+
+/* Keep Interface-II CSS vars so the vertical splitter can resize both panels */
+.pos-sale-layout--barcode-only.pos-sale-layout--interface2 {
+  --pos-items-pct: 32%;
+  --pos-basket-pct: 68%;
+}
+
+.pos-sale-panel--barcode-only {
+  min-height: 12rem;
+  justify-content: center;
+  align-items: center;
+}
+
+.pos-barcode-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 1.25rem 1rem;
+  flex: 1 1 auto;
+  text-align: center;
+}
+
+.pos-barcode-center .pos-barcode-scan-wrap {
+  text-align: left;
+}
+
+.pos-barcode-hint {
+  max-width: 22rem;
+  line-height: 1.35;
+}
+
+.pos-barcode-scan-input {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.15);
+}
+
+.pos-barcode-scan-input:focus {
+  border-color: #4338ca;
+  box-shadow: 0 0 0 0.2rem rgba(79, 70, 229, 0.25);
 }
 
 .pos-category-select {
@@ -1858,6 +1913,8 @@ body.pos-panel-splitter-active * {
   .pos-sale-layout--cards,
   .pos-sale-layout--interface2,
   .pos-sale-layout--cards.pos-sale-layout--interface2,
+  .pos-sale-layout--barcode-only,
+  .pos-sale-layout--barcode-only.pos-sale-layout--interface2,
   .monthly-entry-layout {
     grid-template-columns: 1fr;
     min-height: 0;

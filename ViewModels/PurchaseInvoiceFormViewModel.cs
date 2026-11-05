@@ -67,7 +67,7 @@ public sealed class PurchaseInvoiceLineFormViewModel
     [Display(Name = "Quantity")]
     public decimal Quantity { get; set; }
 
-    [Display(Name = "Unit Cost")]
+    [Display(Name = "Unit Price")]
     public decimal UnitCost { get; set; }
 }
 

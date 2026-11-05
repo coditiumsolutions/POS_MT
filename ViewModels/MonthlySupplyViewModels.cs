@@ -17,6 +17,8 @@ public sealed class MonthlySupplyPageViewModel
 {
     public List<MonthlySupplyCustomerRowViewModel> Customers { get; set; } = [];
     public int? OpenCustomerUid { get; set; }
+    public string? Area { get; set; }
+    public IEnumerable<SelectListItem> AreaOptions { get; set; } = [];
 }
 
 public sealed class MonthlySupplyItemsPageViewModel

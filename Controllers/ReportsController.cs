@@ -255,6 +255,11 @@ public class ReportsController : Controller
         var employeePaymentCount = await employeePayQuery.CountAsync(ct);
         var employeePaymentTotal = await employeePayQuery.SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
 
+        var vendorPayQuery = _db.VendorPayments.AsNoTracking()
+            .Where(p => p.PaymentDate >= from && p.PaymentDate < toExclusive);
+        var vendorPaymentCount = await vendorPayQuery.CountAsync(ct);
+        var vendorPaymentTotal = await vendorPayQuery.SumAsync(p => (decimal?)p.Amount, ct) ?? 0m;
+
         var invoiceQuery = _db.SalesInvoices.AsNoTracking()
             .Where(i => i.InvoiceDate >= from
                         && i.InvoiceDate < toExclusive
@@ -270,9 +275,145 @@ public class ReportsController : Controller
             ExpenseTotal = expenseTotal,
             EmployeePaymentCount = employeePaymentCount,
             EmployeePaymentTotal = employeePaymentTotal,
+            VendorPaymentCount = vendorPaymentCount,
+            VendorPaymentTotal = vendorPaymentTotal,
             CustomerInvoiceCount = customerInvoiceCount,
             CustomerInvoiceTotal = customerInvoiceTotal
         });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> PaymentReport(DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
+    {
+        EnsureReportsNav();
+        ViewData["Title"] = "Payment Report";
+        var model = await BuildPaymentReportAsync(dateFrom, dateTo, ct);
+        return View(model);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> PrintPaymentReport(DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
+    {
+        EnsureReportsNav();
+        ViewData["Title"] = "Payment Report";
+        var model = await BuildPaymentReportAsync(dateFrom, dateTo, ct);
+        model.PrintedAt = DateTime.Now;
+        return View(model);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> VendorPaymentReport(DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
+    {
+        EnsureReportsNav();
+        ViewData["Title"] = "Vendor Payments";
+        var model = await BuildVendorPaymentReportAsync(dateFrom, dateTo, ct);
+        return View(model);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> PrintVendorPaymentReport(DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
+    {
+        EnsureReportsNav();
+        ViewData["Title"] = "Vendor Payments";
+        var model = await BuildVendorPaymentReportAsync(dateFrom, dateTo, ct);
+        model.PrintedAt = DateTime.Now;
+        return View(model);
+    }
+
+    private async Task<PaymentReportViewModel> BuildPaymentReportAsync(
+        DateTime? dateFrom,
+        DateTime? dateTo,
+        CancellationToken ct)
+    {
+        var today = DateTime.Today;
+        var startDate = (dateFrom ?? new DateTime(today.Year, today.Month, 1)).Date;
+        var toInclusive = (dateTo ?? today).Date;
+        if (toInclusive < startDate)
+            (startDate, toInclusive) = (toInclusive, startDate);
+        var toExclusive = toInclusive.AddDays(1);
+
+        var rows = await (
+            from p in _db.CustomerPayments.AsNoTracking()
+            join c in _db.Customers.AsNoTracking() on p.CustomerUid equals c.Uid into cj
+            from c in cj.DefaultIfEmpty()
+            join inv in _db.SalesInvoices.AsNoTracking() on p.SalesInvoiceUid equals inv.Uid into ij
+            from inv in ij.DefaultIfEmpty()
+            join pm in _db.PaymentMethods.AsNoTracking() on p.PaymentMethodUid equals pm.Uid into pmj
+            from pm in pmj.DefaultIfEmpty()
+            where p.PaymentDate >= startDate && p.PaymentDate < toExclusive
+            orderby p.PaymentDate, p.Uid
+            select new PaymentReportRowViewModel
+            {
+                PaymentNo = p.PaymentNo,
+                PaymentDate = p.PaymentDate,
+                CustomerName = c != null ? c.CustomerName : ("#" + p.CustomerUid),
+                PaymentType = p.SalesInvoiceUid == null || p.AppliedToInvoiceAmount <= 0
+                    ? "Advance"
+                    : (p.Amount > p.AppliedToInvoiceAmount ? "Invoice + Advance" : "Against Invoice"),
+                InvoiceNo = inv != null ? inv.InvoiceNo : null,
+                PaymentMethod = pm != null ? pm.PaymentName : null,
+                ReferenceNo = p.ReferenceNo,
+                Amount = p.Amount,
+                AppliedToInvoiceAmount = p.AppliedToInvoiceAmount,
+                Remarks = p.Remarks
+            }).ToListAsync(ct);
+
+        return new PaymentReportViewModel
+        {
+            DateFrom = startDate,
+            DateTo = toInclusive,
+            Rows = rows,
+            PaymentCount = rows.Count,
+            TotalAmount = rows.Sum(x => x.Amount),
+            TotalAppliedToInvoice = rows.Sum(x => x.AppliedToInvoiceAmount),
+            TotalAdvance = rows.Sum(x => x.AdvanceAmount),
+            PrintedAt = DateTime.Now
+        };
+    }
+
+    private async Task<VendorPaymentReportViewModel> BuildVendorPaymentReportAsync(
+        DateTime? dateFrom,
+        DateTime? dateTo,
+        CancellationToken ct)
+    {
+        var today = DateTime.Today;
+        var startDate = (dateFrom ?? new DateTime(today.Year, today.Month, 1)).Date;
+        var toInclusive = (dateTo ?? today).Date;
+        if (toInclusive < startDate)
+            (startDate, toInclusive) = (toInclusive, startDate);
+        var toExclusive = toInclusive.AddDays(1);
+
+        var rows = await (
+            from p in _db.VendorPayments.AsNoTracking()
+            join v in _db.Vendors.AsNoTracking() on p.VendorUid equals v.Uid into vj
+            from v in vj.DefaultIfEmpty()
+            join inv in _db.PurchaseInvoices.AsNoTracking() on p.PurchaseInvoiceUid equals inv.Uid into ij
+            from inv in ij.DefaultIfEmpty()
+            join pm in _db.PaymentMethods.AsNoTracking() on p.PaymentMethodUid equals pm.Uid into pmj
+            from pm in pmj.DefaultIfEmpty()
+            where p.PaymentDate >= startDate && p.PaymentDate < toExclusive
+            orderby p.PaymentDate, p.Uid
+            select new VendorPaymentReportRowViewModel
+            {
+                PaymentNo = p.PaymentNo,
+                PaymentDate = p.PaymentDate,
+                VendorName = v != null ? v.VendorName : ("#" + p.VendorUid),
+                PurchaseInvoiceNo = inv != null ? inv.PurchaseInvoiceNo : null,
+                PaymentMethod = pm != null ? pm.PaymentName : null,
+                ReferenceNo = p.ReferenceNo,
+                Amount = p.Amount,
+                Remarks = p.Remarks
+            }).ToListAsync(ct);
+
+        return new VendorPaymentReportViewModel
+        {
+            DateFrom = startDate,
+            DateTo = toInclusive,
+            Rows = rows,
+            PaymentCount = rows.Count,
+            TotalAmount = rows.Sum(x => x.Amount),
+            PrintedAt = DateTime.Now
+        };
     }
 
     [HttpGet]

@@ -34,10 +34,9 @@ public static class NavigationCatalog
         new("POS", "POS",
         [
             new("Cash POS", "POS", "Cash", IconClass: "bi-cash-stack"),
-            new("Interface-II", "POS", "Interface2", IconClass: "bi-grid-3x3-gap"),
+            new("Barcode", "POS", "Barcode", IconClass: "bi-upc-scan"),
             new("Credit POS", "POS", "Credit", IconClass: "bi-calendar-month"),
-            new("Monthly Supply", "POS", "MonthlySupply", IconClass: "bi-calendar2-check"),
-            new("Yogurt Production", "YogurtProduction", IconClass: "bi-cup-straw")
+            new("Monthly Supply", "POS", "MonthlySupply", IconClass: "bi-calendar2-check")
         ]),
         new("Customers", "Customers",
         [
@@ -95,7 +94,8 @@ public static class NavigationCatalog
         new("Purchases", "Purchases",
         [
             new("All Purchases", "PurchaseInvoices", IconClass: "bi-cart-plus"),
-            new("Add Invoice", "PurchaseInvoices", "Create", IconClass: "bi-plus-circle")
+            new("Add Invoice", "PurchaseInvoices", "Create", IconClass: "bi-plus-circle"),
+            new("Yogurt Production", "YogurtProduction", IconClass: "bi-cup-straw", NavArea: "Purchases")
         ]),
         new("SalesInvoice", "Sales Invoice",
         [
@@ -106,6 +106,8 @@ public static class NavigationCatalog
         [
             new("Sales Report", "Reports", "TotalSale", IconClass: "bi-graph-up-arrow"),
             new("Daily Report", "Reports", "DailyReport", IconClass: "bi-calendar-day"),
+            new("Payment Report", "Reports", "PaymentReport", IconClass: "bi-cash-coin"),
+            new("Vendor Payments", "Reports", "VendorPaymentReport", IconClass: "bi-wallet2"),
             new("Branch / Terminal / User", "Reports", "TerminalReport", IconClass: "bi-display"),
             new("Financial Summary", "Reports", "ExpenseReport", IconClass: "bi-cash-stack")
         ])
@@ -167,6 +169,7 @@ public static class NavigationCatalog
         new("Branches", "bi-building", "Branches"),
         new("Warehouses", "bi-house-door", "Warehouses"),
         new("Configs", "bi-sliders", "Configurations"),
+        new("Test Barcodes", "bi-upc", "Setup", "TestBarcodes"),
         new("Sync Tables", "bi-arrow-left-right", "OfflineSyncTables"),
         new("Audit Logs", "bi-journal-text", "AuditLogs")
     ];

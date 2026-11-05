@@ -157,24 +157,7 @@ public class SalesReturnsController : Controller
             }
         }
 
-        var walkInUid = await _db.Customers.AsNoTracking()
-            .Where(x => x.IsActive &&
-                        (x.CustomerCode == "C001" ||
-                         x.CustomerName.Contains("Walk-in") ||
-                         x.CustomerName.Contains("Walk-In") ||
-                         x.CustomerName.Contains("Walk In")))
-            .OrderBy(x => x.Uid)
-            .Select(x => (int?)x.Uid)
-            .FirstOrDefaultAsync(ct);
-
-        if (walkInUid is null)
-        {
-            return BadRequest(new SalesReturnCheckoutResultViewModel
-            {
-                Success = false,
-                Message = "Walk-in Customer was not found. Please create an active Walk-in customer."
-            });
-        }
+        var walkInUid = await EnsureWalkInCustomerUidAsync(ct);
 
         int? userUid = null;
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -352,5 +335,45 @@ public class SalesReturnsController : Controller
         ViewData["Title"] = $"Return {invoice.InvoiceNo}";
         ViewBag.Lines = lines;
         return View(invoice);
+    }
+
+    private async Task<int> EnsureWalkInCustomerUidAsync(CancellationToken ct)
+    {
+        var existing = await _db.Customers
+            .Where(x => x.CustomerCode == "C001"
+                        || x.CustomerName.Contains("Walk-in")
+                        || x.CustomerName.Contains("Walk-In")
+                        || x.CustomerName.Contains("Walk In"))
+            .OrderBy(x => x.Uid)
+            .FirstOrDefaultAsync(ct);
+
+        if (existing is not null)
+        {
+            if (!existing.IsActive)
+            {
+                existing.IsActive = true;
+                existing.UpdatedDate = DateTime.Now;
+                await _db.SaveChangesAsync(ct);
+            }
+
+            return existing.Uid;
+        }
+
+        var walkIn = new Customer
+        {
+            CustomerCode = "C001",
+            CustomerName = "Walk-in Customer",
+            IsActive = true,
+            OpeningBalance = 0,
+            AdvanceBalance = 0,
+            CreditLimit = 0,
+            DiscountPercent = 0,
+            CreatedDate = DateTime.Now
+        };
+        _db.Customers.Add(walkIn);
+        await _db.SaveChangesAsync(ct);
+        await _audit.WriteAsync("Create", "Customers", walkIn.Uid.ToString(),
+            "Auto-created Walk-in Customer for sales returns", ct);
+        return walkIn.Uid;
     }
 }

@@ -288,6 +288,77 @@ public class CustomersController : Controller
         return RedirectToAction("MonthlySupplyItems", "POS", new { customerUids = ids, returnTo = "Customers" });
     }
 
+    /// <summary>Appends an area to Configuration key "Areas" (comma-separated) for customer dropdowns.</summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddArea([FromForm] string? areaName, CancellationToken ct)
+    {
+        EnsureCustomersNav();
+        var name = (areaName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return BadRequest(new { success = false, message = "Area name is required." });
+        }
+
+        if (name.Contains(','))
+        {
+            return BadRequest(new { success = false, message = "Area name cannot contain a comma." });
+        }
+
+        if (name.Length > 100)
+        {
+            return BadRequest(new { success = false, message = "Area name is too long." });
+        }
+
+        var config = await _db.Configurations
+            .FirstOrDefaultAsync(x => x.ConfigKey == "Areas", ct);
+
+        var values = (config?.ConfigValue ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToList();
+
+        if (values.Any(x => string.Equals(x, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            return Ok(new { success = true, area = name, message = "Area already exists.", created = false });
+        }
+
+        values.Add(name);
+        values = values
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var csv = string.Join(", ", values);
+
+        if (config is null)
+        {
+            config = new Configuration
+            {
+                ConfigKey = "Areas",
+                ConfigValue = csv
+            };
+            _db.Configurations.Add(config);
+            await _db.SaveChangesAsync(ct);
+            if (config.ConfigId is null)
+            {
+                config.ConfigId = config.Uid;
+                await _db.SaveChangesAsync(ct);
+            }
+
+            await _audit.WriteAsync("Create", "Configuration", config.Uid.ToString(),
+                $"Created Areas config with area '{name}'", ct);
+        }
+        else
+        {
+            config.ConfigValue = csv;
+            await _db.SaveChangesAsync(ct);
+            await _audit.WriteAsync("Update", "Configuration", config.Uid.ToString(),
+                $"Added area '{name}' to Areas config", ct);
+        }
+
+        return Ok(new { success = true, area = name, message = "Area added.", created = true });
+    }
+
     private static CustomerFormViewModel MapToForm(Customer e) => new()
     {
         Uid = e.Uid,

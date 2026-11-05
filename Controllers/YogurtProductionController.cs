@@ -47,7 +47,7 @@ public class YogurtProductionController : Controller
     [HttpGet]
     public async Task<IActionResult> Index(CancellationToken ct)
     {
-        _navContext.SetArea("POS");
+        _navContext.SetArea("Purchases");
         ViewData["Title"] = "Yogurt Production";
         var model = await BuildPageModelAsync(0, ct);
         return View(model);
@@ -57,7 +57,7 @@ public class YogurtProductionController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Produce(YogurtProductionViewModel model, CancellationToken ct)
     {
-        _navContext.SetArea("POS");
+        _navContext.SetArea("Purchases");
         ViewData["Title"] = "Yogurt Production";
 
         if (model.YogurtQuantity <= 0)

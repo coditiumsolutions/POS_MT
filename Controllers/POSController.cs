@@ -55,14 +55,27 @@ public class POSController : Controller
     [HttpGet]
     public async Task<IActionResult> Cash(CancellationToken ct)
     {
-        return await SalePage("Cash", ct);
+        // Cash POS uses the Interface-II shell (resizable split, category buttons, compact basket).
+        return await SalePage("Cash", ct, pageTitle: "Cash POS", enablePanelToggle: true);
     }
 
-    /// <summary>Second POS shell — same checkout as Cash POS; draggable items/basket split.</summary>
+    /// <summary>Cash POS shell with barcode scanner field for adding basket items.</summary>
     [HttpGet]
-    public async Task<IActionResult> Interface2(CancellationToken ct)
+    public async Task<IActionResult> Barcode(CancellationToken ct)
     {
-        return await SalePage("Cash", ct, pageTitle: "Interface-II", enablePanelToggle: true);
+        return await SalePage(
+            "Cash",
+            ct,
+            pageTitle: "POS Barcode",
+            enablePanelToggle: true,
+            enableBarcodeScan: true);
+    }
+
+    /// <summary>Alias for Cash POS (Interface-II shell). Kept for existing bookmarks/links.</summary>
+    [HttpGet]
+    public IActionResult Interface2()
+    {
+        return RedirectToAction(nameof(Cash));
     }
 
     /// <summary>Open Credit POS draft lines. Finalized invoices use <see cref="MonthlyFinalRemarkPrefix"/>.</summary>
@@ -74,17 +87,24 @@ public class POSController : Controller
     private const string MonthlyRemarkLegacy = "Monthly POS";
 
     [HttpGet]
-    public async Task<IActionResult> MonthlySupply(int? openCustomer, CancellationToken ct)
+    public async Task<IActionResult> MonthlySupply(int? openCustomer, string? area, CancellationToken ct)
     {
         _navContext.SetArea("POS");
         ViewData["Title"] = "Monthly Supply";
 
-        var customers = await _db.Customers.AsNoTracking()
+        var areaFilter = string.IsNullOrWhiteSpace(area) ? null : area.Trim();
+
+        var query = _db.Customers.AsNoTracking()
             .Where(x => x.IsActive
                         && x.CustomerCode != "C001"
                         && !x.CustomerName.Contains("Walk-in")
                         && !x.CustomerName.Contains("Walk-In")
-                        && !x.CustomerName.Contains("Walk In"))
+                        && !x.CustomerName.Contains("Walk In"));
+
+        if (areaFilter is not null)
+            query = query.Where(x => x.Area != null && x.Area == areaFilter);
+
+        var customers = await query
             .OrderBy(x => x.CustomerName)
             .Select(x => new MonthlySupplyCustomerRowViewModel
             {
@@ -100,8 +120,46 @@ public class POSController : Controller
         return View(new MonthlySupplyPageViewModel
         {
             Customers = customers,
-            OpenCustomerUid = openCustomer
+            OpenCustomerUid = openCustomer,
+            Area = areaFilter,
+            AreaOptions = await BuildMonthlySupplyAreaOptionsAsync(areaFilter, ct)
         });
+    }
+
+    private async Task<List<SelectListItem>> BuildMonthlySupplyAreaOptionsAsync(string? selected, CancellationToken ct)
+    {
+        var areasRaw = await _db.Configurations.AsNoTracking()
+            .Where(x => x.ConfigKey == "Areas")
+            .Select(x => x.ConfigValue)
+            .FirstOrDefaultAsync(ct);
+
+        var values = (areasRaw ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(selected)
+            && !values.Any(x => string.Equals(x, selected, StringComparison.OrdinalIgnoreCase)))
+        {
+            values.Insert(0, selected.Trim());
+        }
+
+        var items = new List<SelectListItem>
+        {
+            new() { Value = "", Text = "All areas", Selected = string.IsNullOrWhiteSpace(selected) }
+        };
+
+        items.AddRange(values.Select(v => new SelectListItem
+        {
+            Value = v,
+            Text = v,
+            Selected = !string.IsNullOrWhiteSpace(selected)
+                       && string.Equals(v, selected, StringComparison.OrdinalIgnoreCase)
+        }));
+
+        return items;
     }
 
     /// <summary>
@@ -477,21 +535,22 @@ public class POSController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> AddMonthlySupplied(DateTime supplyDate, int[]? selectedCustomerUids, CancellationToken ct)
+    public async Task<IActionResult> AddMonthlySupplied(DateTime supplyDate, int[]? selectedCustomerUids, string? area, CancellationToken ct)
     {
         _navContext.SetArea("POS");
+        IActionResult BackToList() => RedirectToAction(nameof(MonthlySupply), new { area });
         var customerIds = selectedCustomerUids?.Distinct().Where(x => x > 0).ToList() ?? [];
         if (customerIds.Count == 0)
         {
             TempData["Error"] = "Select at least one customer.";
-            return RedirectToAction(nameof(MonthlySupply));
+            return BackToList();
         }
 
         var supplyDay = supplyDate.Date;
         if (supplyDay == default)
         {
             TempData["Error"] = "Select a supply date.";
-            return RedirectToAction(nameof(MonthlySupply));
+            return BackToList();
         }
 
         var customers = await _db.Customers.AsNoTracking()
@@ -502,7 +561,7 @@ public class POSController : Controller
         if (customers.Count == 0)
         {
             TempData["Error"] = "Selected customers were not found.";
-            return RedirectToAction(nameof(MonthlySupply));
+            return BackToList();
         }
 
         await EnsureSalesInvoiceStampColumnsAsync(ct);
@@ -740,7 +799,7 @@ public class POSController : Controller
         catch (Exception ex)
         {
             TempData["Error"] = "Add Supplied failed: " + (ex.InnerException?.Message ?? ex.Message);
-            return RedirectToAction(nameof(MonthlySupply));
+            return BackToList();
         }
 
         if (processed.Count == 0)
@@ -748,7 +807,7 @@ public class POSController : Controller
             TempData["Error"] = skipped.Count > 0
                 ? "No invoices processed. " + string.Join("; ", skipped)
                 : "No invoices were processed.";
-            return RedirectToAction(nameof(MonthlySupply));
+            return BackToList();
         }
 
         var message = $"Monthly supply posted: {string.Join("; ", processed)}.";
@@ -758,7 +817,7 @@ public class POSController : Controller
         }
 
         TempData["Success"] = message;
-        return RedirectToAction(nameof(MonthlySupply));
+        return BackToList();
     }
 
     /// <summary>
@@ -767,21 +826,22 @@ public class POSController : Controller
     /// </summary>
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> CancelMonthlySupplied(DateTime supplyDate, int[]? selectedCustomerUids, CancellationToken ct)
+    public async Task<IActionResult> CancelMonthlySupplied(DateTime supplyDate, int[]? selectedCustomerUids, string? area, CancellationToken ct)
     {
         _navContext.SetArea("POS");
+        IActionResult BackToList() => RedirectToAction(nameof(MonthlySupply), new { area });
         var customerIds = selectedCustomerUids?.Distinct().Where(x => x > 0).ToList() ?? [];
         if (customerIds.Count == 0)
         {
             TempData["Error"] = "Select at least one customer.";
-            return RedirectToAction(nameof(MonthlySupply));
+            return BackToList();
         }
 
         var supplyDay = supplyDate.Date;
         if (supplyDay == default)
         {
             TempData["Error"] = "Select a supply date.";
-            return RedirectToAction(nameof(MonthlySupply));
+            return BackToList();
         }
 
         var customers = await _db.Customers.AsNoTracking()
@@ -792,7 +852,7 @@ public class POSController : Controller
         if (customers.Count == 0)
         {
             TempData["Error"] = "Selected customers were not found.";
-            return RedirectToAction(nameof(MonthlySupply));
+            return BackToList();
         }
 
         int? userUid = null;
@@ -906,7 +966,7 @@ public class POSController : Controller
         catch (Exception ex)
         {
             TempData["Error"] = "Cancel Order failed: " + (ex.InnerException?.Message ?? ex.Message);
-            return RedirectToAction(nameof(MonthlySupply));
+            return BackToList();
         }
 
         if (processed.Count == 0)
@@ -914,7 +974,7 @@ public class POSController : Controller
             TempData["Error"] = skipped.Count > 0
                 ? "No orders cancelled. " + string.Join("; ", skipped)
                 : "No orders were cancelled.";
-            return RedirectToAction(nameof(MonthlySupply));
+            return BackToList();
         }
 
         var message = $"Order cancelled: {string.Join("; ", processed)}.";
@@ -922,7 +982,7 @@ public class POSController : Controller
             message += " Skipped: " + string.Join("; ", skipped) + ".";
 
         TempData["Success"] = message;
-        return RedirectToAction(nameof(MonthlySupply));
+        return BackToList();
     }
 
     [HttpGet]
@@ -2106,16 +2166,7 @@ public class POSController : Controller
         int? customerUid = null;
         if (isCash)
         {
-            customerUid = await ResolveWalkInCustomerUidAsync(ct);
-            if (customerUid is null)
-            {
-                return BadRequest(new PosCheckoutResultViewModel
-                {
-                    Success = false,
-                    Message = "Walk-in Customer was not found. Please create an active customer named Walk-in Customer."
-                });
-            }
-
+            customerUid = await EnsureWalkInCustomerUidAsync(ct);
         }
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
@@ -2253,7 +2304,8 @@ public class POSController : Controller
         string mode,
         CancellationToken ct,
         string? pageTitle = null,
-        bool enablePanelToggle = false)
+        bool enablePanelToggle = false,
+        bool enableBarcodeScan = false)
     {
         _navContext.SetArea("POS");
         ViewData["Title"] = string.IsNullOrWhiteSpace(pageTitle) ? $"{mode} POS" : pageTitle.Trim();
@@ -2269,7 +2321,9 @@ public class POSController : Controller
                 Barcode = x.Barcode,
                 SalePrice = x.SalePrice,
                 CategoryUid = x.CategoryUid,
-                ImagePath = x.ImagePath
+                ImagePath = x.ImagePath,
+                UnitName = null,
+                UnitCode = null
             })
             .ToListAsync(ct);
 
@@ -2293,10 +2347,26 @@ public class POSController : Controller
             // No warehouse — leave stock at 0 on cards.
         }
 
+        var unitByProductUid = await _db.Products.AsNoTracking()
+            .Where(x => x.IsActive && x.UnitUid != null)
+            .Select(x => new { x.Uid, x.UnitUid })
+            .ToListAsync(ct);
+        var unitIds = unitByProductUid.Select(x => x.UnitUid!.Value).Distinct().ToList();
+        var units = await _db.ProductUnits.AsNoTracking()
+            .Where(u => unitIds.Contains(u.Uid))
+            .ToDictionaryAsync(u => u.Uid, ct);
+        var unitUidByProduct = unitByProductUid.ToDictionary(x => x.Uid, x => x.UnitUid!.Value);
+
         foreach (var product in products)
         {
             if (stockByProduct.TryGetValue(product.Uid, out var qty))
                 product.StockQuantity = qty;
+            if (unitUidByProduct.TryGetValue(product.Uid, out var unitUid)
+                && units.TryGetValue(unitUid, out var unit))
+            {
+                product.UnitName = unit.UnitName;
+                product.UnitCode = unit.UnitCode;
+            }
         }
 
         var categories = await _db.ProductCategories.AsNoTracking()
@@ -2330,6 +2400,7 @@ public class POSController : Controller
             PageTitle = string.IsNullOrWhiteSpace(pageTitle) ? null : pageTitle.Trim(),
             UseCardLayout = SetupController.IsCardLayout(layout),
             EnablePanelToggle = enablePanelToggle,
+            EnableBarcodeScan = enableBarcodeScan,
             Products = products,
             Categories = categories
         });
@@ -2404,6 +2475,51 @@ public class POSController : Controller
             .OrderBy(x => x.Uid)
             .Select(x => (int?)x.Uid)
             .FirstOrDefaultAsync(ct);
+    }
+
+    /// <summary>Finds Walk-in / C001 customer, reactivates if inactive, or creates it for Cash POS.</summary>
+    private async Task<int> EnsureWalkInCustomerUidAsync(CancellationToken ct)
+    {
+        await _advance.EnsureSchemaAsync(ct);
+
+        var existing = await _db.Customers
+            .Where(x => x.CustomerCode == "C001"
+                        || x.CustomerName.Contains("Walk-in")
+                        || x.CustomerName.Contains("Walk-In")
+                        || x.CustomerName.Contains("Walk In"))
+            .OrderBy(x => x.Uid)
+            .FirstOrDefaultAsync(ct);
+
+        if (existing is not null)
+        {
+            if (!existing.IsActive)
+            {
+                existing.IsActive = true;
+                existing.UpdatedDate = DateTime.Now;
+                await _db.SaveChangesAsync(ct);
+                await _audit.WriteAsync("Update", "Customers", existing.Uid.ToString(),
+                    "Reactivated Walk-in Customer for Cash POS", ct);
+            }
+
+            return existing.Uid;
+        }
+
+        var walkIn = new Customer
+        {
+            CustomerCode = "C001",
+            CustomerName = "Walk-in Customer",
+            IsActive = true,
+            OpeningBalance = 0,
+            AdvanceBalance = 0,
+            CreditLimit = 0,
+            DiscountPercent = 0,
+            CreatedDate = DateTime.Now
+        };
+        _db.Customers.Add(walkIn);
+        await _db.SaveChangesAsync(ct);
+        await _audit.WriteAsync("Create", "Customers", walkIn.Uid.ToString(),
+            "Auto-created Walk-in Customer for Cash POS", ct);
+        return walkIn.Uid;
     }
 
     private static bool IsWalkInCustomer(string? customerCode, string? customerName)

@@ -37,21 +37,33 @@
     </form>
 
     <div class="row g-3 mb-3">
-        <div class="col-md-4 col-sm-6">
+        <div class="col-md-3 col-sm-6">
             <div class="bg-white border rounded p-3 h-100 expense-report-card">
                 <div class="expense-report-title">Expenses</div>
                 <div class="expense-report-value">@Model.ExpenseTotal.ToString("N2")</div>
                 <div class="expense-report-meta mt-1">@Model.ExpenseCount record(s)</div>
             </div>
         </div>
-        <div class="col-md-4 col-sm-6">
+        <div class="col-md-3 col-sm-6">
             <div class="bg-white border rounded p-3 h-100 expense-report-card">
                 <div class="expense-report-title">Employee Payments</div>
                 <div class="expense-report-value">@Model.EmployeePaymentTotal.ToString("N2")</div>
                 <div class="expense-report-meta mt-1">@Model.EmployeePaymentCount record(s)</div>
             </div>
         </div>
-        <div class="col-md-4 col-sm-6">
+        <div class="col-md-3 col-sm-6">
+            <div class="bg-white border rounded p-3 h-100 expense-report-card">
+                <div class="expense-report-title">Vendor Payments</div>
+                <div class="expense-report-value">@Model.VendorPaymentTotal.ToString("N2")</div>
+                <div class="expense-report-meta mt-1">
+                    @Model.VendorPaymentCount record(s)
+                    · <a asp-action="VendorPaymentReport"
+                         asp-route-dateFrom="@Model.DateFrom.ToString("yyyy-MM-dd")"
+                         asp-route-dateTo="@Model.DateTo.ToString("yyyy-MM-dd")">View</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
             <div class="bg-white border rounded p-3 h-100 expense-report-card">
                 <div class="expense-report-title">Customer Invoices</div>
                 <div class="expense-report-value">@Model.CustomerInvoiceTotal.ToString("N2")</div>
@@ -63,7 +75,7 @@
     <div class="row g-3">
         <div class="col-md-6 col-sm-6">
             <div class="bg-white border rounded p-3 h-100 expense-report-card">
-                <div class="expense-report-title">Total Outflow (Expenses + Employee Payments)</div>
+                <div class="expense-report-title">Total Outflow (Expenses + Employee + Vendor Payments)</div>
                 <div class="expense-report-value">@Model.TotalOutflow.ToString("N2")</div>
             </div>
         </div>

@@ -221,10 +221,7 @@ public class PurchaseInvoicesController : Controller
         await LoadLookups(ct);
         var form = ToForm(e);
         EnsureLineRows(form);
-        ViewBag.ExistingLines = await _db.PurchaseInvoiceDetails.AsNoTracking()
-            .Where(x => x.PurchaseInvoiceUid == id)
-            .OrderBy(x => x.Uid)
-            .ToListAsync(ct);
+        await LoadVendorPaymentContextAsync(id, ct);
         return View(form);
     }
 
@@ -244,10 +241,7 @@ public class PurchaseInvoicesController : Controller
         {
             EnsureLineRows(model);
             await LoadLookups(ct);
-            ViewBag.ExistingLines = await _db.PurchaseInvoiceDetails.AsNoTracking()
-                .Where(x => x.PurchaseInvoiceUid == id)
-                .OrderBy(x => x.Uid)
-                .ToListAsync(ct);
+            await LoadVendorPaymentContextAsync(id, ct);
             return View(model);
         }
 
@@ -299,17 +293,6 @@ public class PurchaseInvoicesController : Controller
         string? yogurtMsg = null;
         if (movements.Count > 0)
         {
-            if (e.SubTotal <= 0)
-            {
-                var existingSub = await _db.PurchaseInvoiceDetails.AsNoTracking()
-                    .Where(x => x.PurchaseInvoiceUid == e.Uid)
-                    .SumAsync(x => x.LineTotal, ct);
-                e.SubTotal = existingSub + movements.Sum(x => Math.Round(x.Quantity * x.UnitCost, 2));
-            }
-            if (e.NetAmount <= 0)
-                e.NetAmount = e.SubTotal + e.TaxAmount + e.OtherCharges - e.DiscountAmount;
-            e.BalanceAmount = e.NetAmount - e.PaidAmount;
-
             await _db.SaveChangesAsync(ct);
             var warehouseUid = e.WarehouseUid
                 ?? await _inventory.ResolveWarehouseUidAsync(null, e.BranchUid, ct);
@@ -322,6 +305,7 @@ public class PurchaseInvoicesController : Controller
                 movements, warehouseUid, e.BranchUid, e.UserUid, e.TerminalUid, e.PurchaseInvoiceNo, ct);
         }
 
+        await RecalculatePurchaseTotalsAsync(e, ct);
         await _db.SaveChangesAsync(ct);
         await _audit.WriteAsync("Update", "PurchaseInvoices", e.Uid.ToString(),
             $"Updated purchase {e.PurchaseInvoiceNo}" + (movements.Count > 0 ? $" and added {movements.Count} stock line(s)" : ""), ct);
@@ -331,7 +315,84 @@ public class PurchaseInvoicesController : Controller
             ? $"Purchase invoice updated and {movements.Count} product(s) added to inventory."
               + (string.IsNullOrEmpty(yogurtMsg) ? "" : " " + yogurtMsg)
             : "Purchase invoice updated.";
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction(nameof(Edit), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> PayVendor(
+        int id,
+        decimal amount,
+        int? paymentMethodUid,
+        DateTime paymentDate,
+        string? referenceNo,
+        CancellationToken ct)
+    {
+        EnsurePurchasesNav();
+        var invoice = await _db.PurchaseInvoices.FirstOrDefaultAsync(x => x.Uid == id, ct);
+        if (invoice is null) return NotFound();
+        if (string.Equals(invoice.InvoiceStatus, "Cancelled", StringComparison.OrdinalIgnoreCase))
+        {
+            TempData["PaymentError"] = "Cancelled invoices cannot accept payments.";
+            return RedirectToAction(nameof(Edit), new { id });
+        }
+
+        await RecalculatePurchaseTotalsAsync(invoice, ct);
+        await _db.SaveChangesAsync(ct);
+
+        if (amount <= 0)
+        {
+            TempData["PaymentError"] = "Payment amount must be greater than zero.";
+            return RedirectToAction(nameof(Edit), new { id });
+        }
+
+        if (invoice.BalanceAmount <= 0)
+        {
+            TempData["PaymentError"] = "This invoice has no remaining balance.";
+            return RedirectToAction(nameof(Edit), new { id });
+        }
+
+        if (amount > invoice.BalanceAmount)
+            amount = invoice.BalanceAmount;
+
+        var payDate = paymentDate == default ? DateTime.Now : paymentDate;
+
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            var payment = new VendorPayment
+            {
+                PaymentNo = $"VP-{DateTime.Now:yyyyMMddHHmmss}",
+                PaymentDate = payDate,
+                VendorUid = invoice.VendorUid,
+                PurchaseInvoiceUid = invoice.Uid,
+                PaymentMethodUid = paymentMethodUid is > 0 ? paymentMethodUid : null,
+                Amount = amount,
+                ReferenceNo = string.IsNullOrWhiteSpace(referenceNo) ? null : referenceNo.Trim(),
+                CreatedDate = DateTime.Now
+            };
+            _db.VendorPayments.Add(payment);
+
+            invoice.PaidAmount = Math.Min(invoice.NetAmount, invoice.PaidAmount + amount);
+            invoice.BalanceAmount = Math.Max(0, invoice.NetAmount - invoice.PaidAmount);
+            invoice.PaymentStatus = invoice.PaidAmount <= 0
+                ? "Unpaid"
+                : invoice.PaidAmount >= invoice.NetAmount ? "Paid" : "Partial";
+            invoice.UpdatedDate = DateTime.Now;
+
+            await _db.SaveChangesAsync(ct);
+            await _audit.WriteAsync("Payment", "VendorPayments", payment.Uid.ToString(),
+                $"Vendor payment {payment.PaymentNo} for purchase {invoice.PurchaseInvoiceNo}: {amount:N2}", ct);
+            await tx.CommitAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync(ct);
+            TempData["PaymentError"] = "Payment failed: " + (ex.InnerException?.Message ?? ex.Message);
+            return RedirectToAction(nameof(Edit), new { id });
+        }
+
+        TempData["PaymentSuccess"] = $"Paid {amount:N2} to vendor. Remaining balance: {invoice.BalanceAmount:N2}.";
+        return RedirectToAction(nameof(Edit), new { id });
     }
 
     public async Task<IActionResult> Details(int id, CancellationToken ct)
@@ -474,6 +535,58 @@ public class PurchaseInvoicesController : Controller
         model.Lines ??= [];
         while (model.Lines.Count < 5)
             model.Lines.Add(new PurchaseInvoiceLineFormViewModel());
+    }
+
+    private async Task LoadVendorPaymentContextAsync(int purchaseInvoiceUid, CancellationToken ct)
+    {
+        ViewBag.ExistingLines = await _db.PurchaseInvoiceDetails.AsNoTracking()
+            .Where(x => x.PurchaseInvoiceUid == purchaseInvoiceUid)
+            .OrderBy(x => x.Uid)
+            .ToListAsync(ct);
+
+        ViewBag.VendorPayments = await _db.VendorPayments.AsNoTracking()
+            .Where(x => x.PurchaseInvoiceUid == purchaseInvoiceUid)
+            .OrderByDescending(x => x.PaymentDate)
+            .ThenByDescending(x => x.Uid)
+            .Select(p => new VendorPaymentListItemViewModel
+            {
+                Uid = p.Uid,
+                PaymentNo = p.PaymentNo,
+                PaymentDate = p.PaymentDate,
+                Amount = p.Amount,
+                ReferenceNo = p.ReferenceNo
+            })
+            .ToListAsync(ct);
+
+        var paymentMethods = await _db.PaymentMethods.AsNoTracking()
+            .Where(x => x.IsActive)
+            .OrderBy(x => x.PaymentName)
+            .ThenBy(x => x.Uid)
+            .Select(x => new { x.Uid, x.PaymentName })
+            .ToListAsync(ct);
+
+        ViewBag.PaymentMethods = paymentMethods
+            .GroupBy(x => x.PaymentName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .OrderBy(x => x.PaymentName, StringComparer.OrdinalIgnoreCase)
+            .Select(x => new SelectListItem { Value = x.Uid.ToString(), Text = x.PaymentName })
+            .ToList();
+    }
+
+    private async Task RecalculatePurchaseTotalsAsync(PurchaseInvoice invoice, CancellationToken ct)
+    {
+        var subTotal = await _db.PurchaseInvoiceDetails.AsNoTracking()
+            .Where(x => x.PurchaseInvoiceUid == invoice.Uid)
+            .SumAsync(x => (decimal?)x.LineTotal, ct) ?? 0m;
+
+        invoice.SubTotal = subTotal;
+        invoice.NetAmount = Math.Max(0, subTotal + invoice.TaxAmount + invoice.OtherCharges - invoice.DiscountAmount);
+        if (invoice.PaidAmount < 0) invoice.PaidAmount = 0;
+        if (invoice.PaidAmount > invoice.NetAmount) invoice.PaidAmount = invoice.NetAmount;
+        invoice.BalanceAmount = Math.Max(0, invoice.NetAmount - invoice.PaidAmount);
+        invoice.PaymentStatus = invoice.PaidAmount <= 0
+            ? "Unpaid"
+            : invoice.PaidAmount >= invoice.NetAmount ? "Paid" : "Partial";
     }
 
     /// <summary>

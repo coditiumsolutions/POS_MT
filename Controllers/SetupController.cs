@@ -81,6 +81,24 @@ public class SetupController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    /// <summary>Printable product-code barcodes for testing the POS Barcode scanner.</summary>
+    [HttpGet]
+    public async Task<IActionResult> TestBarcodes(CancellationToken ct)
+    {
+        ViewData["Title"] = "Test Barcodes";
+        var products = await _db.Products.AsNoTracking()
+            .Where(x => x.IsActive)
+            .OrderBy(x => x.ProductCode)
+            .Select(x => new TestBarcodeItemViewModel
+            {
+                ProductCode = x.ProductCode,
+                ProductName = x.ProductName,
+                BarcodeValue = string.IsNullOrWhiteSpace(x.Barcode) ? x.ProductCode : x.Barcode!
+            })
+            .ToListAsync(ct);
+        return View(products);
+    }
+
     internal static bool IsCardLayout(string? value)
         => string.Equals(value, "Card", StringComparison.OrdinalIgnoreCase)
            || string.Equals(value, "Cards", StringComparison.OrdinalIgnoreCase);

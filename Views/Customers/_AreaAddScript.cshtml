@@ -1,0 +1,62 @@
+<script>
+(function () {
+    const btn = document.getElementById('btnAddCustomerArea');
+    const areaSelect = document.getElementById('Area');
+    if (!btn || !areaSelect) return;
+
+    const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+    const addUrl = '@Url.Action("AddArea", "Customers")';
+
+    btn.addEventListener('click', async function () {
+        const raw = window.prompt('Enter new area name:');
+        if (raw == null) return;
+        const name = (raw || '').trim();
+        if (!name) {
+            window.alert('Area name is required.');
+            return;
+        }
+
+        btn.disabled = true;
+        try {
+            const body = new URLSearchParams();
+            body.set('areaName', name);
+            body.set('__RequestVerificationToken', token);
+
+            const response = await fetch(addUrl, {
+                method: 'POST',
+                headers: {
+                    'RequestVerificationToken': token,
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                },
+                body: body.toString()
+            });
+
+            const rawText = await response.text();
+            let result = null;
+            try { result = rawText ? JSON.parse(rawText) : null; } catch { /* ignore */ }
+
+            if (!response.ok || !result || !result.success) {
+                window.alert((result && result.message) || 'Could not add area.');
+                return;
+            }
+
+            const area = result.area || name;
+            let option = Array.from(areaSelect.options).find(function (o) {
+                return (o.value || '').toLowerCase() === area.toLowerCase();
+            });
+            if (!option) {
+                option = new Option(area, area, true, true);
+                areaSelect.add(option);
+            }
+            areaSelect.value = option.value;
+            if (result.message) {
+                // Quiet success when already existed; still select it.
+            }
+        } catch (err) {
+            window.alert('Could not add area. Try again or edit Areas in Configurations.');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+})();
+</script>

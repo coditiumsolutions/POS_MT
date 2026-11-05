@@ -156,8 +156,8 @@
                     <tr>
                         <th>Product</th>
                         <th style="width:140px">Quantity</th>
-                        <th style="width:140px">Unit Cost</th>
-                        <th style="width:140px">Line Total</th>
+                        <th style="width:140px">Unit Price</th>
+                        <th style="width:140px">Total</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -184,24 +184,25 @@
     <h2 class="invoice-meta-section-title">@(Model.Uid == 0 ? "Receive into inventory" : "Add items into inventory")</h2>
     <p class="text-muted small mb-2">
         @(Model.Uid == 0
-            ? "Add at least one product line (product, quantity, unit cost). Stock posts to the branch warehouse automatically."
+            ? "Add at least one product line (product, quantity, unit price). Stock posts to the branch warehouse automatically."
             : "Add more product lines below. Each saved line increases stock for the branch warehouse.")
     </p>
     <span asp-validation-for="Lines" class="text-danger d-block mb-2"></span>
     <div class="table-responsive">
-        <table class="table table-sm table-bordered align-middle mb-0">
+        <table class="table table-sm table-bordered align-middle mb-0" id="purchaseReceiveLinesTable">
             <thead>
                 <tr>
                     <th>Product</th>
                     <th style="width:140px">Quantity</th>
-                    <th style="width:140px">Unit Cost</th>
+                    <th style="width:140px">Unit Price</th>
+                    <th style="width:140px">Total</th>
                 </tr>
             </thead>
             <tbody>
             @for (var i = 0; i < Model.Lines.Count; i++)
             {
                 var selectedProductUid = Model.Lines[i].ProductUid;
-                <tr>
+                <tr class="purchase-receive-line">
                     <td>
                         <select asp-for="Lines[i].ProductUid"
                                 class="form-select form-select-sm"
@@ -210,10 +211,17 @@
                         </select>
                     </td>
                     <td>
-                        <input asp-for="Lines[i].Quantity" class="form-control form-control-sm" />
+                        <input asp-for="Lines[i].Quantity" class="form-control form-control-sm purchase-line-qty" />
                     </td>
                     <td>
-                        <input asp-for="Lines[i].UnitCost" class="form-control form-control-sm" />
+                        <input asp-for="Lines[i].UnitCost" class="form-control form-control-sm purchase-line-price" />
+                    </td>
+                    <td>
+                        <input type="text"
+                               class="form-control form-control-sm purchase-line-total"
+                               readonly
+                               tabindex="-1"
+                               value="@((Model.Lines[i].Quantity * Model.Lines[i].UnitCost).ToString("N2"))" />
                     </td>
                 </tr>
             }
@@ -225,31 +233,63 @@
 <script>
 (function () {
     var root = document.getElementById('purchaseInvoiceTabs');
-    if (!root) return;
-    var buttons = root.querySelectorAll('.product-tab-btn');
-    var panels = root.querySelectorAll('.product-tab-panel');
+    if (root) {
+        var buttons = root.querySelectorAll('.product-tab-btn');
+        var panels = root.querySelectorAll('.product-tab-panel');
 
-    function activate(tabName) {
+        function activate(tabName) {
+            buttons.forEach(function (btn) {
+                var on = btn.getAttribute('data-tab') === tabName;
+                btn.classList.toggle('active', on);
+                btn.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            panels.forEach(function (panel) {
+                var on = panel.getAttribute('data-panel') === tabName;
+                panel.classList.toggle('active', on);
+                if (on) {
+                    panel.removeAttribute('hidden');
+                } else {
+                    panel.setAttribute('hidden', 'hidden');
+                }
+            });
+        }
+
         buttons.forEach(function (btn) {
-            var on = btn.getAttribute('data-tab') === tabName;
-            btn.classList.toggle('active', on);
-            btn.setAttribute('aria-selected', on ? 'true' : 'false');
+            btn.addEventListener('click', function () {
+                activate(btn.getAttribute('data-tab'));
+            });
         });
-        panels.forEach(function (panel) {
-            var on = panel.getAttribute('data-panel') === tabName;
-            panel.classList.toggle('active', on);
-            if (on) {
-                panel.removeAttribute('hidden');
-            } else {
-                panel.setAttribute('hidden', 'hidden');
+    }
+
+    function parseNum(el) {
+        if (!el) return 0;
+        var n = parseFloat(String(el.value || '').replace(/,/g, ''));
+        return isFinite(n) ? n : 0;
+    }
+
+    function refreshLineTotals() {
+        document.querySelectorAll('#purchaseReceiveLinesTable .purchase-receive-line').forEach(function (row) {
+            var qty = parseNum(row.querySelector('.purchase-line-qty'));
+            var price = parseNum(row.querySelector('.purchase-line-price'));
+            var totalEl = row.querySelector('.purchase-line-total');
+            if (totalEl) {
+                totalEl.value = (qty * price).toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
             }
         });
     }
 
-    buttons.forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            activate(btn.getAttribute('data-tab'));
+    var linesTable = document.getElementById('purchaseReceiveLinesTable');
+    if (linesTable) {
+        linesTable.addEventListener('input', function (e) {
+            if (e.target && (e.target.classList.contains('purchase-line-qty')
+                || e.target.classList.contains('purchase-line-price'))) {
+                refreshLineTotals();
+            }
         });
-    });
+        refreshLineTotals();
+    }
 })();
 </script>

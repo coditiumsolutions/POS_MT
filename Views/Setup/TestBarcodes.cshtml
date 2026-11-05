@@ -1,0 +1,154 @@
+@model IReadOnlyList<TestBarcodeItemViewModel>
+@{
+    Layout = null;
+    ViewData["Title"] = "Test Barcodes";
+    string ToCode39Payload(string? raw)
+    {
+        // Code 39 supports A–Z, 0–9, space, and - . $ / + %
+        var chars = (raw ?? string.Empty)
+            .Trim()
+            .ToUpperInvariant()
+            .Where(ch => char.IsLetterOrDigit(ch) || ch is ' ' or '-' or '.' or '$' or '/' or '+' or '%')
+            .ToArray();
+        var value = new string(chars);
+        if (string.IsNullOrWhiteSpace(value))
+            value = "EMPTY";
+        return "*" + value + "*";
+    }
+
+    var pages = Model
+        .Select((item, index) => new { item, index })
+        .GroupBy(x => x.index / 6)
+        .Select(g => g.Select(x => x.item).ToList())
+        .ToList();
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"]</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/lib/bootstrap-icons/font/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="~/css/barcode-fonts.css" asp-append-version="true" />
+    <style>
+        body {
+            margin: 0;
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+        .toolbar {
+            width: 210mm;
+            max-width: 100%;
+            margin: 12px auto 0;
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+            padding: 0 8px;
+        }
+        .sheet-wrap {
+            width: 210mm;
+            max-width: 100%;
+            margin: 12px auto 24px;
+        }
+        .barcode-page {
+            background: #fff;
+            box-shadow: 0 1px 8px rgba(15, 23, 42, 0.12);
+            padding: 10mm;
+            min-height: 297mm;
+            box-sizing: border-box;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 8mm;
+            page-break-after: always;
+            break-after: page;
+        }
+        .barcode-page:last-child {
+            page-break-after: auto;
+            break-after: auto;
+        }
+        .test-barcode-card {
+            border: 1px solid #94a3b8;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6mm 4mm;
+            text-align: center;
+            overflow: hidden;
+        }
+        .test-barcode-font {
+            font-family: "Libre Barcode 39 Text", "Libre Barcode 39", monospace;
+            font-size: 56px;
+            line-height: 1;
+            letter-spacing: 0;
+            color: #000;
+            white-space: nowrap;
+            max-width: 100%;
+            overflow: hidden;
+        }
+        .empty {
+            width: 210mm;
+            max-width: 100%;
+            margin: 24px auto;
+            background: #fff;
+            padding: 1rem 1.25rem;
+            border-radius: 0.4rem;
+        }
+        @@page {
+            size: A4 portrait;
+            margin: 8mm;
+        }
+        @@media print {
+            body { background: #fff; }
+            .toolbar { display: none !important; }
+            .sheet-wrap { width: auto; margin: 0; }
+            .barcode-page {
+                width: auto;
+                min-height: auto;
+                height: 100vh;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+                gap: 6mm;
+            }
+            .test-barcode-font {
+                font-size: 52px;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.location.href='@Url.Action("Index", "Setup")'">Back</button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="window.print()">
+            <i class="bi bi-printer" aria-hidden="true"></i> Print
+        </button>
+    </div>
+
+    @if (Model.Count == 0)
+    {
+        <div class="empty text-muted">No active products found.</div>
+    }
+    else
+    {
+        <div class="sheet-wrap">
+            @foreach (var pageItems in pages)
+            {
+                <section class="barcode-page">
+                    @foreach (var item in pageItems)
+                    {
+                        var payload = ToCode39Payload(item.BarcodeValue);
+                        <div class="test-barcode-card">
+                            <div class="test-barcode-font" title="@item.BarcodeValue">@payload</div>
+                        </div>
+                    }
+                </section>
+            }
+        </div>
+    }
+</body>
+</html>

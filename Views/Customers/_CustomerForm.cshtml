@@ -60,7 +60,24 @@
     <div class="invoice-meta-row">
         <label asp-for="Area" class="invoice-meta-title"></label>
         <div class="invoice-meta-field">
-            <select asp-for="Area" asp-items="Model.AreaOptions" class="form-select form-select-sm invoice-meta-input"></select>
+            <div class="d-flex gap-1 align-items-start">
+                <select asp-for="Area" asp-items="Model.AreaOptions" class="form-select form-select-sm invoice-meta-input flex-grow-1" id="Area"></select>
+                <button type="button"
+                        id="btnAddCustomerArea"
+                        class="btn btn-sm btn-outline-primary text-nowrap"
+                        title="Add a missing area to the Areas list (Configurations)">
+                    Add area
+                </button>
+                <a class="btn btn-sm btn-outline-secondary text-nowrap"
+                   asp-controller="Configurations"
+                   asp-action="Index"
+                   title="Open Configurations to edit the Areas list"
+                   target="_blank"
+                   rel="noopener">
+                    Configs
+                </a>
+            </div>
+            <span class="form-text">Missing area? Add it here, or edit the <strong>Areas</strong> config.</span>
             <span asp-validation-for="Area" class="text-danger"></span>
         </div>
         <label asp-for="Address" class="invoice-meta-title"></label>

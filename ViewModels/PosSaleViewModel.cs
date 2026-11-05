@@ -11,6 +11,13 @@ public sealed class PosProductItemViewModel
     public int? CategoryUid { get; set; }
     public string? CategoryName { get; set; }
     public string? ImagePath { get; set; }
+    public string? UnitName { get; set; }
+    public string? UnitCode { get; set; }
+
+    /// <summary>Sale price is for one dozen; POS qty is in pieces (12 = one dozen).</summary>
+    public bool PricedByDozen =>
+        (!string.IsNullOrWhiteSpace(UnitName) && UnitName.Contains("dozen", StringComparison.OrdinalIgnoreCase))
+        || (!string.IsNullOrWhiteSpace(UnitCode) && UnitCode.Contains("doz", StringComparison.OrdinalIgnoreCase));
 }
 
 public sealed class PosCategoryItemViewModel
@@ -26,6 +33,10 @@ public sealed class PosSaleViewModel
     public bool UseCardLayout { get; set; }
     /// <summary>Interface-II: draggable splitter between items and basket panels.</summary>
     public bool EnablePanelToggle { get; set; }
+
+    /// <summary>Shows a barcode scan field that adds items to the basket on Enter.</summary>
+    public bool EnableBarcodeScan { get; set; }
+
     public List<PosProductItemViewModel> Products { get; set; } = [];
     public List<PosCategoryItemViewModel> Categories { get; set; } = [];
 }

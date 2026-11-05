@@ -11,9 +11,12 @@ public class ExpenseReportViewModel
     public int EmployeePaymentCount { get; set; }
     public decimal EmployeePaymentTotal { get; set; }
 
+    public int VendorPaymentCount { get; set; }
+    public decimal VendorPaymentTotal { get; set; }
+
     public int CustomerInvoiceCount { get; set; }
     public decimal CustomerInvoiceTotal { get; set; }
 
-    public decimal TotalOutflow => ExpenseTotal + EmployeePaymentTotal;
+    public decimal TotalOutflow => ExpenseTotal + EmployeePaymentTotal + VendorPaymentTotal;
     public decimal NetPosition => CustomerInvoiceTotal - TotalOutflow;
 }

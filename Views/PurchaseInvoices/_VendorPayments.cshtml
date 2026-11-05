@@ -1,0 +1,120 @@
+@model PurchaseInvoiceFormViewModel
+@{
+    var payments = ViewBag.VendorPayments as IEnumerable<VendorPaymentListItemViewModel>
+                   ?? Enumerable.Empty<VendorPaymentListItemViewModel>();
+    var paymentMethods = ViewBag.PaymentMethods as IEnumerable<SelectListItem>
+                         ?? Enumerable.Empty<SelectListItem>();
+    var balance = Model.BalanceAmount;
+    var canPay = Model.Uid > 0
+                 && !string.Equals(Model.InvoiceStatus, "Cancelled", StringComparison.OrdinalIgnoreCase)
+                 && balance > 0;
+}
+<section class="mt-4 border-top pt-3" id="vendorPaymentsSection">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+        <h2 class="invoice-meta-section-title mb-0">Vendor payments</h2>
+        <div class="text-muted small">
+            Net <strong>@Model.NetAmount.ToString("N2")</strong>
+            · Paid <strong>@Model.PaidAmount.ToString("N2")</strong>
+            · Balance <strong>@balance.ToString("N2")</strong>
+            · <span>@Model.PaymentStatus</span>
+        </div>
+    </div>
+
+    @if (TempData["PaymentError"] != null)
+    {
+        <div class="alert alert-danger py-2">@TempData["PaymentError"]</div>
+    }
+    @if (TempData["PaymentSuccess"] != null)
+    {
+        <div class="alert alert-success py-2">@TempData["PaymentSuccess"]</div>
+    }
+
+    @if (canPay)
+    {
+        <form asp-action="PayVendor" asp-route-id="@Model.Uid" method="post" class="mb-3">
+            @Html.AntiForgeryToken()
+            <div class="d-flex flex-wrap gap-2 align-items-end">
+                <div>
+                    <label class="form-label small text-muted mb-1" for="vendorPayAmount">Pay amount</label>
+                    <input type="number"
+                           step="0.01"
+                           min="0.01"
+                           max="@balance.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                           name="amount"
+                           id="vendorPayAmount"
+                           class="form-control form-control-sm"
+                           style="width:8.5rem"
+                           value="@balance.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)"
+                           required />
+                </div>
+                <div>
+                    <label class="form-label small text-muted mb-1" for="vendorPayMethod">Payment method</label>
+                    <select name="paymentMethodUid"
+                            id="vendorPayMethod"
+                            class="form-select form-select-sm"
+                            style="width:auto; min-width:10rem;"
+                            asp-items="paymentMethods">
+                        <option value="">-- Select --</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label small text-muted mb-1" for="vendorPayDate">Payment date</label>
+                    <input type="datetime-local"
+                           name="paymentDate"
+                           id="vendorPayDate"
+                           class="form-control form-control-sm"
+                           value="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")"
+                           required />
+                </div>
+                <div>
+                    <label class="form-label small text-muted mb-1" for="vendorPayReference">Reference</label>
+                    <input type="text"
+                           name="referenceNo"
+                           id="vendorPayReference"
+                           class="form-control form-control-sm"
+                           style="width:10rem"
+                           maxlength="100"
+                           placeholder="Optional" />
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">Pay vendor</button>
+            </div>
+            <p class="text-muted small mt-1 mb-0">
+                Records a vendor payment against this purchase invoice and updates paid / balance.
+            </p>
+        </form>
+    }
+    else if (Model.Uid > 0 && balance <= 0)
+    {
+        <p class="text-muted small">This invoice is fully paid.</p>
+    }
+
+    <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Payment No</th>
+                    <th>Date</th>
+                    <th class="text-end">Amount</th>
+                    <th>Reference</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var p in payments)
+            {
+                <tr>
+                    <td>@p.PaymentNo</td>
+                    <td>@p.PaymentDate.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td class="text-end">@p.Amount.ToString("N2")</td>
+                    <td>@(string.IsNullOrWhiteSpace(p.ReferenceNo) ? "—" : p.ReferenceNo)</td>
+                </tr>
+            }
+            @if (!payments.Any())
+            {
+                <tr>
+                    <td colspan="4" class="text-muted text-center py-3">No vendor payments yet for this invoice.</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</section>
