@@ -65,7 +65,7 @@
                            spellcheck="false" />
                 </div>
                 <p class="pos-barcode-hint text-muted small mb-0">
-                    Scan a barcode or type a product code and press Enter to add to the basket.
+                    Keep this field focused. Scan to add. Same barcode waits 2 seconds before it can add again.
                 </p>
             </div>
             @* Hidden catalog for barcode/code lookup — no item grid on this screen. *@
@@ -472,18 +472,25 @@
         });
     }
 
+    function normalizeScanCode(rawCode) {
+        return String(rawCode || '')
+            .replace(/[\u0000-\u001F\u007F]/g, '')
+            .replace(/^\*+|\*+$/g, '')
+            .trim();
+    }
+
     function findProductRowByScanCode(rawCode, allowNameSearch) {
-        const code = (rawCode || '').trim();
+        const code = normalizeScanCode(rawCode);
         if (!code) return null;
         const lower = code.toLowerCase();
         const rows = Array.from(productsTable.querySelectorAll('.pos-product-row'));
-        // Prefer product code (test barcodes print codes), then barcode field.
+        // Physical scanners usually emit Barcode; test labels often print ProductCode.
         let match = rows.find(function (row) {
-            return (row.getAttribute('data-code') || '').trim().toLowerCase() === lower;
+            return (row.getAttribute('data-barcode') || '').trim().toLowerCase() === lower;
         });
         if (match) return match;
         match = rows.find(function (row) {
-            return (row.getAttribute('data-barcode') || '').trim().toLowerCase() === lower;
+            return (row.getAttribute('data-code') || '').trim().toLowerCase() === lower;
         });
         if (match) return match;
         if (allowNameSearch) {
@@ -499,14 +506,15 @@
     }
 
     function addProductFromBarcode(rawCode, allowNameSearch) {
-        const row = findProductRowByScanCode(rawCode, !!allowNameSearch);
+        const code = normalizeScanCode(rawCode);
+        const row = findProductRowByScanCode(code, !!allowNameSearch);
         if (!row) {
-            showAlert('warning', 'No product found for "' + (rawCode || '').trim() + '".');
+            showAlert('warning', 'No product found for "' + code + '".');
             return false;
         }
         selectRow(row);
         addSelected();
-        showAlert('success', 'Added: ' + (row.getAttribute('data-name') || rawCode));
+        showAlert('success', 'Added: ' + (row.getAttribute('data-name') || code));
         return true;
     }
 
@@ -628,7 +636,9 @@
         renderBasket();
     });
 
-    searchInput.addEventListener('input', applyProductFilters);
+    if (searchInput) {
+        searchInput.addEventListener('input', applyProductFilters);
+    }
 
     function syncCategoryControls(uid) {
         activeCategoryUid = (uid || '').trim();
@@ -1086,29 +1096,131 @@
 
     const barcodeScanInput = document.getElementById('posBarcodeScan');
     if (barcodeScanInput) {
+        let scanIdleTimer = null;
+        let lastScanKeyAt = 0;
+        let rapidKeyCount = 0;
+        let scanBusy = false;
+        let lastAcceptedCode = '';
+        let lastAcceptedAt = 0;
+        const SCAN_IDLE_MS = 120;
+        const RAPID_KEY_MS = 55;
+        // Ignore repeat scans of the same code (scanner bounce / accidental re-read).
+        const SAME_CODE_COOLDOWN_MS = 2000;
+
         function focusBarcodeScan() {
-            requestAnimationFrame(function () {
+            window.setTimeout(function () {
+                if (document.activeElement === barcodeScanInput) {
+                    barcodeScanInput.select();
+                    return;
+                }
+                const active = document.activeElement;
+                if (active && active !== document.body && active !== document.documentElement) {
+                    const tag = (active.tagName || '').toLowerCase();
+                    if (tag === 'input' || tag === 'textarea' || tag === 'select' || active.isContentEditable) {
+                        if (active !== barcodeScanInput) return;
+                    }
+                }
                 barcodeScanInput.focus();
                 barcodeScanInput.select();
-            });
+            }, 0);
         }
 
-        barcodeScanInput.addEventListener('keydown', function (e) {
-            if (e.key !== 'Enter') return;
-            e.preventDefault();
-            const code = (barcodeScanInput.value || '').trim();
+        function commitBarcodeScan() {
+            if (scanBusy) return;
+            if (scanIdleTimer) {
+                clearTimeout(scanIdleTimer);
+                scanIdleTimer = null;
+            }
+            rapidKeyCount = 0;
+            lastScanKeyAt = 0;
+            const code = normalizeScanCode(barcodeScanInput.value);
             barcodeScanInput.value = '';
             if (!code) {
                 focusBarcodeScan();
                 return;
             }
-            addProductFromBarcode(code, false);
+
+            const now = Date.now();
+            if (code.toLowerCase() === lastAcceptedCode && (now - lastAcceptedAt) < SAME_CODE_COOLDOWN_MS) {
+                // Same barcode again too soon — wait before allowing another add.
+                focusBarcodeScan();
+                return;
+            }
+
+            scanBusy = true;
+            try {
+                const added = addProductFromBarcode(code, false);
+                if (added) {
+                    lastAcceptedCode = code.toLowerCase();
+                    lastAcceptedAt = now;
+                }
+            } finally {
+                // Brief lock so Enter + idle-commit cannot double-add one scan.
+                window.setTimeout(function () { scanBusy = false; }, 250);
+            }
             focusBarcodeScan();
+        }
+
+        function noteScanKey() {
+            const now = Date.now();
+            if (lastScanKeyAt && (now - lastScanKeyAt) <= RAPID_KEY_MS) {
+                rapidKeyCount += 1;
+            } else {
+                rapidKeyCount = 1;
+            }
+            lastScanKeyAt = now;
+            if (scanIdleTimer) clearTimeout(scanIdleTimer);
+            scanIdleTimer = setTimeout(function () {
+                scanIdleTimer = null;
+                const code = normalizeScanCode(barcodeScanInput.value);
+                // Only auto-submit without Enter when input looked like a hardware wedge burst.
+                if (rapidKeyCount >= 4 && code.length >= 3) {
+                    commitBarcodeScan();
+                }
+            }, SCAN_IDLE_MS);
+        }
+
+        barcodeScanInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault();
+                commitBarcodeScan();
+                return;
+            }
+            if (e.key.length === 1) {
+                noteScanKey();
+            }
         });
+
+        // USB HID scanners type into whatever has focus — route keys here when not editing another field.
+        document.addEventListener('keydown', function (e) {
+            if (e.ctrlKey || e.altKey || e.metaKey) return;
+            const active = document.activeElement;
+            if (active === barcodeScanInput) return;
+            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.isContentEditable)) {
+                return;
+            }
+            if (e.key === 'Enter' || e.key === 'Tab') {
+                if (normalizeScanCode(barcodeScanInput.value)) {
+                    e.preventDefault();
+                    commitBarcodeScan();
+                }
+                return;
+            }
+            if (e.key.length !== 1) return;
+            e.preventDefault();
+            barcodeScanInput.focus();
+            barcodeScanInput.value = (barcodeScanInput.value || '') + e.key;
+            noteScanKey();
+        }, true);
 
         document.getElementById('posSaleLayout')?.addEventListener('mouseup', function (e) {
             if (e.target.closest('input, select, textarea, button, a')) return;
             focusBarcodeScan();
+        });
+
+        window.addEventListener('focus', focusBarcodeScan);
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) focusBarcodeScan();
         });
 
         focusBarcodeScan();
