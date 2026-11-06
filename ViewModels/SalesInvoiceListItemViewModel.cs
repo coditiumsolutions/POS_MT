@@ -21,6 +21,9 @@ public sealed class SalesInvoiceIndexViewModel
     public DateTime? DateTo { get; set; }
     public string? Search { get; set; }
     public List<SalesInvoiceListItemViewModel> Rows { get; set; } = [];
+
+    public decimal TotalNet => Rows.Sum(x => x.NetAmount);
+    public decimal TotalPaid => Rows.Sum(x => x.PaidAmount);
 }
 
 public sealed class SalesReportPrintViewModel
@@ -62,6 +65,8 @@ public sealed class SalesInvoiceDetailIndexViewModel
     public DateTime? DateTo { get; set; }
     public string? Search { get; set; }
     public List<SalesInvoiceDetailListItemViewModel> Rows { get; set; } = [];
+
+    public decimal TotalLineTotal => Rows.Sum(x => x.LineTotal);
 }
 
 public sealed class SalesInvoiceDetailViewModel

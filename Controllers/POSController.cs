@@ -398,6 +398,66 @@ public class POSController : Controller
         });
     }
 
+    /// <summary>
+    /// Compact deliverable lines for many customers on one supply date (grid row preview).
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> CustomerMonthlySupplySummaries(
+        DateTime supplyDate,
+        string? customerUids,
+        CancellationToken ct)
+    {
+        var day = supplyDate == default ? DateTime.Today : supplyDate.Date;
+        var ids = (customerUids ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => int.TryParse(s, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
+
+        if (ids.Count == 0)
+        {
+            return Json(new { supplyDate = day.ToString("yyyy-MM-dd"), customers = Array.Empty<object>() });
+        }
+
+        var templates = await _db.CustomerMonthlySupplies.AsNoTracking()
+            .Where(x => x.CustomerUid != null && ids.Contains(x.CustomerUid.Value))
+            .ToListAsync(ct);
+        var overrides = await _db.CustomerMonthlySupplyOverrides.AsNoTracking()
+            .Where(x => ids.Contains(x.CustomerUid) && x.SupplyDate == day)
+            .ToListAsync(ct);
+
+        var customers = ids.Select(uid =>
+        {
+            var lines = BuildEffectiveMonthlySupplyLines(
+                    templates.Where(x => x.CustomerUid == uid).OrderBy(x => x.ProductName).ToList(),
+                    overrides.Where(x => x.CustomerUid == uid).OrderBy(x => x.ProductName).ToList())
+                .Where(x => !x.IsSkipped && x.Quantity > 0)
+                .Select(x => new
+                {
+                    name = string.IsNullOrWhiteSpace(x.ProductName) ? x.ProductCode : x.ProductName,
+                    qty = x.Quantity,
+                    price = x.UnitPrice,
+                    total = Math.Round(x.Quantity * x.UnitPrice, 2, MidpointRounding.AwayFromZero)
+                })
+                .ToList();
+
+            return new
+            {
+                customerUid = uid,
+                lines,
+                totalQty = lines.Sum(x => x.qty),
+                totalAmount = lines.Sum(x => x.total)
+            };
+        });
+
+        return Json(new
+        {
+            supplyDate = day.ToString("yyyy-MM-dd"),
+            customers
+        });
+    }
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpsertMonthlySupplyOverride(
@@ -798,22 +858,22 @@ public class POSController : Controller
         }
         catch (Exception ex)
         {
-            TempData["Error"] = "Add Supplied failed: " + (ex.InnerException?.Message ?? ex.Message);
+            TempData["Error"] = "Save Supplied failed: " + (ex.InnerException?.Message ?? ex.Message);
             return BackToList();
         }
 
         if (processed.Count == 0)
         {
             TempData["Error"] = skipped.Count > 0
-                ? "No invoices processed. " + string.Join("; ", skipped)
-                : "No invoices were processed.";
+                ? "Save Supplied did not complete. " + string.Join("; ", skipped)
+                : "Save Supplied did not complete. No invoices were processed.";
             return BackToList();
         }
 
-        var message = $"Monthly supply posted: {string.Join("; ", processed)}.";
+        var message = $"Save Supplied completed for {processed.Count} customer(s) on {supplyDay:dd-MMM-yyyy}.";
         if (skipped.Count > 0)
         {
-            message += " Skipped: " + string.Join("; ", skipped) + ".";
+            message += $" Skipped {skipped.Count}: " + string.Join("; ", skipped) + ".";
         }
 
         TempData["Success"] = message;
@@ -977,9 +1037,9 @@ public class POSController : Controller
             return BackToList();
         }
 
-        var message = $"Order cancelled: {string.Join("; ", processed)}.";
+        var message = $"Cancel Order completed for {processed.Count} customer(s) on {supplyDay:dd-MMM-yyyy}. Stock restored.";
         if (skipped.Count > 0)
-            message += " Skipped: " + string.Join("; ", skipped) + ".";
+            message += $" Skipped {skipped.Count}: " + string.Join("; ", skipped) + ".";
 
         TempData["Success"] = message;
         return BackToList();
@@ -2394,6 +2454,24 @@ public class POSController : Controller
             .Select(x => x.ConfigValue)
             .FirstOrDefaultAsync(ct);
 
+        var todayStart = DateTime.Today;
+        var tomorrow = todayStart.AddDays(1);
+        // Walk-in / Cash POS sales only (same customer rule as Sales Item Walk-in filter).
+        var todaySaleAmount = await (
+            from inv in _db.SalesInvoices.AsNoTracking()
+            join c in _db.Customers.AsNoTracking() on inv.CustomerUid equals c.Uid
+            where inv.InvoiceDate >= todayStart
+                  && inv.InvoiceDate < tomorrow
+                  && inv.InvoiceStatus != "Cancelled"
+                  && inv.InvoiceStatus != SalesReturnsController.ReturnStatus
+                  && inv.InvoiceStatus != WastageController.WastageStatus
+                  && (c.CustomerCode == "C001"
+                      || c.CustomerName.Contains("Walk-in")
+                      || c.CustomerName.Contains("Walk-In")
+                      || c.CustomerName.Contains("Walk In"))
+            select (decimal?)inv.NetAmount
+        ).SumAsync(ct) ?? 0m;
+
         return View("Sale", new PosSaleViewModel
         {
             Mode = mode,
@@ -2401,6 +2479,7 @@ public class POSController : Controller
             UseCardLayout = SetupController.IsCardLayout(layout),
             EnablePanelToggle = enablePanelToggle,
             EnableBarcodeScan = enableBarcodeScan,
+            TodaySaleAmount = todaySaleAmount,
             Products = products,
             Categories = categories
         });

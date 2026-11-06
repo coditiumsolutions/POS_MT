@@ -66,7 +66,7 @@ public static class NavigationCatalog
             new("Sales", "SalesInvoices", IconClass: "bi-receipt"),
             new("Expenses", "Expenses", IconClass: "bi-credit-card"),
             new("Employees", "Employees", IconClass: "bi-person-badge"),
-            new("Reports", "Reports", "TotalSale", IconClass: "bi-graph-up")
+            new("Reports", "Reports", "SalesItem", IconClass: "bi-graph-up")
         ])
     ];
 
@@ -104,12 +104,12 @@ public static class NavigationCatalog
         ]),
         new("Reports", "Reports",
         [
-            new("Sales Report", "Reports", "TotalSale", IconClass: "bi-graph-up-arrow"),
+            new("Sales Item", "Reports", "SalesItem", IconClass: "bi-cart4"),
             new("Daily Report", "Reports", "DailyReport", IconClass: "bi-calendar-day"),
             new("Payment Report", "Reports", "PaymentReport", IconClass: "bi-cash-coin"),
             new("Vendor Payments", "Reports", "VendorPaymentReport", IconClass: "bi-wallet2"),
-            new("Branch / Terminal / User", "Reports", "TerminalReport", IconClass: "bi-display"),
-            new("Financial Summary", "Reports", "ExpenseReport", IconClass: "bi-cash-stack")
+            new("Terminal Report", "Reports", "TerminalReport", IconClass: "bi-display"),
+            new("Financial Report", "Reports", "ExpenseReport", IconClass: "bi-cash-stack")
         ])
     ];
 
@@ -154,7 +154,7 @@ public static class NavigationCatalog
         ]),
         new("Reports & Logs", "Sales reports and audit history",
         [
-            new("Reports", "bi-graph-up", "Reports", "TotalSale"),
+            new("Reports", "bi-graph-up", "Reports", "SalesItem"),
             new("Audit Logs", "bi-journal-text", "AuditLogs")
         ])
     ];

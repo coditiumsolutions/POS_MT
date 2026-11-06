@@ -37,6 +37,9 @@ public sealed class PosSaleViewModel
     /// <summary>Shows a barcode scan field that adds items to the basket on Enter.</summary>
     public bool EnableBarcodeScan { get; set; }
 
+    /// <summary>Sum of today's completed sales (NetAmount), excluding cancelled / return / wastage.</summary>
+    public decimal TodaySaleAmount { get; set; }
+
     public List<PosProductItemViewModel> Products { get; set; } = [];
     public List<PosCategoryItemViewModel> Categories { get; set; } = [];
 }

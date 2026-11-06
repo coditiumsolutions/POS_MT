@@ -80,7 +80,8 @@ body {
   background: var(--pos-topbar);
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  justify-content: space-between;
+  gap: 0.75rem;
   padding: 0.35rem 1rem;
   overflow: visible;
 }
@@ -91,7 +92,17 @@ body {
   flex-wrap: wrap;
   gap: 0.2rem 1rem;
   min-width: 0;
-  width: 100%;
+  flex: 1 1 auto;
+}
+
+.pos-topbar-date {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
 }
 
 .pos-top-link {
@@ -1271,8 +1282,8 @@ body.pos-panel-splitter-active * {
 
 .pos-items-filters {
   display: flex;
-  align-items: flex-end;
-  flex-wrap: wrap;
+  align-items: center;
+  flex-wrap: nowrap;
   gap: 0.5rem;
   width: 100%;
 }
@@ -1332,13 +1343,15 @@ body.pos-panel-splitter-active * {
 }
 
 .pos-category-select {
-  flex: 0 1 42%;
-  min-width: 7.5rem;
-  max-width: 14rem;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 8.5rem;
+  max-width: 12rem;
 }
 
 .pos-items-filters #productSearch {
   flex: 1 1 auto;
+  width: auto;
   min-width: 0;
 }
 
@@ -1365,17 +1378,18 @@ body.pos-panel-splitter-active * {
   justify-content: stretch;
 }
 
-.pos-sale-panel-header--search .form-control,
-.pos-sale-panel-header--search .form-select {
-  width: 100%;
-  flex: 1 1 auto;
+.pos-sale-panel-header--search .pos-items-filters .form-control,
+.pos-sale-panel-header--search .pos-items-filters .form-select {
+  width: auto;
 }
 
 .pos-sale-panel-title {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: 1rem;
   font-weight: 700;
   color: #0f172a;
+  line-height: 1.25;
+  max-width: min(100%, 28rem);
 }
 
 .pos-sale-toolbar {
@@ -2409,6 +2423,53 @@ a.btn.btn-primary.daily-report-filter-btn:focus {
   color: inherit;
 }
 
+.monthly-supply-preview-cell {
+  max-width: 28rem;
+  min-width: 12rem;
+}
+
+.monthly-supply-row-preview {
+  font-size: 0.82rem;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.monthly-supply-preview-empty {
+  color: #94a3b8;
+}
+
+.monthly-supply-preview-item {
+  display: inline;
+  color: #0f172a;
+}
+
+.monthly-supply-preview-name {
+  font-weight: 600;
+}
+
+.monthly-supply-preview-qp {
+  color: #475569;
+  font-variant-numeric: tabular-nums;
+}
+
+.monthly-supply-preview-sep {
+  color: #94a3b8;
+}
+
+.monthly-supply-simple-panel {
+  padding: 0 0 0.35rem;
+}
+
+.monthly-supply-simple-table > :not(caption) > * > * {
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
+}
+
+.monthly-supply-simple-table tfoot td {
+  background: #f8fafc;
+}
+
 .monthly-supply-day-box {
   margin: 0.7rem 0.15rem 0.2rem 0.85rem;
   padding: 0.3rem 0.45rem 0.35rem;
@@ -2751,4 +2812,96 @@ a.btn.btn-primary.daily-report-filter-btn:focus {
 .employee-details-page table thead th {
   color: #000000 !important;
   font-weight: 700;
+}
+
+/* Shared compact report chrome (Sales Item + other Reports pages) */
+.report-filter-bar {
+  background: #fff;
+}
+
+.report-metric {
+  border-radius: 0.4rem;
+}
+
+.report-metric .small {
+  opacity: 0.9;
+}
+
+.report-metric--lines,
+.sales-item-metric--lines {
+  background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+  border-color: #93c5fd !important;
+  color: #1d4ed8;
+}
+
+.report-metric--qty,
+.sales-item-metric--qty {
+  background: linear-gradient(135deg, #ffedd5 0%, #fff7ed 100%);
+  border-color: #fdba74 !important;
+  color: #c2410c;
+}
+
+.report-metric--amount,
+.sales-item-metric--amount {
+  background: linear-gradient(135deg, #a7f3d0 0%, #ecfdf5 100%);
+  border-color: #6ee7b7 !important;
+  color: #047857;
+}
+
+.report-metric--extra {
+  background: linear-gradient(135deg, #ede9fe 0%, #f5f3ff 100%);
+  border-color: #c4b5fd !important;
+  color: #5b21b6;
+}
+
+.report-grid-table > :not(caption) > * > *,
+.sales-item-report-table > :not(caption) > * > * {
+  padding-top: 0.28rem;
+  padding-bottom: 0.28rem;
+}
+
+.report-grid-table thead th,
+.sales-item-report-table thead th {
+  white-space: nowrap;
+}
+
+.report-grid-table tfoot td,
+.sales-item-report-table tfoot td {
+  background: #f8fafc;
+}
+
+.report-grid-table .report-col-amount,
+.sales-item-report-table .sales-item-col-total {
+  padding-right: 1.15rem !important;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.report-grid-table thead th.report-col-amount,
+.sales-item-report-table thead th.sales-item-col-total {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.report-grid-table tfoot .report-col-amount,
+.sales-item-report-table tfoot .sales-item-col-total {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.sales-item-report-table .sales-item-col-item {
+  padding-left: 1.15rem !important;
+  border-left: 1px solid #c4b5fd;
+  background: #f5f3ff;
+  color: #5b21b6;
+}
+
+.sales-item-report-table thead th.sales-item-col-item {
+  text-align: center;
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.sales-item-report-table tfoot .sales-item-col-item {
+  background: #ede9fe;
 }

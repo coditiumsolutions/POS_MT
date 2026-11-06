@@ -1,0 +1,126 @@
+@model SalesItemReportViewModel
+@{
+    ViewData["Title"] = "Sales Item";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-2">
+    <span class="sales-invoices-heading">Sales Item</span>
+</div>
+
+<form method="get" asp-action="SalesItem" class="bg-white border rounded px-2 py-2 mb-2 report-filter-bar">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-2 col-sm-6">
+            <label class="form-label small mb-1" for="SaleType">Sales Type</label>
+            <select asp-for="SaleType" asp-items="Model.SaleTypes" class="form-select form-select-sm" id="SaleType" name="saleType"></select>
+        </div>
+        <div class="col-md-2 col-sm-6">
+            <label class="form-label small mb-1" for="DateFrom">Start Date</label>
+            <input type="date"
+                   class="form-control form-control-sm"
+                   id="DateFrom"
+                   name="dateFrom"
+                   value="@Model.DateFrom.ToString("yyyy-MM-dd")" />
+        </div>
+        <div class="col-md-2 col-sm-6">
+            <label class="form-label small mb-1" for="DateTo">End Date</label>
+            <input type="date"
+                   class="form-control form-control-sm"
+                   id="DateTo"
+                   name="dateTo"
+                   value="@Model.DateTo.ToString("yyyy-MM-dd")" />
+        </div>
+        <div class="col-md-auto col-sm-6">
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm px-3">Apply</button>
+                <a class="btn btn-outline-secondary btn-sm px-3" asp-action="SalesItem">Reset</a>
+            </div>
+        </div>
+    </div>
+</form>
+
+<div class="row g-2 mb-2">
+    <div class="col-md-4 col-sm-6">
+        <div class="border rounded px-2 py-2 h-100 report-metric report-metric--lines">
+            <div class="small mb-0">Lines</div>
+            <div class="fs-5 fw-semibold mb-0">@Model.LineCount</div>
+        </div>
+    </div>
+    <div class="col-md-4 col-sm-6">
+        <div class="border rounded px-2 py-2 h-100 report-metric report-metric--qty">
+            <div class="small mb-0">Total Quantity</div>
+            <div class="fs-5 fw-semibold mb-0">@Model.TotalQuantity.ToString("N3")</div>
+        </div>
+    </div>
+    <div class="col-md-4 col-sm-6">
+        <div class="border rounded px-2 py-2 h-100 report-metric report-metric--amount">
+            <div class="small mb-0">Total Amount</div>
+            <div class="fs-5 fw-semibold mb-0">@Model.TotalAmount.ToString("N2")</div>
+        </div>
+    </div>
+</div>
+
+<div class="table-responsive bg-white border rounded p-2">
+    <table id="salesItemReportTable" class="table table-sm table-striped table-hover align-middle w-100 mb-0 sales-item-report-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Invoice</th>
+                <th>Type</th>
+                <th class="text-end">Qty</th>
+                <th class="text-end">Price</th>
+                <th class="text-end sales-item-col-total">Total</th>
+                <th class="text-center sales-item-col-item">Item</th>
+            </tr>
+        </thead>
+        <tbody>
+        @if (Model.Rows.Count == 0)
+        {
+            <tr>
+                <td colspan="7" class="text-muted text-center py-3">No sales items found for the selected filters.</td>
+            </tr>
+        }
+        else
+        {
+            foreach (var row in Model.Rows)
+            {
+                <tr>
+                    <td>@row.InvoiceDate.ToString("dd-MMM-yyyy")</td>
+                    <td>
+                        <a asp-controller="SalesInvoices"
+                           asp-action="Details"
+                           asp-route-id="@row.SalesInvoiceUid"
+                           title="@row.InvoiceNo">Open Invoice</a>
+                    </td>
+                    <td>@row.SaleType</td>
+                    <td class="text-end">@row.Quantity.ToString("N3")</td>
+                    <td class="text-end">@row.UnitPrice.ToString("N2")</td>
+                    <td class="text-end sales-item-col-total">@row.LineTotal.ToString("N2")</td>
+                    <td class="sales-item-col-item">
+                        @row.ProductName@if (!string.IsNullOrWhiteSpace(row.ProductCode))
+                        {<span class="text-muted"> (@row.ProductCode)</span>}
+                    </td>
+                </tr>
+            }
+        }
+        </tbody>
+        @if (Model.Rows.Count > 0)
+        {
+            <tfoot>
+                <tr class="fw-semibold">
+                    <td colspan="3" class="text-end">Total</td>
+                    <td class="text-end">@Model.TotalQuantity.ToString("N3")</td>
+                    <td></td>
+                    <td class="text-end sales-item-col-total">@Model.TotalAmount.ToString("N2")</td>
+                    <td class="sales-item-col-item"></td>
+                </tr>
+            </tfoot>
+        }
+    </table>
+</div>
+
+@section Scripts {
+    @if (Model.Rows.Count > 0)
+    {
+        <script>posDataTable('#salesItemReportTable', { lengthBelow: true, hideFilter: true, ordering: false });</script>
+    }
+}

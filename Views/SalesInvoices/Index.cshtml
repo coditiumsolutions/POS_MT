@@ -119,6 +119,8 @@
     @Html.AntiForgeryToken()
     <input type="hidden" name="customerType" value="@Model.CustomerType" />
     <input type="hidden" name="month" value="@Model.Month" />
+    <input type="hidden" name="dateFrom" value="@(Model.DateFrom?.ToString("yyyy-MM-dd") ?? string.Empty)" />
+    <input type="hidden" name="dateTo" value="@(Model.DateTo?.ToString("yyyy-MM-dd") ?? string.Empty)" />
 </form>
 
 <div class="table-responsive bg-white border rounded p-2">
@@ -131,9 +133,10 @@
                 <th>Date</th>
                 <th>Customer Name</th>
                 <th>Type</th>
-                <th>Net</th>
-                <th>Paid</th>
+                <th class="text-end">Total</th>
+                <th class="text-end">Payment</th>
                 <th>Status</th>
+                <th style="width:90px">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -150,15 +153,37 @@
                            data-status="@item.InvoiceStatus"
                            aria-label="Select invoice @item.InvoiceNo" />
                 </td>
-                <td>@item.InvoiceDate.ToString("yyyy-MM-dd")</td>
+                <td data-order="@item.InvoiceDate.ToString("yyyy-MM-dd HH:mm:ss")">@item.InvoiceDate.ToString("dd-MMM-yyyy HH:mm")</td>
                 <td>@item.CustomerName</td>
                 <td>@item.CustomerType</td>
-                <td>@item.NetAmount.ToString("N2")</td>
-                <td>@item.PaidAmount.ToString("N2")</td>
+                <td class="text-end">@item.NetAmount.ToString("N2")</td>
+                <td class="text-end">@item.PaidAmount.ToString("N2")</td>
                 <td>@item.InvoiceStatus</td>
+                <td class="text-nowrap">
+                    <form asp-action="Delete" asp-route-id="@item.Uid" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="customerType" value="@Model.CustomerType" />
+                        <input type="hidden" name="month" value="@Model.Month" />
+                        <input type="hidden" name="dateFrom" value="@(Model.DateFrom?.ToString("yyyy-MM-dd") ?? string.Empty)" />
+                        <input type="hidden" name="dateTo" value="@(Model.DateTo?.ToString("yyyy-MM-dd") ?? string.Empty)" />
+                        <button type="submit"
+                                class="btn btn-sm btn-outline-danger"
+                                onclick="return confirm('Delete sales invoice @item.InvoiceNo?');">Delete</button>
+                    </form>
+                </td>
             </tr>
         }
         </tbody>
+        <tfoot>
+            <tr class="fw-semibold">
+                <td></td>
+                <td colspan="3" class="text-end">Sales Total</td>
+                <td class="text-end">@Model.TotalNet.ToString("N2")</td>
+                <td class="text-end">@Model.TotalPaid.ToString("N2")</td>
+                <td></td>
+                <td></td>
+            </tr>
+        </tfoot>
     </table>
 </div>
 @section Scripts {
@@ -214,7 +239,7 @@
             });
 
             table.addEventListener('click', function (e) {
-                if (e.target.closest('.sales-invoice-select')) return;
+                if (e.target.closest('.sales-invoice-select, form, button, a')) return;
                 const row = e.target.closest('.sales-invoice-row');
                 if (!row) return;
                 const radio = row.querySelector('.sales-invoice-select');
@@ -242,7 +267,7 @@
 
             btnDelete.addEventListener('click', function () {
                 if (!selectedUid) return;
-                if (!confirm('Delete this sales invoice and all its detail lines?')) return;
+                if (!confirm('Delete this sales invoice? If it has sales items, delete those first.')) return;
                 deleteForm.action = deleteUrlBase + '/' + selectedUid;
                 deleteForm.submit();
             });
@@ -271,7 +296,8 @@
 
             posDataTable('#crudTable', {
                 lengthBelow: true,
-                columnDefs: [{ orderable: false, targets: 0 }]
+                order: [[1, 'desc']],
+                columnDefs: [{ orderable: false, targets: [0, 7] }]
             });
 
             const form = filterForm;

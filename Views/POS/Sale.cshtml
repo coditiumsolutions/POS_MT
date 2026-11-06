@@ -227,7 +227,7 @@
 
     <section class="pos-sale-panel pos-sale-panel--basket">
         <div class="pos-sale-panel-header">
-            <h2 class="pos-sale-panel-title" id="basketPanelTitle">Basket</h2>
+            <h2 class="pos-sale-panel-title" id="basketPanelTitle">Sale = @Model.TodaySaleAmount.ToString("0.##") - (Quantity 0)</h2>
             <div class="pos-sale-toolbar">
                 <button type="button" id="btnPrintReceipt" class="btn btn-outline-secondary btn-sm d-none" hidden>
                     <i class="bi bi-printer" aria-hidden="true"></i> Print Receipt
@@ -326,6 +326,7 @@
     const basketChangeEl = document.getElementById('basketChange');
     const btnClear = document.getElementById('btnClearBasket');
     let lastAddedStock = null;
+    let todaySaleAmount = @Model.TodaySaleAmount.ToString(System.Globalization.CultureInfo.InvariantCulture);
     const btnPrint = document.getElementById('btnPrintReceipt');
     const btnPay = document.getElementById('btnPay');
     const searchInput = document.getElementById('productSearch');
@@ -557,15 +558,33 @@
         return String(Math.round(v * 1000) / 1000);
     }
 
+    function formatTodaySale(n) {
+        const v = Number(n);
+        if (!Number.isFinite(v)) return '0';
+        if (Number.isInteger(v)) return String(v);
+        return String(Math.round(v * 100) / 100);
+    }
+
+    function basketQuantityTotal() {
+        let total = 0;
+        basket.forEach(function (item) {
+            const q = Number(item.qty);
+            if (Number.isFinite(q)) total += q;
+        });
+        return total;
+    }
+
     function updateBasketTitle(availableQty) {
         if (!basketPanelTitle) return;
-        if (basket.size === 0 || availableQty == null || !Number.isFinite(Number(availableQty))) {
-            basketPanelTitle.textContent = 'Basket';
-            lastAddedStock = null;
-            return;
+        if (availableQty != null && Number.isFinite(Number(availableQty))) {
+            lastAddedStock = Number(availableQty);
         }
-        lastAddedStock = Number(availableQty);
-        basketPanelTitle.textContent = 'Basket - Quantity ' + formatStockQty(lastAddedStock);
+        if (basket.size === 0) {
+            lastAddedStock = null;
+        }
+        basketPanelTitle.textContent =
+            'Sale = ' + formatTodaySale(todaySaleAmount) +
+            ' - (Quantity ' + formatStockQty(basketQuantityTotal()) + ')';
     }
 
     function isPricedByDozen(rowOrItem) {
@@ -842,6 +861,7 @@
         });
 
         syncTotalsDisplay(total);
+        updateBasketTitle(lastAddedStock);
     }
 
     if (basketDiscountEl) {
@@ -1040,6 +1060,12 @@
             };
 
             basket.clear();
+            const paidNet = Number(result.netAmount);
+            // Sale total is Walk-in / Cash only.
+            if (Number.isFinite(paidNet) && String(posMode || '').toLowerCase() === 'cash') {
+                todaySaleAmount += paidNet;
+            }
+            updateBasketTitle(null);
             renderBasket();
             showPrintReceiptButton();
             showAlert('success', result.message + ' You can print the receipt now.');

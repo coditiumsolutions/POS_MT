@@ -141,6 +141,8 @@ public class PurchaseInvoicesController : Controller
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
         var e = ToEntity(model);
+        if (e.PurchaseDate == default) e.PurchaseDate = DateTime.Now;
+        else if (e.PurchaseDate.TimeOfDay == TimeSpan.Zero) e.PurchaseDate = e.PurchaseDate.Date.Add(DateTime.Now.TimeOfDay);
         e.CreatedDate = DateTime.Now;
 
         if (receiveLines.Count > 0)

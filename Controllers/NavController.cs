@@ -65,7 +65,7 @@ public class NavController : Controller
 
         if (string.Equals(area.Key, "Reports", StringComparison.OrdinalIgnoreCase))
         {
-            return RedirectToAction("TotalSale", "Reports");
+            return RedirectToAction("SalesItem", "Reports");
         }
 
         return RedirectToAction("Index", "Dashboard");

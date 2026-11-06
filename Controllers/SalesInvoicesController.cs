@@ -151,7 +151,11 @@ public class SalesInvoicesController : Controller {
     EnsureSalesInvoiceNav();
     if(!ModelState.IsValid){ await LoadLookups(ct, model.BranchUid, model.CustomerUid, model.PaymentMethodUid); return View(model);} 
     if(await _db.SalesInvoices.AnyAsync(x=>x.InvoiceNo==model.InvoiceNo,ct)){ ModelState.AddModelError(nameof(model.InvoiceNo),"Invoice no already exists."); await LoadLookups(ct, model.BranchUid, model.CustomerUid, model.PaymentMethodUid); return View(model);} 
-    var e=ToEntity(model); e.CreatedDate=DateTime.Now; _db.SalesInvoices.Add(e); await _db.SaveChangesAsync(ct);
+    var e=ToEntity(model);
+    if (e.InvoiceDate == default) e.InvoiceDate = DateTime.Now;
+    else if (e.InvoiceDate.TimeOfDay == TimeSpan.Zero) e.InvoiceDate = e.InvoiceDate.Date.Add(DateTime.Now.TimeOfDay);
+    e.CreatedDate=DateTime.Now;
+    _db.SalesInvoices.Add(e); await _db.SaveChangesAsync(ct);
     await _audit.WriteAsync("Create","SalesInvoices",e.Uid.ToString(),$"Created sales invoice {e.InvoiceNo}",ct);
     TempData["Success"]="Sales invoice created."; return RedirectToAction(nameof(Index));
   }
@@ -342,33 +346,45 @@ public class SalesInvoicesController : Controller {
   }
 
   [HttpPost, ValidateAntiForgeryToken]
-  public async Task<IActionResult> Delete(int id, string? customerType, int? month, string? search, CancellationToken ct)
+  public async Task<IActionResult> Delete(int id, string? customerType, int? month, DateTime? dateFrom, DateTime? dateTo, string? search, CancellationToken ct)
   {
     EnsureSalesInvoiceNav();
+    object IndexRoute() => new
+    {
+      customerType,
+      month,
+      dateFrom = dateFrom?.ToString("yyyy-MM-dd"),
+      dateTo = dateTo?.ToString("yyyy-MM-dd"),
+      search
+    };
+
     var invoice = await _db.SalesInvoices.FirstOrDefaultAsync(x => x.Uid == id, ct);
     if (invoice is null)
     {
       TempData["Error"] = "Sales invoice was not found.";
-      return RedirectToAction(nameof(Index), new { customerType, month, search });
+      return RedirectToAction(nameof(Index), IndexRoute());
+    }
+
+    var hasDetails = await _db.SalesInvoiceDetails.AsNoTracking()
+      .AnyAsync(x => x.SalesInvoiceUid == id, ct);
+    if (hasDetails)
+    {
+      TempData["Error"] = $"Sales invoice {invoice.InvoiceNo} has sales items. Delete its sales items first.";
+      return RedirectToAction(nameof(Index), IndexRoute());
     }
 
     var invoiceNo = invoice.InvoiceNo;
     await using var tx = await _db.Database.BeginTransactionAsync(ct);
     await _inventory.ReverseSaleAsync(invoice.Uid, invoice.InvoiceNo, invoice.UserUid, invoice.TerminalUid, ct);
-    var details = await _db.SalesInvoiceDetails.Where(x => x.SalesInvoiceUid == id).ToListAsync(ct);
-    if (details.Count > 0)
-    {
-      _db.SalesInvoiceDetails.RemoveRange(details);
-    }
 
     _db.SalesInvoices.Remove(invoice);
     await _db.SaveChangesAsync(ct);
     await _audit.WriteAsync("Delete", "SalesInvoices", id.ToString(),
-      $"Deleted sales invoice {invoiceNo} and {details.Count} detail line(s).", ct);
+      $"Deleted sales invoice {invoiceNo}.", ct);
     await tx.CommitAsync(ct);
 
     TempData["Success"] = $"Sales invoice {invoiceNo} deleted.";
-    return RedirectToAction(nameof(Index), new { customerType, month, search });
+    return RedirectToAction(nameof(Index), IndexRoute());
   }
   private static SalesInvoiceFormViewModel ToForm(SalesInvoice e)=>new(){Uid=e.Uid,InvoiceNo=e.InvoiceNo,InvoiceDate=e.InvoiceDate,BranchUid=e.BranchUid,Branch=e.Branch,Terminal=e.Terminal,CustomerUid=e.CustomerUid,PaymentMethodUid=e.PaymentMethodUid,SubTotal=e.SubTotal,DiscountAmount=e.DiscountAmount,TaxAmount=e.TaxAmount,OtherCharges=e.OtherCharges,NetAmount=e.NetAmount,PaidAmount=e.PaidAmount,BalanceAmount=e.BalanceAmount,PaymentStatus=e.PaymentStatus,InvoiceStatus=e.InvoiceStatus,Remarks=e.Remarks};
   private static SalesInvoice ToEntity(SalesInvoiceFormViewModel m)=>new(){InvoiceNo=m.InvoiceNo.Trim(),InvoiceDate=m.InvoiceDate,BranchUid=m.BranchUid,Branch=NormalizeName(m.Branch),Terminal=NormalizeName(m.Terminal),CustomerUid=m.CustomerUid,PaymentMethodUid=m.PaymentMethodUid,SubTotal=m.SubTotal,DiscountAmount=m.DiscountAmount,TaxAmount=m.TaxAmount,OtherCharges=m.OtherCharges,NetAmount=m.NetAmount,PaidAmount=m.PaidAmount,BalanceAmount=m.BalanceAmount,PaymentStatus=m.PaymentStatus,InvoiceStatus=m.InvoiceStatus,Remarks=m.Remarks};

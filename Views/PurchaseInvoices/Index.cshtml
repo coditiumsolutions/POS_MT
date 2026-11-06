@@ -56,7 +56,7 @@
         {
             <tr>
                 <td>@item.PurchaseInvoiceNo</td>
-                <td>@item.PurchaseDate.ToString("yyyy-MM-dd")</td>
+                <td data-order="@item.PurchaseDate.ToString("yyyy-MM-dd HH:mm:ss")">@item.PurchaseDate.ToString("dd-MMM-yyyy HH:mm")</td>
                 <td>@item.NetAmount.ToString("N2")</td>
                 <td>@item.PaidAmount.ToString("N2")</td>
                 <td>@item.InvoiceStatus</td>
@@ -77,4 +77,12 @@
         </tbody>
     </table>
 </div>
-@section Scripts { <script>posDataTable('#crudTable');</script> }
+@section Scripts {
+    <script>
+        posDataTable('#crudTable', {
+            lengthBelow: true,
+            order: [[1, 'desc']],
+            columnDefs: [{ orderable: false, targets: 5 }]
+        });
+    </script>
+}

@@ -135,7 +135,7 @@ public class ReportsController : Controller
         CancellationToken ct)
     {
         EnsureReportsNav();
-        ViewData["Title"] = "Branch / Terminal / User Report";
+        ViewData["Title"] = "Terminal Report";
 
         var today = DateTime.Today;
         var startDate = (dateFrom ?? today).Date;
@@ -233,7 +233,7 @@ public class ReportsController : Controller
     public async Task<IActionResult> ExpenseReport(DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
     {
         EnsureReportsNav();
-        ViewData["Title"] = "Expense Report";
+        ViewData["Title"] = "Financial Report";
 
         var today = DateTime.Today;
         var from = (dateFrom ?? new DateTime(today.Year, today.Month, 1)).Date;
@@ -417,6 +417,101 @@ public class ReportsController : Controller
     }
 
     [HttpGet]
+    public async Task<IActionResult> SalesItem(DateTime? dateFrom, DateTime? dateTo, string? saleType, CancellationToken ct)
+    {
+        EnsureReportsNav();
+        ViewData["Title"] = "Sales Item";
+
+        var today = DateTime.Today;
+        var startDate = (dateFrom ?? today).Date;
+        var toInclusive = (dateTo ?? today).Date;
+        if (toInclusive < startDate)
+        {
+            (startDate, toInclusive) = (toInclusive, startDate);
+        }
+
+        var endExclusive = toInclusive.AddDays(1);
+        var selectedSaleType = NormalizeSalesItemSaleType(saleType);
+
+        var query =
+            from d in _db.SalesInvoiceDetails.AsNoTracking()
+            join inv in _db.SalesInvoices.AsNoTracking() on d.SalesInvoiceUid equals inv.Uid
+            join c in _db.Customers.AsNoTracking() on inv.CustomerUid equals c.Uid into cj
+            from c in cj.DefaultIfEmpty()
+            where inv.InvoiceDate >= startDate
+                  && inv.InvoiceDate < endExclusive
+                  && inv.InvoiceStatus != "Cancelled"
+                  && inv.InvoiceStatus != SalesReturnsController.ReturnStatus
+                  && inv.InvoiceStatus != WastageController.WastageStatus
+            select new { d, inv, c };
+
+        if (selectedSaleType is "Cash" or "Walk-in")
+        {
+            query = query.Where(x => x.c != null &&
+                (x.c.CustomerCode == "C001" ||
+                 x.c.CustomerName.Contains("Walk-in") ||
+                 x.c.CustomerName.Contains("Walk-In") ||
+                 x.c.CustomerName.Contains("Walk In")));
+        }
+        else if (selectedSaleType == "Monthly")
+        {
+            query = query.Where(x => x.c != null &&
+                x.c.CustomerCode != "C001" &&
+                !x.c.CustomerName.Contains("Walk-in") &&
+                !x.c.CustomerName.Contains("Walk-In") &&
+                !x.c.CustomerName.Contains("Walk In") &&
+                x.inv.Remarks != null &&
+                x.inv.Remarks.StartsWith("Monthly Supply"));
+        }
+        else if (selectedSaleType == "Credit")
+        {
+            query = query.Where(x => x.c != null &&
+                x.c.CustomerCode != "C001" &&
+                !x.c.CustomerName.Contains("Walk-in") &&
+                !x.c.CustomerName.Contains("Walk-In") &&
+                !x.c.CustomerName.Contains("Walk In") &&
+                (x.inv.Remarks == null || !x.inv.Remarks.StartsWith("Monthly Supply")));
+        }
+
+        var rows = await query
+            .OrderByDescending(x => x.inv.InvoiceDate)
+            .ThenByDescending(x => x.inv.Uid)
+            .ThenBy(x => x.d.Uid)
+            .Select(x => new SalesItemReportRowViewModel
+            {
+                InvoiceDate = x.inv.InvoiceDate,
+                InvoiceNo = x.inv.InvoiceNo,
+                SalesInvoiceUid = x.inv.Uid,
+                CustomerName = x.c != null ? x.c.CustomerName : "—",
+                SaleType = x.c == null
+                    ? "—"
+                    : (x.c.CustomerCode == "C001" ||
+                       x.c.CustomerName.Contains("Walk-in") ||
+                       x.c.CustomerName.Contains("Walk-In") ||
+                       x.c.CustomerName.Contains("Walk In")
+                        ? "Walk-in"
+                        : (x.inv.Remarks != null && x.inv.Remarks.StartsWith("Monthly Supply")
+                            ? "Monthly"
+                            : "Credit")),
+                ProductCode = x.d.ProductCode ?? string.Empty,
+                ProductName = x.d.ProductName ?? x.d.ProductCode ?? "—",
+                Quantity = x.d.Quantity,
+                UnitPrice = x.d.UnitPrice,
+                LineTotal = x.d.LineTotal
+            })
+            .ToListAsync(ct);
+
+        return View(new SalesItemReportViewModel
+        {
+            DateFrom = startDate,
+            DateTo = toInclusive,
+            SaleType = selectedSaleType,
+            SaleTypes = BuildSalesItemSaleTypeOptions(selectedSaleType),
+            Rows = rows
+        });
+    }
+
+    [HttpGet]
     public async Task<IActionResult> DailyReport(DateTime? date, string? saleType, CancellationToken ct)
     {
         EnsureReportsNav();
@@ -530,6 +625,14 @@ public class ReportsController : Controller
         new SelectListItem { Value = "Walk-in", Text = "Walk-in", Selected = selectedSaleType == "Walk-in" }
     ];
 
+    private static IEnumerable<SelectListItem> BuildSalesItemSaleTypeOptions(string selectedSaleType) =>
+    [
+        new SelectListItem { Value = "All", Text = "All", Selected = selectedSaleType == "All" },
+        new SelectListItem { Value = "Walk-in", Text = "Walk-in", Selected = selectedSaleType == "Walk-in" },
+        new SelectListItem { Value = "Monthly", Text = "Monthly", Selected = selectedSaleType == "Monthly" },
+        new SelectListItem { Value = "Credit", Text = "Credit", Selected = selectedSaleType == "Credit" }
+    ];
+
     private static IEnumerable<SelectListItem> BuildAllOptionList(IEnumerable<string> values, string? selected)
     {
         var selectedValue = string.IsNullOrWhiteSpace(selected) ? "All" : selected.Trim();
@@ -564,5 +667,27 @@ public class ReportsController : Controller
         }
 
         return "Monthly";
+    }
+
+    private static string NormalizeSalesItemSaleType(string? saleType)
+    {
+        if (string.Equals(saleType, "Cash", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(saleType, "Walk-in", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(saleType, "Walkin", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Walk-in";
+        }
+
+        if (string.Equals(saleType, "Credit", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Credit";
+        }
+
+        if (string.Equals(saleType, "Monthly", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Monthly";
+        }
+
+        return "All";
     }
 }
