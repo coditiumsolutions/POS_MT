@@ -84,7 +84,7 @@
             foreach (var row in Model.Rows)
             {
                 <tr>
-                    <td>@row.InvoiceDate.ToString("dd-MMM-yyyy")</td>
+                    <td data-order="@row.InvoiceDate.ToString("yyyy-MM-ddTHH:mm:ss")">@row.InvoiceDate.ToString("dd-MMM-yyyy HH:mm")</td>
                     <td>
                         <a asp-controller="SalesInvoices"
                            asp-action="Details"
@@ -92,9 +92,9 @@
                            title="@row.InvoiceNo">Open Invoice</a>
                     </td>
                     <td>@row.SaleType</td>
-                    <td class="text-end">@row.Quantity.ToString("N3")</td>
-                    <td class="text-end">@row.UnitPrice.ToString("N2")</td>
-                    <td class="text-end sales-item-col-total">@row.LineTotal.ToString("N2")</td>
+                    <td class="text-end" data-order="@row.Quantity.ToString(System.Globalization.CultureInfo.InvariantCulture)">@row.Quantity.ToString("N3")</td>
+                    <td class="text-end" data-order="@row.UnitPrice.ToString(System.Globalization.CultureInfo.InvariantCulture)">@row.UnitPrice.ToString("N2")</td>
+                    <td class="text-end sales-item-col-total" data-order="@row.LineTotal.ToString(System.Globalization.CultureInfo.InvariantCulture)">@row.LineTotal.ToString("N2")</td>
                     <td class="sales-item-col-item">
                         @row.ProductName@if (!string.IsNullOrWhiteSpace(row.ProductCode))
                         {<span class="text-muted"> (@row.ProductCode)</span>}
@@ -121,6 +121,17 @@
 @section Scripts {
     @if (Model.Rows.Count > 0)
     {
-        <script>posDataTable('#salesItemReportTable', { lengthBelow: true, hideFilter: true, ordering: false });</script>
+        <script>
+            posDataTable('#salesItemReportTable', {
+                lengthBelow: true,
+                hideFilter: true,
+                ordering: true,
+                order: [[0, 'desc']],
+                columnDefs: [
+                    { orderable: true, targets: [0, 3, 4, 5] },
+                    { orderable: false, targets: [1, 2, 6] }
+                ]
+            });
+        </script>
     }
 }

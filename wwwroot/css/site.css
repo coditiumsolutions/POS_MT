@@ -1262,14 +1262,14 @@ body.pos-panel-splitter-active * {
   min-width: 0;
 }
 
-/* Interface-II: keep totals mid-panel (not pinned under empty basket space) */
+/* Interface-II: keep totals + quantity mid-panel (not pinned under empty basket space) */
 .pos-sale-layout--interface2 .pos-sale-panel--basket .pos-sale-table-wrap {
   flex: 0 1 auto;
   max-height: 42%;
   min-height: 7rem;
 }
 
-.pos-sale-layout--interface2 .pos-sale-panel--basket .pos-sale-totals {
+.pos-sale-layout--interface2 .pos-sale-panel--basket .pos-sale-basket-footer {
   flex: 0 0 auto;
   margin-top: 0.35rem;
   margin-bottom: auto;
@@ -1800,6 +1800,12 @@ body.pos-panel-splitter-active * {
   font-size: 1.35rem;
 }
 
+.pos-sale-basket-footer {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+}
+
 .pos-sale-totals {
   display: grid;
   gap: 0.45rem;
@@ -1819,6 +1825,30 @@ body.pos-panel-splitter-active * {
 .pos-sale-total-row strong {
   color: #ea580c;
   font-size: 1.05rem;
+}
+
+.pos-sale-quantity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.65rem 1rem 0.75rem;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+}
+
+.pos-sale-quantity-row span {
+  color: #2563eb;
+  font-weight: 700;
+  font-size: 1.2rem;
+}
+
+.pos-sale-quantity-row .pos-sale-quantity-value,
+.pos-sale-quantity-value {
+  color: #2563eb !important;
+  font-weight: 800;
+  font-size: 1.45rem !important;
 }
 
 .pos-sale-discount-row label,

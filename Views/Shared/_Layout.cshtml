@@ -129,7 +129,7 @@
                         }
                     }
                 </nav>
-                <div class="pos-topbar-date" title="Today">@DateTime.Now.ToString("dd MMM, yyyy")</div>
+                <div class="pos-topbar-date" id="posTopbarDate" title="Today">@POS_MT.Services.ShopClock.FormatTopbarDate()</div>
             </header>
 
             <div class="pos-gold-bar" aria-hidden="true"></div>

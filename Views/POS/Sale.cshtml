@@ -227,7 +227,7 @@
 
     <section class="pos-sale-panel pos-sale-panel--basket">
         <div class="pos-sale-panel-header">
-            <h2 class="pos-sale-panel-title" id="basketPanelTitle">Sale = @Model.TodaySaleAmount.ToString("0.##") - (Quantity 0)</h2>
+            <h2 class="pos-sale-panel-title" id="basketPanelTitle">Sale = @Model.TodaySaleAmount.ToString("0.##")</h2>
             <div class="pos-sale-toolbar">
                 <button type="button" id="btnPrintReceipt" class="btn btn-outline-secondary btn-sm d-none" hidden>
                     <i class="bi bi-printer" aria-hidden="true"></i> Print Receipt
@@ -261,43 +261,49 @@
                 </tbody>
             </table>
         </div>
-        <div class="pos-sale-totals">
-            <div class="pos-sale-total-row">
-                <span>Total Amount</span>
-                <strong id="basketTotal">0.00</strong>
-            </div>
-            <div class="pos-sale-total-row pos-sale-discount-row">
-                <label for="basketDiscount">Discount</label>
-                <input type="number"
-                       id="basketDiscount"
-                       class="form-control form-control-sm pos-sale-discount-input"
-                       min="0"
-                       step="0.01"
-                       value="0.00"
-                       inputmode="decimal" />
-            </div>
-            <div class="pos-sale-total-row pos-sale-net-row">
-                <span>Net Amount</span>
-                <strong id="basketNet">0.00</strong>
-            </div>
-            @if (string.Equals(Model.Mode, "Cash", StringComparison.OrdinalIgnoreCase))
-            {
-                <div class="pos-sale-total-row pos-sale-tender-row">
-                    <label for="basketCustomerGiven">Customer Given</label>
+        <div class="pos-sale-basket-footer">
+            <div class="pos-sale-totals">
+                <div class="pos-sale-total-row">
+                    <span>Total Amount</span>
+                    <strong id="basketTotal">0.00</strong>
+                </div>
+                <div class="pos-sale-total-row pos-sale-discount-row">
+                    <label for="basketDiscount">Discount</label>
                     <input type="number"
-                           id="basketCustomerGiven"
+                           id="basketDiscount"
                            class="form-control form-control-sm pos-sale-discount-input"
                            min="0"
                            step="0.01"
-                           value=""
-                           placeholder="0.00"
+                           value="0.00"
                            inputmode="decimal" />
                 </div>
-                <div class="pos-sale-total-row pos-sale-change-row">
-                    <span>Change</span>
-                    <strong id="basketChange">0.00</strong>
+                <div class="pos-sale-total-row pos-sale-net-row">
+                    <span>Net Amount</span>
+                    <strong id="basketNet">0.00</strong>
                 </div>
-            }
+                @if (string.Equals(Model.Mode, "Cash", StringComparison.OrdinalIgnoreCase))
+                {
+                    <div class="pos-sale-total-row pos-sale-tender-row">
+                        <label for="basketCustomerGiven">Customer Given</label>
+                        <input type="number"
+                               id="basketCustomerGiven"
+                               class="form-control form-control-sm pos-sale-discount-input"
+                               min="0"
+                               step="0.01"
+                               value=""
+                               placeholder="0.00"
+                               inputmode="decimal" />
+                    </div>
+                    <div class="pos-sale-total-row pos-sale-change-row">
+                        <span>Change</span>
+                        <strong id="basketChange">0.00</strong>
+                    </div>
+                }
+            </div>
+            <div class="pos-sale-quantity-row">
+                <span>Quantity</span>
+                <strong id="basketQuantity" class="pos-sale-quantity-value">0</strong>
+            </div>
         </div>
     </section>
 </div>
@@ -320,6 +326,7 @@
     const basketEmptyRow = document.getElementById('basketEmptyRow');
     const basketPanelTitle = document.getElementById('basketPanelTitle');
     const basketTotalEl = document.getElementById('basketTotal');
+    const basketQuantityEl = document.getElementById('basketQuantity');
     const basketNetEl = document.getElementById('basketNet');
     const basketDiscountEl = document.getElementById('basketDiscount');
     const basketCustomerGivenEl = document.getElementById('basketCustomerGiven');
@@ -583,16 +590,18 @@
     }
 
     function updateBasketTitle(availableQty) {
-        if (!basketPanelTitle) return;
         if (availableQty != null && Number.isFinite(Number(availableQty))) {
             lastAddedStock = Number(availableQty);
         }
         if (basket.size === 0) {
             lastAddedStock = null;
         }
-        basketPanelTitle.textContent =
-            'Sale = ' + formatTodaySale(todaySaleAmount) +
-            ' - (Quantity ' + formatStockQty(basketQuantityTotal()) + ')';
+        if (basketPanelTitle) {
+            basketPanelTitle.textContent = 'Sale = ' + formatTodaySale(todaySaleAmount);
+        }
+        if (basketQuantityEl) {
+            basketQuantityEl.textContent = formatStockQty(basketQuantityTotal());
+        }
     }
 
     function isPricedByDozen(rowOrItem) {
@@ -726,10 +735,11 @@
         const item = basket.get(uid);
         if (!item) return;
 
+        const step = item.pricedByDozen ? 12 : 1;
         if (action === 'inc') {
-            item.qty = roundQty(item.qty + 1);
+            item.qty = roundQty(item.qty + step);
         } else if (action === 'dec') {
-            item.qty = roundQty(item.qty - 1);
+            item.qty = roundQty(item.qty - step);
             if (item.qty <= 0) basket.delete(uid);
         } else if (action === 'remove') {
             basket.delete(uid);
@@ -1039,7 +1049,7 @@
                     items: items.map(function (item) {
                         return {
                             productUid: parseInt(item.uid, 10),
-                            // Dozen-priced: qty in UI is pieces; bill/stock uses dozen count × unit price.
+                            // Dozen-priced: UI qty is pieces; bill quantity is dozens (stock deducts ×12 server-side).
                             quantity: payQuantity(item),
                             unitPrice: item.price
                         };

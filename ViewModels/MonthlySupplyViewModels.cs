@@ -18,6 +18,8 @@ public sealed class MonthlySupplyPageViewModel
     public List<MonthlySupplyCustomerRowViewModel> Customers { get; set; } = [];
     public int? OpenCustomerUid { get; set; }
     public string? Area { get; set; }
+    public DateTime SupplyDate { get; set; } = DateTime.Today;
+    public List<int> SelectedCustomerUids { get; set; } = [];
     public IEnumerable<SelectListItem> AreaOptions { get; set; } = [];
 }
 
@@ -33,6 +35,12 @@ public sealed class MonthlySupplyItemsPageViewModel
 
     /// <summary>When set to Customers, Back returns to Customers Index.</summary>
     public string? ReturnTo { get; set; }
+
+    /// <summary>Geographic area filter to restore on Monthly Supply list.</summary>
+    public string? ListArea { get; set; }
+
+    /// <summary>Supply date to restore on Monthly Supply list.</summary>
+    public DateTime? SupplyDate { get; set; }
 }
 
 public sealed class DeliveryHandoverPageViewModel
@@ -122,4 +130,8 @@ public sealed class MonthlySupplyAddItemRequest
     public string? CustomerUids { get; set; }
 
     public string? ReturnTo { get; set; }
+
+    public string? Area { get; set; }
+
+    public string? SupplyDate { get; set; }
 }

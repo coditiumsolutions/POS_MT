@@ -23,7 +23,11 @@
     else
     {
         <a class="btn btn-outline-secondary btn-sm"
-           asp-action="MonthlySupply">Back to customers</a>
+           href="@Url.Action("MonthlySupply", "POS", new {
+               area = Model.ListArea,
+               supplyDate = Model.SupplyDate?.ToString("yyyy-MM-dd"),
+               selected = Model.CustomerUidsQuery
+           })">Back to customers</a>
     }
 </div>
 
@@ -45,10 +49,13 @@
                 {
                     var active = c.Uid == Model.ActiveCustomerUid;
                     <a class="list-group-item list-group-item-action @(active ? "active" : "")"
-                       asp-action="MonthlySupplyItems"
-                       asp-route-customerUids="@Model.CustomerUidsQuery"
-                       asp-route-activeCustomerUid="@c.Uid"
-                       asp-route-returnTo="@Model.ReturnTo">
+                       href="@Url.Action("MonthlySupplyItems", "POS", new {
+                           customerUids = Model.CustomerUidsQuery,
+                           activeCustomerUid = c.Uid,
+                           returnTo = Model.ReturnTo,
+                           area = Model.ListArea,
+                           supplyDate = Model.SupplyDate?.ToString("yyyy-MM-dd")
+                       })">
                         <div class="fw-semibold">@c.CustomerName</div>
                         <div class="small @(active ? "" : "text-muted")">@c.CustomerCode</div>
                     </a>
@@ -62,6 +69,14 @@
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="CustomerUid" value="@Model.ActiveCustomerUid" />
                 <input type="hidden" name="CustomerUids" value="@Model.CustomerUidsQuery" />
+                @if (!string.IsNullOrWhiteSpace(Model.ListArea))
+                {
+                    <input type="hidden" name="Area" value="@Model.ListArea" />
+                }
+                @if (Model.SupplyDate is DateTime supplyDay)
+                {
+                    <input type="hidden" name="SupplyDate" value="@supplyDay.ToString("yyyy-MM-dd")" />
+                }
                 @if (fromCustomers)
                 {
                     <input type="hidden" name="ReturnTo" value="Customers" />
@@ -134,6 +149,14 @@
                                     <input type="hidden" name="id" value="@item.Uid" />
                                     <input type="hidden" name="customerUids" value="@Model.CustomerUidsQuery" />
                                     <input type="hidden" name="activeCustomerUid" value="@Model.ActiveCustomerUid" />
+                                    @if (!string.IsNullOrWhiteSpace(Model.ListArea))
+                                    {
+                                        <input type="hidden" name="area" value="@Model.ListArea" />
+                                    }
+                                    @if (Model.SupplyDate is DateTime deleteSupplyDay)
+                                    {
+                                        <input type="hidden" name="supplyDate" value="@deleteSupplyDay.ToString("yyyy-MM-dd")" />
+                                    }
                                     @if (fromCustomers)
                                     {
                                         <input type="hidden" name="returnTo" value="Customers" />

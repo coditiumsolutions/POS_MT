@@ -1,4 +1,17 @@
 ﻿(function () {
+    // Secondary topbar "today" — use the browser calendar day (shop PC), not the host server TZ.
+    var topbarDate = document.getElementById("posTopbarDate");
+    if (topbarDate) {
+        try {
+            var now = new Date();
+            var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            var dd = String(now.getDate()).padStart(2, "0");
+            topbarDate.textContent = dd + " " + months[now.getMonth()] + ", " + now.getFullYear();
+        } catch (e) {
+            /* keep server-rendered date */
+        }
+    }
+
     var sidebar = document.getElementById("posSidebar");
     var backdrop = document.getElementById("posBackdrop");
     var toggle = document.getElementById("posSidebarToggle");

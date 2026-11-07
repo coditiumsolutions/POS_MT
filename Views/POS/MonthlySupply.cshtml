@@ -44,6 +44,11 @@
         {
             <input type="hidden" name="openCustomer" value="@openUid" />
         }
+        <input type="hidden" name="supplyDate" value="@Model.SupplyDate.ToString("yyyy-MM-dd")" />
+        @if (Model.SelectedCustomerUids.Count > 0)
+        {
+            <input type="hidden" name="selected" value="@string.Join(",", Model.SelectedCustomerUids)" />
+        }
         <label for="monthlySupplyArea" class="form-label small text-muted mb-1">Area</label>
         <select id="monthlySupplyArea"
                 name="area"
@@ -59,7 +64,7 @@
                id="supplyDate"
                form="monthlySupplyForm"
                class="form-control form-control-sm"
-               value="@DateTime.Today.ToString("yyyy-MM-dd")"
+               value="@Model.SupplyDate.ToString("yyyy-MM-dd")"
                required />
     </div>
     <div style="width: 10rem;">
@@ -68,6 +73,7 @@
     </div>
     <button type="submit"
             form="monthlySupplyForm"
+            formmethod="post"
             class="btn btn-sm monthly-supply-action-btn"
             id="monthlySupplyAddSuppliedBtn"
             formaction="@Url.Action("AddMonthlySupplied", "POS")"
@@ -76,6 +82,7 @@
     </button>
     <button type="submit"
             form="monthlySupplyForm"
+            formmethod="post"
             class="btn btn-sm monthly-supply-action-btn"
             id="monthlySupplyCancelOrderBtn"
             formaction="@Url.Action("CancelMonthlySupplied", "POS")"
@@ -85,6 +92,7 @@
     </button>
     <button type="submit"
             form="monthlySupplyForm"
+            formmethod="post"
             class="btn btn-sm monthly-supply-action-btn"
             id="monthlySupplyContinueBtn"
             disabled>
@@ -154,7 +162,8 @@
                                    name="selectedCustomerUids"
                                    value="@c.Uid"
                                    data-uid="@c.Uid"
-                                   data-name="@c.CustomerName" />
+                                   data-name="@c.CustomerName"
+                                   @(Model.SelectedCustomerUids.Contains(c.Uid) ? "checked" : null) />
                         </td>
                         <td class="monthly-supply-expand-cell">
                             <button type="button"
@@ -244,16 +253,32 @@
                     tempAlert.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 }
 
+                // Disabling the clicked submit button in the same click turn cancels the POST in many browsers.
+                function lockToolbarAfterSubmit(activeBtn, busyLabel) {
+                    if (activeBtn) activeBtn.textContent = busyLabel;
+                    if (cancelOrderBtn && cancelOrderBtn !== activeBtn) cancelOrderBtn.disabled = true;
+                    if (continueBtn && continueBtn !== activeBtn) continueBtn.disabled = true;
+                    if (addSuppliedBtn && addSuppliedBtn !== activeBtn) addSuppliedBtn.disabled = true;
+                    window.setTimeout(function () {
+                        if (activeBtn) activeBtn.disabled = true;
+                    }, 0);
+                }
+
                 if (addSuppliedBtn && form) {
-                    addSuppliedBtn.addEventListener('click', function () {
+                    addSuppliedBtn.addEventListener('click', function (e) {
                         const selected = checks.filter(function (c) { return c.checked; }).length;
-                        if (selected === 0) return;
+                        if (selected === 0) {
+                            e.preventDefault();
+                            return;
+                        }
                         const day = getSupplyDateValue();
+                        if (!supplyDateInput || !supplyDateInput.value) {
+                            e.preventDefault();
+                            showProcessing('Select a supply date before saving.');
+                            return;
+                        }
                         showProcessing('Saving supplied for ' + selected + ' customer(s) on ' + day + '…');
-                        addSuppliedBtn.disabled = true;
-                        addSuppliedBtn.textContent = 'Saving…';
-                        if (cancelOrderBtn) cancelOrderBtn.disabled = true;
-                        if (continueBtn) continueBtn.disabled = true;
+                        lockToolbarAfterSubmit(addSuppliedBtn, 'Saving…');
                     });
                 }
 
@@ -270,10 +295,7 @@
                             return;
                         }
                         showProcessing('Cancelling order for ' + selected + ' customer(s) on ' + day + '…');
-                        cancelOrderBtn.disabled = true;
-                        cancelOrderBtn.textContent = 'Cancelling…';
-                        if (addSuppliedBtn) addSuppliedBtn.disabled = true;
-                        if (continueBtn) continueBtn.disabled = true;
+                        lockToolbarAfterSubmit(cancelOrderBtn, 'Cancelling…');
                     });
                 }
 

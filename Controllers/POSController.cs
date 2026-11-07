@@ -87,12 +87,19 @@ public class POSController : Controller
     private const string MonthlyRemarkLegacy = "Monthly POS";
 
     [HttpGet]
-    public async Task<IActionResult> MonthlySupply(int? openCustomer, string? area, CancellationToken ct)
+    public async Task<IActionResult> MonthlySupply(
+        int? openCustomer,
+        string? area,
+        DateTime? supplyDate,
+        string? selected,
+        CancellationToken ct)
     {
         _navContext.SetArea("POS");
         ViewData["Title"] = "Monthly Supply";
 
         var areaFilter = string.IsNullOrWhiteSpace(area) ? null : area.Trim();
+        var day = supplyDate is null || supplyDate == default ? DateTime.Today : supplyDate.Value.Date;
+        var selectedIds = ParseCustomerUids(selected);
 
         var query = _db.Customers.AsNoTracking()
             .Where(x => x.IsActive
@@ -122,6 +129,8 @@ public class POSController : Controller
             Customers = customers,
             OpenCustomerUid = openCustomer,
             Area = areaFilter,
+            SupplyDate = day,
+            SelectedCustomerUids = selectedIds,
             AreaOptions = await BuildMonthlySupplyAreaOptionsAsync(areaFilter, ct)
         });
     }
@@ -580,17 +589,29 @@ public class POSController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult MonthlySupplyContinue(int[]? selectedCustomerUids)
+    public IActionResult MonthlySupplyContinue(
+        int[]? selectedCustomerUids,
+        string? area,
+        DateTime? supplyDate)
     {
         _navContext.SetArea("POS");
         if (selectedCustomerUids is null || selectedCustomerUids.Length == 0)
         {
             TempData["Error"] = "Select at least one customer.";
-            return RedirectToAction(nameof(MonthlySupply));
+            return RedirectToAction(nameof(MonthlySupply), new
+            {
+                area,
+                supplyDate = (supplyDate ?? DateTime.Today).ToString("yyyy-MM-dd")
+            });
         }
 
         var ids = string.Join(",", selectedCustomerUids.Distinct());
-        return RedirectToAction(nameof(MonthlySupplyItems), new { customerUids = ids });
+        return RedirectToAction(nameof(MonthlySupplyItems), new
+        {
+            customerUids = ids,
+            area,
+            supplyDate = (supplyDate ?? DateTime.Today).ToString("yyyy-MM-dd")
+        });
     }
 
     [HttpPost]
@@ -598,18 +619,17 @@ public class POSController : Controller
     public async Task<IActionResult> AddMonthlySupplied(DateTime supplyDate, int[]? selectedCustomerUids, string? area, CancellationToken ct)
     {
         _navContext.SetArea("POS");
-        IActionResult BackToList() => RedirectToAction(nameof(MonthlySupply), new { area });
         var customerIds = selectedCustomerUids?.Distinct().Where(x => x > 0).ToList() ?? [];
+        var supplyDay = supplyDate == default ? DateTime.Today : supplyDate.Date;
+        IActionResult BackToList() => RedirectToAction(nameof(MonthlySupply), new
+        {
+            area,
+            supplyDate = supplyDay.ToString("yyyy-MM-dd"),
+            selected = customerIds.Count > 0 ? string.Join(",", customerIds) : null
+        });
         if (customerIds.Count == 0)
         {
             TempData["Error"] = "Select at least one customer.";
-            return BackToList();
-        }
-
-        var supplyDay = supplyDate.Date;
-        if (supplyDay == default)
-        {
-            TempData["Error"] = "Select a supply date.";
             return BackToList();
         }
 
@@ -870,7 +890,7 @@ public class POSController : Controller
             return BackToList();
         }
 
-        var message = $"Save Supplied completed for {processed.Count} customer(s) on {supplyDay:dd-MMM-yyyy}.";
+        var message = $"Saved successfully. Supply recorded for {processed.Count} customer(s) on {supplyDay:dd-MMM-yyyy}.";
         if (skipped.Count > 0)
         {
             message += $" Skipped {skipped.Count}: " + string.Join("; ", skipped) + ".";
@@ -889,18 +909,17 @@ public class POSController : Controller
     public async Task<IActionResult> CancelMonthlySupplied(DateTime supplyDate, int[]? selectedCustomerUids, string? area, CancellationToken ct)
     {
         _navContext.SetArea("POS");
-        IActionResult BackToList() => RedirectToAction(nameof(MonthlySupply), new { area });
         var customerIds = selectedCustomerUids?.Distinct().Where(x => x > 0).ToList() ?? [];
+        var supplyDay = supplyDate == default ? DateTime.Today : supplyDate.Date;
+        IActionResult BackToList() => RedirectToAction(nameof(MonthlySupply), new
+        {
+            area,
+            supplyDate = supplyDay.ToString("yyyy-MM-dd"),
+            selected = customerIds.Count > 0 ? string.Join(",", customerIds) : null
+        });
         if (customerIds.Count == 0)
         {
             TempData["Error"] = "Select at least one customer.";
-            return BackToList();
-        }
-
-        var supplyDay = supplyDate.Date;
-        if (supplyDay == default)
-        {
-            TempData["Error"] = "Select a supply date.";
             return BackToList();
         }
 
@@ -1046,7 +1065,13 @@ public class POSController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> MonthlySupplyItems(string? customerUids, int? activeCustomerUid, string? returnTo, CancellationToken ct)
+    public async Task<IActionResult> MonthlySupplyItems(
+        string? customerUids,
+        int? activeCustomerUid,
+        string? returnTo,
+        string? area,
+        DateTime? supplyDate,
+        CancellationToken ct)
     {
         var fromCustomers = IsCustomersReturn(returnTo);
         if (fromCustomers)
@@ -1055,13 +1080,20 @@ public class POSController : Controller
             _navContext.SetArea("POS");
         ViewData["Title"] = "Monthly Supply Items";
 
+        var listArea = string.IsNullOrWhiteSpace(area) ? null : area.Trim();
+        var day = supplyDate is null || supplyDate == default ? (DateTime?)null : supplyDate.Value.Date;
+
         var uidList = ParseCustomerUids(customerUids);
         if (uidList.Count == 0)
         {
             TempData["Error"] = "Select at least one customer.";
             return fromCustomers
                 ? RedirectToAction("Index", "Customers")
-                : RedirectToAction(nameof(MonthlySupply));
+                : RedirectToAction(nameof(MonthlySupply), new
+                {
+                    area = listArea,
+                    supplyDate = (day ?? DateTime.Today).ToString("yyyy-MM-dd")
+                });
         }
 
         var selectedCustomers = await _db.Customers.AsNoTracking()
@@ -1083,7 +1115,11 @@ public class POSController : Controller
             TempData["Error"] = "Selected customers were not found.";
             return fromCustomers
                 ? RedirectToAction("Index", "Customers")
-                : RedirectToAction(nameof(MonthlySupply));
+                : RedirectToAction(nameof(MonthlySupply), new
+                {
+                    area = listArea,
+                    supplyDate = (day ?? DateTime.Today).ToString("yyyy-MM-dd")
+                });
         }
 
         var active = selectedCustomers.FirstOrDefault(x => x.Uid == activeCustomerUid)
@@ -1136,7 +1172,9 @@ public class POSController : Controller
             CustomerUidsQuery = string.Join(",", selectedCustomers.Select(x => x.Uid)),
             Products = productOptions,
             Items = items,
-            ReturnTo = fromCustomers ? "Customers" : null
+            ReturnTo = fromCustomers ? "Customers" : null,
+            ListArea = listArea,
+            SupplyDate = day ?? DateTime.Today
         });
     }
 
@@ -1151,11 +1189,22 @@ public class POSController : Controller
             _navContext.SetArea("POS");
         var redirectUids = request.CustomerUids;
         var returnTo = fromCustomers ? "Customers" : null;
+        var listArea = string.IsNullOrWhiteSpace(request.Area) ? null : request.Area.Trim();
+        var supplyDateValue = string.IsNullOrWhiteSpace(request.SupplyDate) ? null : request.SupplyDate.Trim();
+
+        object ItemsRoute(int? activeUid) => new
+        {
+            customerUids = redirectUids,
+            activeCustomerUid = activeUid,
+            returnTo,
+            area = listArea,
+            supplyDate = supplyDateValue
+        };
 
         if (!ModelState.IsValid || request.CustomerUid <= 0 || request.ProductUid <= 0)
         {
             TempData["Error"] = "Select a customer and product, then enter quantity and price.";
-            return RedirectToAction(nameof(MonthlySupplyItems), new { customerUids = redirectUids, activeCustomerUid = request.CustomerUid, returnTo });
+            return RedirectToAction(nameof(MonthlySupplyItems), ItemsRoute(request.CustomerUid));
         }
 
         var customer = await _db.Customers.AsNoTracking()
@@ -1165,7 +1214,7 @@ public class POSController : Controller
             TempData["Error"] = "Customer was not found.";
             return fromCustomers
                 ? RedirectToAction("Index", "Customers")
-                : RedirectToAction(nameof(MonthlySupply));
+                : RedirectToAction(nameof(MonthlySupply), new { area = listArea, supplyDate = supplyDateValue, selected = redirectUids });
         }
 
         var product = await _db.Products.AsNoTracking()
@@ -1173,7 +1222,7 @@ public class POSController : Controller
         if (product is null)
         {
             TempData["Error"] = "Product was not found.";
-            return RedirectToAction(nameof(MonthlySupplyItems), new { customerUids = redirectUids, activeCustomerUid = request.CustomerUid, returnTo });
+            return RedirectToAction(nameof(MonthlySupplyItems), ItemsRoute(request.CustomerUid));
         }
 
         var unitPrice = request.UnitPrice > 0 ? request.UnitPrice : product.SalePrice;
@@ -1200,7 +1249,7 @@ public class POSController : Controller
             $"Added monthly supply item {product.ProductCode} for {customer.CustomerCode}", ct);
 
         TempData["Success"] = $"Added {product.ProductName} for {customer.CustomerName}.";
-        return RedirectToAction(nameof(MonthlySupplyItems), new { customerUids = redirectUids, activeCustomerUid = customer.Uid, returnTo });
+        return RedirectToAction(nameof(MonthlySupplyItems), ItemsRoute(customer.Uid));
     }
 
     [HttpPost]
@@ -1243,6 +1292,8 @@ public class POSController : Controller
         bool fromMonthlySupply = false,
         int? customerUid = null,
         string? returnTo = null,
+        string? area = null,
+        string? supplyDate = null,
         CancellationToken ct = default)
     {
         var fromCustomers = IsCustomersReturn(returnTo);
@@ -1251,22 +1302,43 @@ public class POSController : Controller
         else
             _navContext.SetArea("POS");
         var returnToValue = fromCustomers ? "Customers" : null;
+        var listArea = string.IsNullOrWhiteSpace(area) ? null : area.Trim();
+        var supplyDateValue = string.IsNullOrWhiteSpace(supplyDate) ? null : supplyDate.Trim();
         var row = await _db.CustomerMonthlySupplies.FirstOrDefaultAsync(x => x.Uid == id, ct);
         if (row is null)
         {
             TempData["Error"] = "Item was not found.";
             if (fromMonthlySupply)
             {
-                return RedirectToAction(nameof(MonthlySupply), new { openCustomer = customerUid });
+                return RedirectToAction(nameof(MonthlySupply), new
+                {
+                    openCustomer = customerUid,
+                    area = listArea,
+                    supplyDate = supplyDateValue,
+                    selected = customerUids
+                });
             }
 
-            return RedirectToAction(nameof(MonthlySupplyItems), new { customerUids, activeCustomerUid, returnTo = returnToValue });
+            return RedirectToAction(nameof(MonthlySupplyItems), new
+            {
+                customerUids,
+                activeCustomerUid,
+                returnTo = returnToValue,
+                area = listArea,
+                supplyDate = supplyDateValue
+            });
         }
 
         if (fromMonthlySupply && customerUid.HasValue && row.CustomerUid != customerUid)
         {
             TempData["Error"] = "Item does not belong to this customer.";
-            return RedirectToAction(nameof(MonthlySupply), new { openCustomer = customerUid });
+            return RedirectToAction(nameof(MonthlySupply), new
+            {
+                openCustomer = customerUid,
+                area = listArea,
+                supplyDate = supplyDateValue,
+                selected = customerUids
+            });
         }
 
         var ownerCustomerUid = row.CustomerUid;
@@ -1289,10 +1361,23 @@ public class POSController : Controller
         TempData["Success"] = "Item deleted.";
         if (fromMonthlySupply)
         {
-            return RedirectToAction(nameof(MonthlySupply), new { openCustomer = customerUid ?? ownerCustomerUid });
+            return RedirectToAction(nameof(MonthlySupply), new
+            {
+                openCustomer = customerUid ?? ownerCustomerUid,
+                area = listArea,
+                supplyDate = supplyDateValue,
+                selected = customerUids
+            });
         }
 
-        return RedirectToAction(nameof(MonthlySupplyItems), new { customerUids, activeCustomerUid = activeCustomerUid ?? ownerCustomerUid, returnTo = returnToValue });
+        return RedirectToAction(nameof(MonthlySupplyItems), new
+        {
+            customerUids,
+            activeCustomerUid = activeCustomerUid ?? ownerCustomerUid,
+            returnTo = returnToValue,
+            area = listArea,
+            supplyDate = supplyDateValue
+        });
     }
 
     private static bool IsCustomersReturn(string? returnTo) =>
@@ -2118,6 +2203,24 @@ public class POSController : Controller
             });
         }
 
+        // Dozen-priced products bill in dozens but inventory is tracked in pieces (12 per dozen).
+        var dozenProductIds = new HashSet<int>();
+        var unitIds = products.Values.Where(x => x.UnitUid != null).Select(x => x.UnitUid!.Value).Distinct().ToList();
+        if (unitIds.Count > 0)
+        {
+            var dozenUnitIds = await _db.ProductUnits.AsNoTracking()
+                .Where(u => unitIds.Contains(u.Uid)
+                            && ((u.UnitName != null && u.UnitName.ToLower().Contains("dozen"))
+                                || (u.UnitCode != null && u.UnitCode.ToLower().Contains("doz"))))
+                .Select(u => u.Uid)
+                .ToListAsync(ct);
+            foreach (var p in products.Values)
+            {
+                if (p.UnitUid is int uid && dozenUnitIds.Contains(uid))
+                    dozenProductIds.Add(p.Uid);
+            }
+        }
+
         foreach (var item in request.Items)
         {
             if (item.Quantity <= 0)
@@ -2279,6 +2382,9 @@ public class POSController : Controller
             {
                 var product = products[item.ProductUid];
                 var lineTotal = Math.Round(item.UnitPrice * item.Quantity, 2);
+                var stockQty = dozenProductIds.Contains(product.Uid)
+                    ? Math.Round(item.Quantity * 12m, 3)
+                    : item.Quantity;
                 _db.SalesInvoiceDetails.Add(new SalesInvoiceDetail
                 {
                     SalesInvoiceUid = invoice.Uid,
@@ -2298,7 +2404,7 @@ public class POSController : Controller
                 {
                     ProductUid = product.Uid,
                     ProductName = product.ProductName,
-                    Quantity = item.Quantity,
+                    Quantity = stockQty,
                     UnitCost = item.UnitPrice
                 });
             }
