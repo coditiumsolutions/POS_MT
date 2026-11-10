@@ -1,4 +1,4 @@
-name: Deploy TezHost (RDP / Self-hosted)
+﻿name: Deploy TezHost (RDP / Self-hosted)
 
 # Preferred for TezHost Windows VPS/Cloud with Remote Desktop:
 # install a GitHub Actions runner once via RDP (scripts/install-github-runner.ps1),
@@ -29,6 +29,9 @@ concurrency:
 jobs:
   deploy:
     runs-on: [self-hosted, windows, tezhost-windows]
+    defaults:
+      run:
+        shell: powershell
     if: >
       github.event_name == 'workflow_dispatch' && github.event.inputs.confirm == 'deploy'
       || github.event_name == 'push'
@@ -50,7 +53,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Verify configuration
-        shell: pwsh
+        shell: powershell
         run: |
           if ([string]::IsNullOrWhiteSpace($env:CONNECTION_STRING)) {
             throw "CONNECTION_STRING secret is not set"
@@ -73,7 +76,7 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Publish
-        shell: pwsh
+        shell: powershell
         run: |
           $extra = @("/p:SkipApplyDevConnectionString=true")
           $useSc = $env:SELF_CONTAINED
@@ -86,17 +89,17 @@ jobs:
           dotnet publish POS_MT.csproj -c Release -o .\publish @extra
 
       - name: Apply production settings
-        shell: pwsh
+        shell: powershell
         run: |
           .\scripts\ci-apply-production-settings.ps1 -PublishSettings .\publish\appsettings.json
 
       - name: Ensure App_Data exists in publish
-        shell: pwsh
+        shell: powershell
         run: |
           New-Item -ItemType Directory -Path .\publish\App_Data -Force | Out-Null
 
       - name: Deploy to IIS site folder
-        shell: pwsh
+        shell: powershell
         run: |
           .\scripts\ci-deploy-iis.ps1 `
             -PublishDir .\publish `
@@ -107,7 +110,7 @@ jobs:
 
       - name: Health check
         if: ${{ env.SITE_HEALTH_URL != '' }}
-        shell: pwsh
+        shell: powershell
         run: |
           $url = $env:SITE_HEALTH_URL
           Write-Host "Checking $url"
@@ -129,3 +132,4 @@ jobs:
             Start-Sleep -Seconds 5
           }
           throw "Health check failed for $url"
+
