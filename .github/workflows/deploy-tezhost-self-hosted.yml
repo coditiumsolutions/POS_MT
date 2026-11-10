@@ -1,0 +1,131 @@
+name: Deploy TezHost (RDP / Self-hosted)
+
+# Preferred for TezHost Windows VPS/Cloud with Remote Desktop:
+# install a GitHub Actions runner once via RDP (scripts/install-github-runner.ps1),
+# then this workflow publishes and copies into IIS on that same machine.
+on:
+  workflow_dispatch:
+    inputs:
+      self_contained:
+        description: "Publish self-contained win-x64"
+        type: boolean
+        default: false
+      confirm:
+        description: "Type deploy to confirm production upload"
+        required: true
+        type: string
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "Coditium_POS_Bug_Report.txt"
+      - ".gitignore"
+      - ".github/workflows/deploy-tezhost.yml"
+
+concurrency:
+  group: deploy-tezhost-self-hosted
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, windows, tezhost-windows]
+    if: >
+      github.event_name == 'workflow_dispatch' && github.event.inputs.confirm == 'deploy'
+      || github.event_name == 'push'
+    env:
+      CONNECTION_STRING: ${{ secrets.CONNECTION_STRING }}
+      CONNECTION_STRING_CENTRAL: ${{ secrets.CONNECTION_STRING_CENTRAL }}
+      CONNECTION_STRING_OFFLINE: ${{ secrets.CONNECTION_STRING_OFFLINE }}
+      POS_HUB_MODE: ${{ vars.POS_HUB_MODE }}
+      SHOP_NAME: ${{ vars.SHOP_NAME }}
+      ALLOWED_HOSTS: ${{ vars.ALLOWED_HOSTS }}
+      IIS_SITE_PATH: ${{ vars.IIS_SITE_PATH }}
+      IIS_APP_POOL: ${{ vars.IIS_APP_POOL }}
+      IIS_SITE_NAME: ${{ vars.IIS_SITE_NAME }}
+      SITE_HEALTH_URL: ${{ secrets.SITE_HEALTH_URL }}
+      SELF_CONTAINED: ${{ vars.SELF_CONTAINED }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify configuration
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CONNECTION_STRING)) {
+            throw "CONNECTION_STRING secret is not set"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:IIS_SITE_PATH)) {
+            throw "IIS_SITE_PATH variable is not set (example: C:\inetpub\wwwroot\pos)"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:POS_HUB_MODE)) { $env:POS_HUB_MODE = "Standard" }
+          if ([string]::IsNullOrWhiteSpace($env:SHOP_NAME)) { $env:SHOP_NAME = "Main Shop" }
+          if ([string]::IsNullOrWhiteSpace($env:ALLOWED_HOSTS)) { $env:ALLOWED_HOSTS = "*" }
+          if ([string]::IsNullOrWhiteSpace($env:SELF_CONTAINED)) { $env:SELF_CONTAINED = "false" }
+          "POS_HUB_MODE=$($env:POS_HUB_MODE)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "SHOP_NAME=$($env:SHOP_NAME)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "ALLOWED_HOSTS=$($env:ALLOWED_HOSTS)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "SELF_CONTAINED=$($env:SELF_CONTAINED)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          $extra = @("/p:SkipApplyDevConnectionString=true")
+          $useSc = $env:SELF_CONTAINED
+          if ("${{ github.event_name }}" -eq "workflow_dispatch" -and "${{ github.event.inputs.self_contained }}" -eq "true") {
+            $useSc = "true"
+          }
+          if ($useSc -eq "true") {
+            $extra += @("-r", "win-x64", "--self-contained", "true")
+          }
+          dotnet publish POS_MT.csproj -c Release -o .\publish @extra
+
+      - name: Apply production settings
+        shell: pwsh
+        run: |
+          .\scripts\ci-apply-production-settings.ps1 -PublishSettings .\publish\appsettings.json
+
+      - name: Ensure App_Data exists in publish
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path .\publish\App_Data -Force | Out-Null
+
+      - name: Deploy to IIS site folder
+        shell: pwsh
+        run: |
+          .\scripts\ci-deploy-iis.ps1 `
+            -PublishDir .\publish `
+            -SitePath $env:IIS_SITE_PATH `
+            -AppPoolName $env:IIS_APP_POOL `
+            -SiteName $env:IIS_SITE_NAME `
+            -OfflineFile .\deploy\app_offline.htm
+
+      - name: Health check
+        if: ${{ env.SITE_HEALTH_URL != '' }}
+        shell: pwsh
+        run: |
+          $url = $env:SITE_HEALTH_URL
+          Write-Host "Checking $url"
+          for ($i = 1; $i -le 5; $i++) {
+            try {
+              $resp = Invoke-WebRequest -Uri $url -UseBasicParsing -MaximumRedirection 0 -TimeoutSec 30 -ErrorAction Stop
+              $code = [int]$resp.StatusCode
+            }
+            catch {
+              if ($_.Exception.Response) {
+                $code = [int]$_.Exception.Response.StatusCode
+              }
+              else {
+                $code = 0
+              }
+            }
+            Write-Host "Attempt $i -> HTTP $code"
+            if ($code -in 200, 302, 401, 403) { exit 0 }
+            Start-Sleep -Seconds 5
+          }
+          throw "Health check failed for $url"

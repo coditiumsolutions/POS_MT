@@ -1,5 +1,7 @@
-name: Deploy TezHost
+name: Deploy TezHost (FTPS)
 
+# Optional path when you only have FTP/FTPS (no RDP).
+# Prefer "Deploy TezHost (RDP / Self-hosted)" when Remote Desktop is available.
 on:
   workflow_dispatch:
     inputs:
@@ -11,23 +13,15 @@ on:
         description: "Type deploy to confirm production upload"
         required: true
         type: string
-  push:
-    branches: [main]
-    paths-ignore:
-      - "**/*.md"
-      - "Coditium_POS_Bug_Report.txt"
-      - ".gitignore"
 
 concurrency:
-  group: deploy-tezhost
+  group: deploy-tezhost-ftps
   cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: >
-      github.event_name == 'workflow_dispatch' && github.event.inputs.confirm == 'deploy'
-      || github.event_name == 'push'
+    if: github.event.inputs.confirm == 'deploy'
     env:
       CONNECTION_STRING: ${{ secrets.CONNECTION_STRING }}
       CONNECTION_STRING_CENTRAL: ${{ secrets.CONNECTION_STRING_CENTRAL }}
