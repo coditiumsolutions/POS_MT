@@ -232,10 +232,10 @@
                 <button type="button" id="btnPrintReceipt" class="btn btn-outline-secondary btn-sm d-none" hidden>
                     <i class="bi bi-printer" aria-hidden="true"></i> Print Receipt
                 </button>
-                <button type="button" id="btnPay" class="btn btn-success btn-sm">
+                <button type="button" id="btnPay" class="btn btn-success btn-sm pos-sale-action-btn">
                     <i class="bi bi-cash-coin" aria-hidden="true"></i> Pay
                 </button>
-                <button type="button" id="btnClearBasket" class="btn btn-outline-danger btn-sm" title="Clear basket">
+                <button type="button" id="btnClearBasket" class="btn btn-outline-danger btn-sm pos-sale-action-btn" title="Clear basket">
                     <i class="bi bi-trash" aria-hidden="true"></i> Clear
                 </button>
             </div>
@@ -250,14 +250,13 @@
                             <th class="text-end">Price</th>
                         }
                         <th class="text-center">Qty</th>
-                        <th class="text-end">Remaining</th>
                         <th class="text-end">Line</th>
                         <th class="text-center" style="width:3rem;"></th>
                     </tr>
                 </thead>
                 <tbody id="basketBody">
                     <tr id="basketEmptyRow">
-                        <td colspan="@(Model.EnablePanelToggle ? 5 : 6)" class="text-muted text-center py-4">Basket is empty.</td>
+                        <td colspan="@(Model.EnablePanelToggle ? 4 : 5)" class="text-muted text-center py-4">Basket is empty.</td>
                     </tr>
                 </tbody>
             </table>
@@ -867,12 +866,6 @@
         basket.forEach(function (item) {
             const line = amountFromQty(item.qty, item.price, item.pricedByDozen);
             total += line;
-            const remaining = itemRemaining(item);
-            const remainingCls = remaining < 0 ? ' text-danger' : (remaining === 0 ? ' text-warning' : '');
-            const remainingCell =
-                '<td class="text-end fw-semibold pos-basket-remaining' + remainingCls + '" title="Stock left after this basket qty">' +
-                formatStockQty(remaining) +
-                '</td>';
             const priceInput =
                 '<input type="number" class="form-control form-control-sm pos-price-input" data-uid="' + item.uid +
                 '" min="0.01" step="0.01" inputmode="decimal" value="' + Number(item.price).toFixed(2) +
@@ -891,7 +884,6 @@
                     '" min="0.001" step="0.001" inputmode="decimal" value="' + formatQty(item.qty) + '" title="Enter quantity e.g. 0.5 or 0.25" />' +
                     '<button type="button" class="btn btn-sm btn-outline-secondary" data-action="inc" data-uid="' + item.uid + '" title="Increase"><i class="bi bi-plus-lg"></i></button>' +
                     '</div></td>' +
-                    remainingCell +
                     '<td class="text-end">' +
                     '<input type="number" class="form-control form-control-sm pos-line-input" data-uid="' + item.uid +
                     '" min="0.01" step="0.01" inputmode="decimal" value="' + line.toFixed(2) +
@@ -912,7 +904,6 @@
                     '" min="0.001" step="0.001" inputmode="decimal" value="' + formatQty(item.qty) + '" title="Enter quantity e.g. 0.5 or 0.25" />' +
                     '<button type="button" class="btn btn-sm btn-outline-secondary" data-action="inc" data-uid="' + item.uid + '" title="Increase"><i class="bi bi-plus-lg"></i></button>' +
                     '</div></td>' +
-                    remainingCell +
                     '<td class="text-end">' +
                     '<input type="number" class="form-control form-control-sm pos-line-input" data-uid="' + item.uid +
                     '" min="0.01" step="0.01" inputmode="decimal" value="' + line.toFixed(2) +
