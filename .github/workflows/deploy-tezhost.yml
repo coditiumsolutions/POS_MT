@@ -1,0 +1,118 @@
+name: Deploy TezHost
+
+on:
+  workflow_dispatch:
+    inputs:
+      self_contained:
+        description: "Publish self-contained win-x64 (use if TezHost has no ASP.NET Core 8 runtime)"
+        type: boolean
+        default: false
+      confirm:
+        description: "Type deploy to confirm production upload"
+        required: true
+        type: string
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "Coditium_POS_Bug_Report.txt"
+      - ".gitignore"
+
+concurrency:
+  group: deploy-tezhost
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' && github.event.inputs.confirm == 'deploy'
+      || github.event_name == 'push'
+    env:
+      CONNECTION_STRING: ${{ secrets.CONNECTION_STRING }}
+      CONNECTION_STRING_CENTRAL: ${{ secrets.CONNECTION_STRING_CENTRAL }}
+      CONNECTION_STRING_OFFLINE: ${{ secrets.CONNECTION_STRING_OFFLINE }}
+      POS_HUB_MODE: ${{ vars.POS_HUB_MODE }}
+      SHOP_NAME: ${{ vars.SHOP_NAME }}
+      ALLOWED_HOSTS: ${{ vars.ALLOWED_HOSTS }}
+      FTP_SERVER: ${{ secrets.FTP_SERVER }}
+      FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+      FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+      FTP_REMOTE_DIR: ${{ vars.FTP_REMOTE_DIR }}
+      FTP_PROTOCOL: ${{ vars.FTP_PROTOCOL }}
+      FTP_PORT: ${{ vars.FTP_PORT }}
+      FTP_VERIFY_CERT: ${{ vars.FTP_VERIFY_CERT }}
+      SITE_HEALTH_URL: ${{ secrets.SITE_HEALTH_URL }}
+      SELF_CONTAINED: ${{ vars.SELF_CONTAINED }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify required secrets
+        run: |
+          missing=0
+          for key in CONNECTION_STRING FTP_SERVER FTP_USERNAME FTP_PASSWORD; do
+            if [ -z "${!key}" ]; then
+              echo "::error::$key secret is not set"
+              missing=1
+            fi
+          done
+          echo "POS_HUB_MODE=${POS_HUB_MODE:-Standard}" >> "$GITHUB_ENV"
+          echo "SHOP_NAME=${SHOP_NAME:-Main Shop}" >> "$GITHUB_ENV"
+          echo "ALLOWED_HOSTS=${ALLOWED_HOSTS:-*}" >> "$GITHUB_ENV"
+          echo "FTP_REMOTE_DIR=${FTP_REMOTE_DIR:-/httpdocs/}" >> "$GITHUB_ENV"
+          echo "FTP_PROTOCOL=${FTP_PROTOCOL:-ftps}" >> "$GITHUB_ENV"
+          echo "FTP_PORT=${FTP_PORT:-21}" >> "$GITHUB_ENV"
+          echo "FTP_VERIFY_CERT=${FTP_VERIFY_CERT:-no}" >> "$GITHUB_ENV"
+          echo "SELF_CONTAINED=${SELF_CONTAINED:-false}" >> "$GITHUB_ENV"
+          exit $missing
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish
+        run: |
+          EXTRA_ARGS="/p:SkipApplyDevConnectionString=true"
+          USE_SC="${SELF_CONTAINED:-false}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.self_contained }}" = "true" ]; then
+            USE_SC=true
+          fi
+          if [ "$USE_SC" = "true" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS -r win-x64 --self-contained true"
+          fi
+          # shellcheck disable=SC2086
+          dotnet publish POS_MT.csproj -c Release -o ./publish $EXTRA_ARGS
+
+      - name: Apply production settings
+        run: python3 scripts/ci-apply-production-settings.py --publish-settings ./publish/appsettings.json
+
+      - name: Ensure App_Data placeholder exists
+        run: |
+          mkdir -p ./publish/App_Data
+          if [ ! -f ./publish/App_Data/.gitkeep ]; then
+            echo "Keep App_Data on deploy target" > ./publish/App_Data/.gitkeep
+          fi
+
+      - name: Deploy via FTPS
+        run: |
+          chmod +x scripts/ci-ftps-deploy.sh
+          LOCAL_DIR=./publish OFFLINE_FILE=deploy/app_offline.htm \
+            bash scripts/ci-ftps-deploy.sh
+
+      - name: Health check
+        if: ${{ env.SITE_HEALTH_URL != '' }}
+        run: |
+          echo "Checking $SITE_HEALTH_URL"
+          for i in 1 2 3 4 5; do
+            code=$(curl -sS -o /tmp/health.out -w "%{http_code}" "$SITE_HEALTH_URL" || true)
+            echo "Attempt $i -> HTTP $code"
+            if [ "$code" = "200" ] || [ "$code" = "302" ] || [ "$code" = "401" ] || [ "$code" = "403" ]; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Health check failed for $SITE_HEALTH_URL"
+          exit 1

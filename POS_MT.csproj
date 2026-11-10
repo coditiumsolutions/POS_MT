@@ -32,7 +32,8 @@
     After publish, copy the real POS_MT connection string into the published appsettings.json
     so the server uses the same DB as local without committing secrets to source control.
   -->
-  <Target Name="ApplyDevConnectionStringOnPublish" AfterTargets="Publish">
+  <!-- Local/shop publish. CI sets SkipApplyDevConnectionString=true and injects production secrets separately. -->
+  <Target Name="ApplyDevConnectionStringOnPublish" AfterTargets="Publish" Condition="'$(SkipApplyDevConnectionString)' != 'true'">
     <PropertyGroup>
       <_DevSettings>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\appsettings.Development.json'))</_DevSettings>
       <_PublishSettings>$([System.IO.Path]::GetFullPath('$(PublishDir)appsettings.json'))</_PublishSettings>
@@ -45,7 +46,7 @@
   </Target>
 
   <!-- Optional: include local offline catalog in publish output (App_Data is gitignored). -->
-  <Target Name="CopyOfflineSqliteOnPublish" AfterTargets="ApplyDevConnectionStringOnPublish">
+  <Target Name="CopyOfflineSqliteOnPublish" AfterTargets="ApplyDevConnectionStringOnPublish" Condition="'$(SkipApplyDevConnectionString)' != 'true'">
     <PropertyGroup>
       <_OfflineDb>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\App_Data\pos-offline.db'))</_OfflineDb>
       <_PublishAppData>$([System.IO.Path]::GetFullPath('$(PublishDir)App_Data\'))</_PublishAppData>

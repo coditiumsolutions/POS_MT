@@ -1,0 +1,27 @@
+name: Build
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore POS_MT.csproj
+
+      - name: Publish (CI, no secrets)
+        run: >
+          dotnet publish POS_MT.csproj -c Release -o ./publish
+          /p:SkipApplyDevConnectionString=true
