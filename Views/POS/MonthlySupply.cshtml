@@ -194,6 +194,14 @@
                                 </div>
                                 <div class="monthly-supply-items-loading text-muted px-3 pb-3">Loading items…</div>
                                 <div class="monthly-supply-items-host d-none px-3 pb-3"></div>
+                                <div class="monthly-supply-month-invoices px-3 pb-3 border-top pt-3">
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                        <strong>Supplied this month</strong>
+                                        <span class="text-muted small monthly-supply-month-label">—</span>
+                                    </div>
+                                    <div class="monthly-supply-month-loading text-muted">Loading month invoices…</div>
+                                    <div class="monthly-supply-month-host d-none"></div>
+                                </div>
                             </div>
                         </td>
                     </tr>
@@ -210,7 +218,11 @@
             (function () {
                 const forDateUrl = '@Url.Action("CustomerMonthlySupplyForDate", "POS")';
                 const summariesUrl = '@Url.Action("CustomerMonthlySupplySummaries", "POS")';
+                const monthInvoicesUrl = '@Url.Action("CustomerMonthlyMonthInvoices", "POS")';
+                const invoiceDetailsUrl = '@Url.Action("Details", "SalesInvoices")';
+                const invoicePrintUrl = '@Url.Action("Print", "SalesInvoices")';
                 const supplyDateInput = document.getElementById('supplyDate');
+                const loadedMonthInvoices = new Set();
 
                 const selectAll = document.getElementById('monthlySupplySelectAll');
                 const checks = Array.from(document.querySelectorAll('.monthly-supply-check'));
@@ -525,6 +537,113 @@
                         '</div>';
                 }
 
+                function renderMonthInvoices(detailRow, payload) {
+                    const host = detailRow.querySelector('.monthly-supply-month-host');
+                    const loading = detailRow.querySelector('.monthly-supply-month-loading');
+                    const monthLabel = detailRow.querySelector('.monthly-supply-month-label');
+                    if (!host || !loading) return;
+
+                    if (monthLabel) {
+                        monthLabel.textContent = payload.monthLabel || payload.month || '—';
+                    }
+
+                    const invoices = Array.isArray(payload.invoices) ? payload.invoices : [];
+                    if (!invoices.length) {
+                        host.innerHTML = '<p class="text-muted mb-0">No Monthly Supply invoice for this customer in <strong>' +
+                            escapeHtml(payload.monthLabel || payload.month || 'this month') +
+                            '</strong> yet. Use <strong>Save Supplied</strong> to create one.</p>';
+                        loading.classList.add('d-none');
+                        host.classList.remove('d-none');
+                        return;
+                    }
+
+                    let html = '';
+                    invoices.forEach(function (inv) {
+                        const days = Array.isArray(inv.days) ? inv.days : [];
+                        let dayRows = '';
+                        days.forEach(function (day) {
+                            const lines = Array.isArray(day.lines) ? day.lines : [];
+                            const itemsPreview = lines.map(function (l) {
+                                return escapeHtml(l.productName || l.productCode || '—') + ' × ' + formatMoney(l.quantity);
+                            }).join(', ');
+                            dayRows +=
+                                '<tr>' +
+                                '<td>' + escapeHtml(day.entryDateLabel || day.entryDate || '—') + '</td>' +
+                                '<td class="small">' + (itemsPreview || '—') + '</td>' +
+                                '<td class="text-end">' + formatMoney(day.quantity) + '</td>' +
+                                '<td class="text-end fw-semibold">' + formatMoney(day.amount) + '</td>' +
+                                '</tr>';
+                        });
+
+                        html +=
+                            '<div class="border rounded bg-white mb-2 p-2">' +
+                            '<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">' +
+                            '<div>' +
+                            '<div class="fw-semibold">' + escapeHtml(inv.invoiceNo || '—') + '</div>' +
+                            '<div class="small text-muted">' +
+                            escapeHtml(String(inv.supplyDays || days.length)) + ' supply day(s) · ' +
+                            escapeHtml(inv.invoiceStatus || '') + ' · ' +
+                            escapeHtml(inv.paymentStatus || '') +
+                            ' · Net ' + formatMoney(inv.netAmount) +
+                            '</div>' +
+                            '</div>' +
+                            '<div class="d-flex flex-wrap gap-1">' +
+                            '<a class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener" href="' +
+                            invoiceDetailsUrl + '/' + encodeURIComponent(inv.uid) + '">Open Invoice</a>' +
+                            '<a class="btn btn-sm btn-outline-dark" target="_blank" rel="noopener" href="' +
+                            invoicePrintUrl + '/' + encodeURIComponent(inv.uid) + '">Print</a>' +
+                            '</div>' +
+                            '</div>';
+
+                        if (dayRows) {
+                            html +=
+                                '<div class="table-responsive">' +
+                                '<table class="table table-sm table-striped align-middle mb-0">' +
+                                '<thead class="table-light"><tr>' +
+                                '<th>Supply Date</th><th>Items</th>' +
+                                '<th class="text-end">Qty</th><th class="text-end">Amount</th>' +
+                                '</tr></thead><tbody>' + dayRows + '</tbody></table></div>';
+                        } else {
+                            html += '<p class="text-muted small mb-0">Invoice exists but has no supply lines yet.</p>';
+                        }
+
+                        html += '</div>';
+                    });
+
+                    host.innerHTML = html;
+                    loading.classList.add('d-none');
+                    host.classList.remove('d-none');
+                }
+
+                function loadMonthInvoices(customerUid, detailRow, force) {
+                    const host = detailRow.querySelector('.monthly-supply-month-host');
+                    const loading = detailRow.querySelector('.monthly-supply-month-loading');
+                    if (!host || !loading) return Promise.resolve();
+
+                    const day = getSupplyDateValue();
+                    const cacheKey = customerUid + '|' + day.substring(0, 7);
+                    if (!force && loadedMonthInvoices.has(cacheKey) && !host.classList.contains('d-none')) {
+                        return Promise.resolve();
+                    }
+
+                    loading.classList.remove('d-none');
+                    host.classList.add('d-none');
+                    loading.textContent = 'Loading month invoices…';
+
+                    return fetch(monthInvoicesUrl + '?customerUid=' + encodeURIComponent(customerUid) + '&supplyDate=' + encodeURIComponent(day), {
+                        headers: { 'Accept': 'application/json' }
+                    }).then(function (res) {
+                        if (!res.ok) throw new Error('Failed to load month invoices');
+                        return res.json();
+                    }).then(function (payload) {
+                        loadedMonthInvoices.add(cacheKey);
+                        renderMonthInvoices(detailRow, payload);
+                    }).catch(function () {
+                        loading.textContent = 'Could not load month invoices. Try again.';
+                        host.classList.add('d-none');
+                    });
+                }
+
                 function loadItems(customerUid, detailRow, force) {
                     const host = detailRow.querySelector('.monthly-supply-items-host');
                     const loading = detailRow.querySelector('.monthly-supply-items-loading');
@@ -533,6 +652,7 @@
                     if (!force && loadedCustomers.has(cacheKey)) {
                         loading.classList.add('d-none');
                         host.classList.remove('d-none');
+                        loadMonthInvoices(customerUid, detailRow, force);
                         return Promise.resolve();
                     }
 
@@ -550,15 +670,18 @@
                         renderItems(host, customerUid, payload);
                         loading.classList.add('d-none');
                         host.classList.remove('d-none');
+                        return loadMonthInvoices(customerUid, detailRow, force);
                     }).catch(function () {
                         loading.textContent = 'Could not load supply. Try again.';
                         host.classList.add('d-none');
+                        loadMonthInvoices(customerUid, detailRow, force);
                     });
                 }
 
                 if (supplyDateInput) {
                     supplyDateInput.addEventListener('change', function () {
                         loadedCustomers.clear();
+                        loadedMonthInvoices.clear();
                         loadRowPreviews();
                         if (activeCustomerUid) {
                             loadItems(activeCustomerUid, detailRowFor(activeCustomerUid), true);

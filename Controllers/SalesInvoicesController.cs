@@ -1,12 +1,35 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization; using Microsoft.AspNetCore.Mvc; using Microsoft.AspNetCore.Mvc.Rendering; using Microsoft.EntityFrameworkCore;
 using POS_MT.Data; using POS_MT.Interfaces; using POS_MT.Models; using POS_MT.Services; using POS_MT.ViewModels;
 namespace POS_MT.Controllers;
 [Authorize(Policy = "CanViewSales")]
 public class SalesInvoicesController : Controller {
+  /// <summary>Monthly Supply invoices use InvoiceDate = month start; detail lines carry EntryDate:yyyy-MM-dd.</summary>
+  private const string MonthlySupplyRemarkPrefix = "Monthly Supply";
+  private const string MonthlyEntryDatePrefix = "EntryDate:";
+
   private readonly POSDbContext _db; private readonly IAuditService _audit; private readonly INavContextService _navContext;
   private readonly IInventoryLedgerService _inventory;
   public SalesInvoicesController(POSDbContext db, IAuditService audit, INavContextService navContext, IInventoryLedgerService inventory){ _db=db; _audit=audit; _navContext=navContext; _inventory=inventory; }
   private void EnsureSalesInvoiceNav() => _navContext.SetArea("SalesInvoice");
+
+  private static List<string> BuildEntryDateRemarkKeys(DateTime startDate, DateTime toInclusive)
+  {
+    var keys = new List<string>();
+    for (var day = startDate.Date; day <= toInclusive.Date; day = day.AddDays(1))
+      keys.Add($"{MonthlyEntryDatePrefix}{day:yyyy-MM-dd}");
+    return keys;
+  }
+
+  private static DateTime? TryParseEntryDate(string? detailRemarks)
+  {
+    if (string.IsNullOrWhiteSpace(detailRemarks)
+        || !detailRemarks.StartsWith(MonthlyEntryDatePrefix, StringComparison.OrdinalIgnoreCase)
+        || !DateTime.TryParse(detailRemarks[MonthlyEntryDatePrefix.Length..], CultureInfo.InvariantCulture,
+            DateTimeStyles.None, out var entryDate))
+      return null;
+    return entryDate.Date;
+  }
   private async Task LoadLookups(CancellationToken ct, int? selectedBranchUid = null, int? selectedCustomerUid = null, int? selectedPaymentMethodUid = null, string? selectedBranch = null, string? selectedTerminal = null){
     ViewBag.Branches=new SelectList(await _db.Branches.AsNoTracking().Where(x=>x.IsActive).OrderBy(x=>x.BranchName).ToListAsync(ct),"Uid","BranchName", selectedBranchUid);
     var branchNames = await _db.Branches.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.BranchName).Select(x => x.BranchName).ToListAsync(ct);
@@ -41,7 +64,22 @@ public class SalesInvoicesController : Controller {
     string? customerType, int? month, DateTime? dateFrom, DateTime? dateTo, string? search, CancellationToken ct)
   {
     var fromDay = dateFrom?.Date;
-    var toExclusive = dateTo?.Date.AddDays(1);
+    var toInclusive = dateTo?.Date;
+    if (fromDay.HasValue && toInclusive.HasValue && toInclusive < fromDay)
+      (fromDay, toInclusive) = (toInclusive, fromDay);
+    var toExclusive = toInclusive?.AddDays(1);
+    var hasDateFilter = fromDay.HasValue || toInclusive.HasValue;
+    List<string> entryDateKeys = [];
+    DateTime? monthSpanStart = null;
+    DateTime? monthSpanEndExclusive = null;
+    if (hasDateFilter)
+    {
+      var entryStart = fromDay ?? toInclusive!.Value;
+      var entryEnd = toInclusive ?? fromDay!.Value;
+      entryDateKeys = BuildEntryDateRemarkKeys(entryStart, entryEnd);
+      monthSpanStart = new DateTime(entryStart.Year, entryStart.Month, 1);
+      monthSpanEndExclusive = new DateTime(entryEnd.Year, entryEnd.Month, 1).AddMonths(1);
+    }
 
     var query =
       from inv in _db.SalesInvoices.AsNoTracking()
@@ -66,7 +104,7 @@ public class SalesInvoicesController : Controller {
         !x.c.CustomerName.Contains("Walk-in") &&
         !x.c.CustomerName.Contains("Walk-In") &&
         !x.c.CustomerName.Contains("Walk In") &&
-        (x.inv.Remarks == null || !x.inv.Remarks.StartsWith("Monthly Supply")));
+        (x.inv.Remarks == null || !x.inv.Remarks.StartsWith(MonthlySupplyRemarkPrefix)));
     }
     else if (string.Equals(customerType, "monthly", StringComparison.OrdinalIgnoreCase))
     {
@@ -76,17 +114,32 @@ public class SalesInvoicesController : Controller {
         !x.c.CustomerName.Contains("Walk-In") &&
         !x.c.CustomerName.Contains("Walk In") &&
         x.inv.Remarks != null &&
-        x.inv.Remarks.StartsWith("Monthly Supply"));
+        x.inv.Remarks.StartsWith(MonthlySupplyRemarkPrefix));
     }
 
-    if (fromDay.HasValue)
-      query = query.Where(x => x.inv.InvoiceDate >= fromDay.Value);
-
-    if (toExclusive.HasValue)
-      query = query.Where(x => x.inv.InvoiceDate < toExclusive.Value);
-
-    if (month is >= 1 and <= 12 && !fromDay.HasValue && !dateTo.HasValue)
+    if (hasDateFilter)
+    {
+      var keys = entryDateKeys;
+      var spanStart = monthSpanStart!.Value;
+      var spanEnd = monthSpanEndExclusive!.Value;
+      query = query.Where(x =>
+        ((x.inv.Remarks == null || !x.inv.Remarks.StartsWith(MonthlySupplyRemarkPrefix))
+         && (!fromDay.HasValue || x.inv.InvoiceDate >= fromDay.Value)
+         && (!toExclusive.HasValue || x.inv.InvoiceDate < toExclusive.Value))
+        ||
+        (x.inv.Remarks != null
+         && x.inv.Remarks.StartsWith(MonthlySupplyRemarkPrefix)
+         && x.inv.InvoiceDate >= spanStart
+         && x.inv.InvoiceDate < spanEnd
+         && _db.SalesInvoiceDetails.Any(d =>
+              d.SalesInvoiceUid == x.inv.Uid
+              && d.Remarks != null
+              && keys.Contains(d.Remarks))));
+    }
+    else if (month is >= 1 and <= 12)
+    {
       query = query.Where(x => x.inv.InvoiceDate.Month == month.Value);
+    }
 
     if (!string.IsNullOrWhiteSpace(search))
     {
@@ -100,7 +153,7 @@ public class SalesInvoicesController : Controller {
         (x.c != null && x.c.CustomerCode.Contains(term)));
     }
 
-    return await query
+    var rows = await query
       .OrderByDescending(x => x.inv.InvoiceDate)
       .ThenByDescending(x => x.inv.Uid)
       .Select(x => new SalesInvoiceListItemViewModel
@@ -116,7 +169,7 @@ public class SalesInvoicesController : Controller {
              x.c.CustomerName.Contains("Walk-In") ||
              x.c.CustomerName.Contains("Walk In")
               ? "Walk-in"
-              : (x.inv.Remarks != null && x.inv.Remarks.StartsWith("Monthly Supply")
+              : (x.inv.Remarks != null && x.inv.Remarks.StartsWith(MonthlySupplyRemarkPrefix)
                   ? "Monthly"
                   : "Credit")),
         NetAmount = x.inv.NetAmount,
@@ -124,6 +177,48 @@ public class SalesInvoicesController : Controller {
         InvoiceStatus = x.inv.InvoiceStatus,
         PaymentStatus = x.inv.PaymentStatus
       }).ToListAsync(ct);
+
+    if (hasDateFilter && entryDateKeys.Count > 0)
+    {
+      var monthlyIds = rows.Where(r => r.CustomerType == "Monthly").Select(r => r.Uid).ToList();
+      if (monthlyIds.Count > 0)
+      {
+        var keys = entryDateKeys;
+        var matchingLines = await _db.SalesInvoiceDetails.AsNoTracking()
+          .Where(d => monthlyIds.Contains(d.SalesInvoiceUid)
+                      && d.Remarks != null
+                      && keys.Contains(d.Remarks))
+          .Select(d => new { d.SalesInvoiceUid, d.Remarks, d.LineTotal })
+          .ToListAsync(ct);
+
+        var byInvoice = matchingLines
+          .GroupBy(x => x.SalesInvoiceUid)
+          .ToDictionary(g => g.Key, g => g.ToList());
+
+        foreach (var row in rows.Where(r => r.CustomerType == "Monthly"))
+        {
+          if (!byInvoice.TryGetValue(row.Uid, out var lines) || lines.Count == 0)
+            continue;
+
+          row.NetAmount = lines.Sum(x => x.LineTotal);
+          var entryDates = lines
+            .Select(x => TryParseEntryDate(x.Remarks))
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .OrderByDescending(x => x)
+            .ToList();
+          if (entryDates.Count > 0)
+            row.InvoiceDate = entryDates[0];
+        }
+
+        rows = rows
+          .OrderByDescending(x => x.InvoiceDate)
+          .ThenByDescending(x => x.Uid)
+          .ToList();
+      }
+    }
+
+    return rows;
   }
 
   /// <summary>Printable sales report for the same filters as Index (dates, type, month).</summary>

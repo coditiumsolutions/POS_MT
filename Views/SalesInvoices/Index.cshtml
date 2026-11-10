@@ -2,7 +2,6 @@
 @{
     ViewData["Title"] = "Sales Invoices";
     var type = Model.CustomerType ?? string.Empty;
-    var selectedMonth = Model.Month;
 }
 <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
     <span class="sales-invoices-heading">Sales Invoices</span>
@@ -50,31 +49,6 @@
                 }
             </select>
         </div>
-        <div class="col-sm-6 col-md-4 col-lg-3">
-            <label class="form-label mb-1" for="month">Month</label>
-            <select class="form-select form-select-sm" id="month" name="month">
-                @if (selectedMonth is null)
-                {
-                    <option value="" selected>All Months</option>
-                }
-                else
-                {
-                    <option value="">All Months</option>
-                }
-                @for (var m = 1; m <= 12; m++)
-                {
-                    var name = System.Globalization.CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(m);
-                    if (selectedMonth == m)
-                    {
-                        <option value="@m" selected>@name</option>
-                    }
-                    else
-                    {
-                        <option value="@m">@name</option>
-                    }
-                }
-            </select>
-        </div>
         <div class="col-sm-6 col-md-4 col-lg-2">
             <label class="form-label mb-1" for="dateFrom">Date From</label>
             <input type="date"
@@ -118,7 +92,6 @@
 <form id="deleteInvoiceForm" method="post" class="d-none">
     @Html.AntiForgeryToken()
     <input type="hidden" name="customerType" value="@Model.CustomerType" />
-    <input type="hidden" name="month" value="@Model.Month" />
     <input type="hidden" name="dateFrom" value="@(Model.DateFrom?.ToString("yyyy-MM-dd") ?? string.Empty)" />
     <input type="hidden" name="dateTo" value="@(Model.DateTo?.ToString("yyyy-MM-dd") ?? string.Empty)" />
 </form>
@@ -163,7 +136,6 @@
                     <form asp-action="Delete" asp-route-id="@item.Uid" method="post" class="d-inline">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="customerType" value="@Model.CustomerType" />
-                        <input type="hidden" name="month" value="@Model.Month" />
                         <input type="hidden" name="dateFrom" value="@(Model.DateFrom?.ToString("yyyy-MM-dd") ?? string.Empty)" />
                         <input type="hidden" name="dateTo" value="@(Model.DateTo?.ToString("yyyy-MM-dd") ?? string.Empty)" />
                         <button type="submit"
@@ -302,11 +274,8 @@
 
             const form = filterForm;
             const type = document.getElementById('customerType');
-            const month = document.getElementById('month');
-            if (!form || !type || !month) return;
-            function submitFilter() { form.submit(); }
-            type.addEventListener('change', submitFilter);
-            month.addEventListener('change', submitFilter);
+            if (!form || !type) return;
+            type.addEventListener('change', function () { form.submit(); });
         })();
     </script>
 }

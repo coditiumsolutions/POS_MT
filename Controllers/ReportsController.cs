@@ -12,6 +12,10 @@ namespace POS_MT.Controllers;
 [Authorize(Policy = "ManagerOrAdmin")]
 public class ReportsController : Controller
 {
+    /// <summary>Monthly Supply invoices use InvoiceDate = month start; detail lines carry EntryDate:yyyy-MM-dd.</summary>
+    private const string MonthlySupplyRemarkPrefix = "Monthly Supply";
+    private const string MonthlyEntryDatePrefix = "EntryDate:";
+
     private readonly POSDbContext _db;
     private readonly INavContextService _navContext;
 
@@ -22,6 +26,32 @@ public class ReportsController : Controller
     }
 
     private void EnsureReportsNav() => _navContext.SetArea("Reports");
+
+    private static List<string> BuildEntryDateRemarkKeys(DateTime startDate, DateTime toInclusive)
+    {
+        var keys = new List<string>();
+        for (var day = startDate.Date; day <= toInclusive.Date; day = day.AddDays(1))
+            keys.Add($"{MonthlyEntryDatePrefix}{day:yyyy-MM-dd}");
+        return keys;
+    }
+
+    private static bool IsMonthlySupplyInvoice(string? invoiceRemarks) =>
+        !string.IsNullOrWhiteSpace(invoiceRemarks)
+        && invoiceRemarks.StartsWith(MonthlySupplyRemarkPrefix, StringComparison.Ordinal);
+
+    private static DateTime ResolveReportLineDate(string? invoiceRemarks, string? detailRemarks, DateTime invoiceDate)
+    {
+        if (IsMonthlySupplyInvoice(invoiceRemarks)
+            && !string.IsNullOrWhiteSpace(detailRemarks)
+            && detailRemarks.StartsWith(MonthlyEntryDatePrefix, StringComparison.OrdinalIgnoreCase)
+            && DateTime.TryParse(detailRemarks[MonthlyEntryDatePrefix.Length..], CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var entryDate))
+        {
+            return entryDate.Date;
+        }
+
+        return invoiceDate;
+    }
 
     [HttpGet]
     public async Task<IActionResult> TotalSale(int? month, int? year, string? saleType, DateTime? date, CancellationToken ct)
@@ -432,17 +462,32 @@ public class ReportsController : Controller
 
         var endExclusive = toInclusive.AddDays(1);
         var selectedSaleType = NormalizeSalesItemSaleType(saleType);
+        var entryDateKeys = BuildEntryDateRemarkKeys(startDate, toInclusive);
+        var monthSpanStart = new DateTime(startDate.Year, startDate.Month, 1);
+        var monthSpanEndExclusive = new DateTime(toInclusive.Year, toInclusive.Month, 1).AddMonths(1);
 
         var query =
             from d in _db.SalesInvoiceDetails.AsNoTracking()
             join inv in _db.SalesInvoices.AsNoTracking() on d.SalesInvoiceUid equals inv.Uid
             join c in _db.Customers.AsNoTracking() on inv.CustomerUid equals c.Uid into cj
             from c in cj.DefaultIfEmpty()
-            where inv.InvoiceDate >= startDate
-                  && inv.InvoiceDate < endExclusive
-                  && inv.InvoiceStatus != "Cancelled"
+            where inv.InvoiceStatus != "Cancelled"
                   && inv.InvoiceStatus != SalesReturnsController.ReturnStatus
                   && inv.InvoiceStatus != WastageController.WastageStatus
+                  && (
+                      // Normal sales: filter by invoice date
+                      ((inv.Remarks == null || !inv.Remarks.StartsWith(MonthlySupplyRemarkPrefix))
+                       && inv.InvoiceDate >= startDate
+                       && inv.InvoiceDate < endExclusive)
+                      ||
+                      // Monthly Supply: one invoice per month; day is on detail Remarks EntryDate:yyyy-MM-dd
+                      (inv.Remarks != null
+                       && inv.Remarks.StartsWith(MonthlySupplyRemarkPrefix)
+                       && inv.InvoiceDate >= monthSpanStart
+                       && inv.InvoiceDate < monthSpanEndExclusive
+                       && d.Remarks != null
+                       && entryDateKeys.Contains(d.Remarks))
+                  )
             select new { d, inv, c };
 
         if (selectedSaleType is "Cash" or "Walk-in")
@@ -461,7 +506,7 @@ public class ReportsController : Controller
                 !x.c.CustomerName.Contains("Walk-In") &&
                 !x.c.CustomerName.Contains("Walk In") &&
                 x.inv.Remarks != null &&
-                x.inv.Remarks.StartsWith("Monthly Supply"));
+                x.inv.Remarks.StartsWith(MonthlySupplyRemarkPrefix));
         }
         else if (selectedSaleType == "Credit")
         {
@@ -470,29 +515,22 @@ public class ReportsController : Controller
                 !x.c.CustomerName.Contains("Walk-in") &&
                 !x.c.CustomerName.Contains("Walk-In") &&
                 !x.c.CustomerName.Contains("Walk In") &&
-                (x.inv.Remarks == null || !x.inv.Remarks.StartsWith("Monthly Supply")));
+                (x.inv.Remarks == null || !x.inv.Remarks.StartsWith(MonthlySupplyRemarkPrefix)));
         }
 
-        var rows = await query
+        var raw = await query
             .OrderByDescending(x => x.inv.InvoiceDate)
             .ThenByDescending(x => x.inv.Uid)
             .ThenBy(x => x.d.Uid)
-            .Select(x => new SalesItemReportRowViewModel
+            .Select(x => new
             {
-                InvoiceDate = x.inv.InvoiceDate,
+                x.inv.InvoiceDate,
+                InvoiceRemarks = x.inv.Remarks,
+                DetailRemarks = x.d.Remarks,
                 InvoiceNo = x.inv.InvoiceNo,
                 SalesInvoiceUid = x.inv.Uid,
                 CustomerName = x.c != null ? x.c.CustomerName : "—",
-                SaleType = x.c == null
-                    ? "—"
-                    : (x.c.CustomerCode == "C001" ||
-                       x.c.CustomerName.Contains("Walk-in") ||
-                       x.c.CustomerName.Contains("Walk-In") ||
-                       x.c.CustomerName.Contains("Walk In")
-                        ? "Walk-in"
-                        : (x.inv.Remarks != null && x.inv.Remarks.StartsWith("Monthly Supply")
-                            ? "Monthly"
-                            : "Credit")),
+                CustomerCode = x.c != null ? x.c.CustomerCode : null,
                 ProductCode = x.d.ProductCode ?? string.Empty,
                 ProductName = x.d.ProductName ?? x.d.ProductCode ?? "—",
                 Quantity = x.d.Quantity,
@@ -500,6 +538,31 @@ public class ReportsController : Controller
                 LineTotal = x.d.LineTotal
             })
             .ToListAsync(ct);
+
+        var rows = raw.Select(x =>
+        {
+            var isWalkIn = x.CustomerCode == "C001"
+                || (!string.IsNullOrWhiteSpace(x.CustomerName)
+                    && (x.CustomerName.Contains("Walk-in", StringComparison.OrdinalIgnoreCase)
+                        || x.CustomerName.Contains("Walk In", StringComparison.OrdinalIgnoreCase)));
+            var isMonthly = IsMonthlySupplyInvoice(x.InvoiceRemarks);
+            return new SalesItemReportRowViewModel
+            {
+                InvoiceDate = ResolveReportLineDate(x.InvoiceRemarks, x.DetailRemarks, x.InvoiceDate),
+                InvoiceNo = x.InvoiceNo,
+                SalesInvoiceUid = x.SalesInvoiceUid,
+                CustomerName = x.CustomerName,
+                SaleType = isWalkIn ? "Walk-in" : (isMonthly ? "Monthly" : "Credit"),
+                ProductCode = x.ProductCode,
+                ProductName = x.ProductName,
+                Quantity = x.Quantity,
+                UnitPrice = x.UnitPrice,
+                LineTotal = x.LineTotal
+            };
+        })
+        .OrderByDescending(x => x.InvoiceDate)
+        .ThenByDescending(x => x.SalesInvoiceUid)
+        .ToList();
 
         return View(new SalesItemReportViewModel
         {
@@ -546,6 +609,9 @@ public class ReportsController : Controller
         var endExclusive = toInclusive.AddDays(1);
         var selectedSaleType = NormalizeSalesItemSaleType(saleType);
         var search = string.IsNullOrWhiteSpace(itemSearch) ? string.Empty : itemSearch.Trim();
+        var entryDateKeys = BuildEntryDateRemarkKeys(startDate, toInclusive);
+        var monthSpanStart = new DateTime(startDate.Year, startDate.Month, 1);
+        var monthSpanEndExclusive = new DateTime(toInclusive.Year, toInclusive.Month, 1).AddMonths(1);
 
         var query =
             from d in _db.SalesInvoiceDetails.AsNoTracking()
@@ -556,11 +622,21 @@ public class ReportsController : Controller
             from p in pj.DefaultIfEmpty()
             join u in _db.ProductUnits.AsNoTracking() on p.UnitUid equals u.Uid into uj
             from u in uj.DefaultIfEmpty()
-            where inv.InvoiceDate >= startDate
-                  && inv.InvoiceDate < endExclusive
-                  && inv.InvoiceStatus != "Cancelled"
+            where inv.InvoiceStatus != "Cancelled"
                   && inv.InvoiceStatus != SalesReturnsController.ReturnStatus
                   && inv.InvoiceStatus != WastageController.WastageStatus
+                  && (
+                      ((inv.Remarks == null || !inv.Remarks.StartsWith(MonthlySupplyRemarkPrefix))
+                       && inv.InvoiceDate >= startDate
+                       && inv.InvoiceDate < endExclusive)
+                      ||
+                      (inv.Remarks != null
+                       && inv.Remarks.StartsWith(MonthlySupplyRemarkPrefix)
+                       && inv.InvoiceDate >= monthSpanStart
+                       && inv.InvoiceDate < monthSpanEndExclusive
+                       && d.Remarks != null
+                       && entryDateKeys.Contains(d.Remarks))
+                  )
             select new { d, inv, c, p, u };
 
         if (selectedSaleType is "Cash" or "Walk-in")
@@ -579,7 +655,7 @@ public class ReportsController : Controller
                 !x.c.CustomerName.Contains("Walk-In") &&
                 !x.c.CustomerName.Contains("Walk In") &&
                 x.inv.Remarks != null &&
-                x.inv.Remarks.StartsWith("Monthly Supply"));
+                x.inv.Remarks.StartsWith(MonthlySupplyRemarkPrefix));
         }
         else if (selectedSaleType == "Credit")
         {
@@ -588,7 +664,7 @@ public class ReportsController : Controller
                 !x.c.CustomerName.Contains("Walk-in") &&
                 !x.c.CustomerName.Contains("Walk-In") &&
                 !x.c.CustomerName.Contains("Walk In") &&
-                (x.inv.Remarks == null || !x.inv.Remarks.StartsWith("Monthly Supply")));
+                (x.inv.Remarks == null || !x.inv.Remarks.StartsWith(MonthlySupplyRemarkPrefix)));
         }
 
         if (!string.IsNullOrEmpty(search))
@@ -642,15 +718,28 @@ public class ReportsController : Controller
         var selectedSaleType = NormalizeSalesItemSaleType(saleType);
         var dayStart = selectedDate;
         var dayEnd = dayStart.AddDays(1);
+        var entryDateKeys = BuildEntryDateRemarkKeys(selectedDate, selectedDate);
+        var monthSpanStart = new DateTime(selectedDate.Year, selectedDate.Month, 1);
+        var monthSpanEndExclusive = monthSpanStart.AddMonths(1);
 
         var query =
             from d in _db.SalesInvoiceDetails.AsNoTracking()
             join inv in _db.SalesInvoices.AsNoTracking() on d.SalesInvoiceUid equals inv.Uid
             join c in _db.Customers.AsNoTracking() on inv.CustomerUid equals c.Uid into cj
             from c in cj.DefaultIfEmpty()
-            where inv.InvoiceDate >= dayStart
-                  && inv.InvoiceDate < dayEnd
-                  && inv.InvoiceStatus != "Cancelled"
+            where inv.InvoiceStatus != "Cancelled"
+                  && (
+                      ((inv.Remarks == null || !inv.Remarks.StartsWith(MonthlySupplyRemarkPrefix))
+                       && inv.InvoiceDate >= dayStart
+                       && inv.InvoiceDate < dayEnd)
+                      ||
+                      (inv.Remarks != null
+                       && inv.Remarks.StartsWith(MonthlySupplyRemarkPrefix)
+                       && inv.InvoiceDate >= monthSpanStart
+                       && inv.InvoiceDate < monthSpanEndExclusive
+                       && d.Remarks != null
+                       && entryDateKeys.Contains(d.Remarks))
+                  )
             select new { d, inv, c };
 
         if (selectedSaleType is "Cash" or "Walk-in")
@@ -669,7 +758,7 @@ public class ReportsController : Controller
                 !x.c.CustomerName.Contains("Walk-In") &&
                 !x.c.CustomerName.Contains("Walk In") &&
                 x.inv.Remarks != null &&
-                x.inv.Remarks.StartsWith("Monthly Supply"));
+                x.inv.Remarks.StartsWith(MonthlySupplyRemarkPrefix));
         }
         else if (selectedSaleType == "Credit")
         {
@@ -678,7 +767,7 @@ public class ReportsController : Controller
                 !x.c.CustomerName.Contains("Walk-in") &&
                 !x.c.CustomerName.Contains("Walk-In") &&
                 !x.c.CustomerName.Contains("Walk In") &&
-                (x.inv.Remarks == null || !x.inv.Remarks.StartsWith("Monthly Supply")));
+                (x.inv.Remarks == null || !x.inv.Remarks.StartsWith(MonthlySupplyRemarkPrefix)));
         }
 
         var raw = await query
@@ -689,6 +778,8 @@ public class ReportsController : Controller
             {
                 x.inv.Uid,
                 x.inv.InvoiceDate,
+                InvoiceRemarks = x.inv.Remarks,
+                DetailRemarks = x.d.Remarks,
                 Item = x.d.ProductName ?? x.d.ProductCode ?? "—",
                 x.d.Quantity,
                 Amount = x.d.LineTotal,
@@ -702,7 +793,7 @@ public class ReportsController : Controller
             var showDelivery = seenInvoices.Add(x.Uid);
             return new DailyReportRowViewModel
             {
-                Date = x.InvoiceDate,
+                Date = ResolveReportLineDate(x.InvoiceRemarks, x.DetailRemarks, x.InvoiceDate),
                 Item = x.Item,
                 Quantity = x.Quantity,
                 Amount = x.Amount,

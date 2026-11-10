@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -406,6 +407,132 @@ public class POSController : Controller
                 x.IsSkipped
             }),
             products
+        });
+    }
+
+    /// <summary>
+    /// Monthly Supply invoices (and day-by-day supplied lines) for a customer in the month of <paramref name="supplyDate"/>.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> CustomerMonthlyMonthInvoices(int customerUid, DateTime supplyDate, CancellationToken ct)
+    {
+        if (customerUid <= 0)
+            return BadRequest(new { error = "Invalid customer." });
+
+        var customer = await _db.Customers.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Uid == customerUid && x.IsActive, ct);
+        if (customer is null)
+            return NotFound(new { error = "Customer was not found." });
+
+        var day = supplyDate == default ? DateTime.Today : supplyDate.Date;
+        var monthStart = new DateTime(day.Year, day.Month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+
+        var invoices = await _db.SalesInvoices.AsNoTracking()
+            .Where(x => x.CustomerUid == customerUid
+                        && x.InvoiceStatus != "Cancelled"
+                        && x.InvoiceStatus != SalesReturnsController.ReturnStatus
+                        && x.InvoiceStatus != WastageController.WastageStatus
+                        && x.Remarks != null
+                        && x.Remarks.StartsWith(MonthlySupplyRemarkPrefix)
+                        && x.InvoiceDate >= monthStart
+                        && x.InvoiceDate < monthEnd)
+            .OrderBy(x => x.Uid)
+            .Select(x => new
+            {
+                x.Uid,
+                x.InvoiceNo,
+                x.InvoiceDate,
+                x.NetAmount,
+                x.PaidAmount,
+                x.BalanceAmount,
+                x.InvoiceStatus,
+                x.PaymentStatus
+            })
+            .ToListAsync(ct);
+
+        var invoiceUids = invoices.Select(x => x.Uid).ToList();
+        var details = await _db.SalesInvoiceDetails.AsNoTracking()
+            .Where(d => invoiceUids.Contains(d.SalesInvoiceUid))
+            .OrderBy(d => d.Uid)
+            .Select(d => new
+            {
+                d.SalesInvoiceUid,
+                d.Remarks,
+                d.ProductCode,
+                d.ProductName,
+                d.Quantity,
+                d.UnitPrice,
+                d.LineTotal
+            })
+            .ToListAsync(ct);
+
+        static DateTime? ParseEntryDate(string? remarks)
+        {
+            if (string.IsNullOrWhiteSpace(remarks)
+                || !remarks.StartsWith(MonthlyEntryDatePrefix, StringComparison.OrdinalIgnoreCase)
+                || !DateTime.TryParse(remarks[MonthlyEntryDatePrefix.Length..], CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var entryDate))
+                return null;
+            return entryDate.Date;
+        }
+
+        var detailsByInvoice = details.GroupBy(d => d.SalesInvoiceUid).ToDictionary(g => g.Key, g => g.ToList());
+
+        var payload = invoices.Select(inv =>
+        {
+            detailsByInvoice.TryGetValue(inv.Uid, out var lines);
+            lines ??= [];
+
+            var days = lines
+                .Select(l => new
+                {
+                    Line = l,
+                    EntryDate = ParseEntryDate(l.Remarks) ?? inv.InvoiceDate.Date
+                })
+                .GroupBy(x => x.EntryDate)
+                .OrderBy(g => g.Key)
+                .Select(g => new
+                {
+                    entryDate = g.Key.ToString("yyyy-MM-dd"),
+                    entryDateLabel = g.Key.ToString("dd-MMM-yyyy"),
+                    itemCount = g.Count(),
+                    quantity = g.Sum(x => x.Line.Quantity),
+                    amount = g.Sum(x => x.Line.LineTotal),
+                    lines = g.Select(x => new
+                    {
+                        productCode = x.Line.ProductCode ?? string.Empty,
+                        productName = x.Line.ProductName ?? x.Line.ProductCode ?? "—",
+                        quantity = x.Line.Quantity,
+                        unitPrice = x.Line.UnitPrice,
+                        lineTotal = x.Line.LineTotal
+                    }).ToList()
+                })
+                .ToList();
+
+            return new
+            {
+                uid = inv.Uid,
+                invoiceNo = inv.InvoiceNo,
+                invoiceDate = inv.InvoiceDate.ToString("yyyy-MM-dd"),
+                netAmount = inv.NetAmount,
+                paidAmount = inv.PaidAmount,
+                balanceAmount = inv.BalanceAmount,
+                invoiceStatus = inv.InvoiceStatus,
+                paymentStatus = inv.PaymentStatus,
+                supplyDays = days.Count,
+                days
+            };
+        }).ToList();
+
+        return Json(new
+        {
+            customerUid = customer.Uid,
+            customerCode = customer.CustomerCode,
+            customerName = customer.CustomerName,
+            month = monthStart.ToString("yyyy-MM"),
+            monthLabel = monthStart.ToString("MMMM yyyy", CultureInfo.InvariantCulture),
+            invoices = payload
         });
     }
 
