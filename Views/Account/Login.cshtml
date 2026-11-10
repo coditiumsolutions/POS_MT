@@ -5,33 +5,78 @@
 }
 
 <div class="login-card">
-    <div class="login-card-header">
-        <h1 class="login-title">Welcome to POS</h1>
-        <p class="login-subtitle">Enter your credentials to access the system</p>
+    <div class="login-card-badge" aria-hidden="true">
+        <i class="bi bi-cart3"></i>
     </div>
 
     <form asp-action="Login" asp-controller="Account" method="post" class="login-form" autocomplete="off">
         @Html.AntiForgeryToken()
         <input type="hidden" name="returnUrl" value="@ViewData["ReturnUrl"]" />
-        <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2" role="alert"></div>
+        <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 login-alert" role="alert"></div>
 
         <div class="mb-3">
             <label asp-for="UserName" class="form-label"></label>
-            <input asp-for="UserName" class="form-control form-control-lg" autocomplete="username" autofocus placeholder="Enter username" />
+            <div class="login-input-wrap">
+                <i class="bi bi-person login-input-icon" aria-hidden="true"></i>
+                <input asp-for="UserName"
+                       class="form-control form-control-lg login-input"
+                       autocomplete="username"
+                       autofocus
+                       placeholder="Enter username" />
+            </div>
             <span asp-validation-for="UserName" class="text-danger"></span>
         </div>
 
         <div class="mb-3">
             <label asp-for="Password" class="form-label"></label>
-            <input asp-for="Password" class="form-control form-control-lg" autocomplete="current-password" placeholder="Enter password" />
+            <div class="login-input-wrap">
+                <i class="bi bi-lock login-input-icon" aria-hidden="true"></i>
+                <input asp-for="Password"
+                       class="form-control form-control-lg login-input"
+                       autocomplete="current-password"
+                       placeholder="Enter password" />
+                <button type="button"
+                        class="login-password-toggle"
+                        id="togglePasswordVisibility"
+                        aria-label="Show password"
+                        title="Show password">
+                    <i class="bi bi-eye" aria-hidden="true"></i>
+                </button>
+            </div>
             <span asp-validation-for="Password" class="text-danger"></span>
         </div>
 
-        <div class="form-check mb-4">
-            <input asp-for="RememberMe" class="form-check-input" />
-            <label asp-for="RememberMe" class="form-check-label"></label>
+        <div class="login-form-meta mb-4">
+            <div class="form-check mb-0">
+                <input asp-for="RememberMe" class="form-check-input" />
+                <label asp-for="RememberMe" class="form-check-label"></label>
+            </div>
+            <a class="login-forgot-link" href="#" title="Contact your administrator to reset your password">Forgot Password?</a>
         </div>
 
-        <button type="submit" class="btn btn-primary btn-lg w-100 login-submit">Sign In</button>
+        <button type="submit" class="btn btn-lg w-100 login-submit">
+            <span>Sign In</span>
+            <i class="bi bi-arrow-right-short" aria-hidden="true"></i>
+        </button>
     </form>
 </div>
+
+@section Scripts {
+    <script>
+        (function () {
+            var btn = document.getElementById('togglePasswordVisibility');
+            var input = document.getElementById('Password');
+            if (!btn || !input) return;
+            btn.addEventListener('click', function () {
+                var show = input.type === 'password';
+                input.type = show ? 'text' : 'password';
+                btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+                btn.setAttribute('title', show ? 'Hide password' : 'Show password');
+                var icon = btn.querySelector('i');
+                if (icon) {
+                    icon.className = show ? 'bi bi-eye-slash' : 'bi bi-eye';
+                }
+            });
+        })();
+    </script>
+}
