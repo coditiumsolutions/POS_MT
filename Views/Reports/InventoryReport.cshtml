@@ -1,0 +1,157 @@
+@model InventoryReportViewModel
+@{
+    ViewData["Title"] = "Inventory Report";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-2">
+    <span class="sales-invoices-heading">Inventory Report</span>
+    <a class="btn btn-outline-dark btn-sm"
+       asp-action="PrintInventoryReport"
+       asp-route-dateFrom="@Model.DateFrom.ToString("yyyy-MM-dd")"
+       asp-route-dateTo="@Model.DateTo.ToString("yyyy-MM-dd")"
+       asp-route-saleType="@Model.SaleType"
+       asp-route-itemSearch="@Model.ItemSearch"
+       target="_blank"
+       rel="noopener">
+        <i class="bi bi-printer" aria-hidden="true"></i> Print / PDF
+    </a>
+</div>
+
+<form method="get" asp-action="InventoryReport" class="bg-white border rounded px-2 py-2 mb-2 report-filter-bar">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-2 col-sm-6">
+            <label class="form-label small mb-1" for="SaleType">Customer Type</label>
+            <select asp-for="SaleType" asp-items="Model.SaleTypes" class="form-select form-select-sm" id="SaleType" name="saleType"></select>
+        </div>
+        <div class="col-md-2 col-sm-6">
+            <label class="form-label small mb-1" for="DateFrom">Start Date</label>
+            <input type="date"
+                   class="form-control form-control-sm"
+                   id="DateFrom"
+                   name="dateFrom"
+                   value="@Model.DateFrom.ToString("yyyy-MM-dd")" />
+        </div>
+        <div class="col-md-2 col-sm-6">
+            <label class="form-label small mb-1" for="DateTo">End Date</label>
+            <input type="date"
+                   class="form-control form-control-sm"
+                   id="DateTo"
+                   name="dateTo"
+                   value="@Model.DateTo.ToString("yyyy-MM-dd")" />
+        </div>
+        <div class="col-md-2 col-sm-6">
+            <label class="form-label small mb-1" for="ItemSearch">Search Item</label>
+            <input type="text"
+                   class="form-control form-control-sm"
+                   id="ItemSearch"
+                   name="itemSearch"
+                   value="@Model.ItemSearch"
+                   placeholder="Item name"
+                   autocomplete="off" />
+        </div>
+        <div class="col-md-auto col-sm-6">
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm px-3">Apply</button>
+                <a class="btn btn-outline-secondary btn-sm px-3" asp-action="InventoryReport">Reset</a>
+            </div>
+        </div>
+    </div>
+</form>
+
+<div class="row g-2 mb-2">
+    <div class="col-md-3 col-sm-6">
+        <div class="border rounded px-2 py-2 h-100 report-metric report-metric--lines">
+            <div class="small mb-0">Items</div>
+            <div class="fs-5 fw-semibold mb-0">@Model.ItemCount</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="border rounded px-2 py-2 h-100 report-metric report-metric--qty">
+            <div class="small mb-0">Total Quantity</div>
+            <div class="fs-5 fw-semibold mb-0">@Model.TotalQuantity.ToString("N3")</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="border rounded px-2 py-2 h-100 report-metric report-metric--amount">
+            <div class="small mb-0">Total Amount</div>
+            <div class="fs-5 fw-semibold mb-0">@Model.TotalAmount.ToString("N2")</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="border rounded px-2 py-2 h-100 report-metric report-metric--extra">
+            <div class="small mb-0">Period</div>
+            <div class="fs-6 fw-semibold mb-0">
+                @Model.DateFrom.ToString("dd-MMM-yyyy") – @Model.DateTo.ToString("dd-MMM-yyyy")
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="table-responsive bg-white border rounded p-2">
+    <table id="inventoryReportTable" class="table table-sm table-striped table-hover align-middle w-100 mb-0 report-grid-table">
+        <thead>
+            <tr>
+                <th>Item</th>
+                <th>Unit</th>
+                <th class="text-end">Qty Sold</th>
+                <th class="text-end report-col-amount">Amount</th>
+                <th>Sold</th>
+            </tr>
+        </thead>
+        <tbody>
+        @if (Model.Rows.Count == 0)
+        {
+            <tr>
+                <td colspan="5" class="text-muted text-center py-3">
+                    No inventory sales for @Model.DateFrom.ToString("dd-MMM-yyyy") – @Model.DateTo.ToString("dd-MMM-yyyy").
+                </td>
+            </tr>
+        }
+        else
+        {
+            foreach (var row in Model.Rows)
+            {
+                <tr>
+                    <td>
+                        @row.ProductName@if (!string.IsNullOrWhiteSpace(row.ProductCode))
+                        {<span class="text-muted"> (@row.ProductCode)</span>}
+                    </td>
+                    <td>@row.Unit</td>
+                    <td class="text-end" data-order="@row.QuantitySold.ToString(System.Globalization.CultureInfo.InvariantCulture)">@row.QuantitySold.ToString("N3")</td>
+                    <td class="text-end report-col-amount" data-order="@row.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture)">@row.Amount.ToString("N2")</td>
+                    <td>@row.ProductName sold @row.SoldSummary</td>
+                </tr>
+            }
+        }
+        </tbody>
+        @if (Model.Rows.Count > 0)
+        {
+            <tfoot>
+                <tr class="fw-semibold">
+                    <td colspan="2" class="text-end">Total</td>
+                    <td class="text-end">@Model.TotalQuantity.ToString("N3")</td>
+                    <td class="text-end report-col-amount">@Model.TotalAmount.ToString("N2")</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        }
+    </table>
+</div>
+
+@section Scripts {
+    @if (Model.Rows.Count > 0)
+    {
+        <script>
+            posDataTable('#inventoryReportTable', {
+                lengthBelow: true,
+                hideFilter: true,
+                ordering: true,
+                order: [[0, 'asc']],
+                columnDefs: [
+                    { orderable: true, targets: [0, 2, 3] },
+                    { orderable: false, targets: [1, 4] }
+                ]
+            });
+        </script>
+    }
+}

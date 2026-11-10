@@ -512,15 +512,134 @@ public class ReportsController : Controller
     }
 
     [HttpGet]
+    public async Task<IActionResult> InventoryReport(DateTime? dateFrom, DateTime? dateTo, string? saleType, string? itemSearch, CancellationToken ct)
+    {
+        EnsureReportsNav();
+        ViewData["Title"] = "Inventory Report";
+        var model = await BuildInventoryReportAsync(dateFrom, dateTo, saleType, itemSearch, ct);
+        return View(model);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> PrintInventoryReport(DateTime? dateFrom, DateTime? dateTo, string? saleType, string? itemSearch, CancellationToken ct)
+    {
+        EnsureReportsNav();
+        ViewData["Title"] = "Inventory Report";
+        var model = await BuildInventoryReportAsync(dateFrom, dateTo, saleType, itemSearch, ct);
+        model.PrintedAt = DateTime.Now;
+        return View(model);
+    }
+
+    private async Task<InventoryReportViewModel> BuildInventoryReportAsync(
+        DateTime? dateFrom,
+        DateTime? dateTo,
+        string? saleType,
+        string? itemSearch,
+        CancellationToken ct)
+    {
+        var today = DateTime.Today;
+        var startDate = (dateFrom ?? today).Date;
+        var toInclusive = (dateTo ?? today).Date;
+        if (toInclusive < startDate)
+            (startDate, toInclusive) = (toInclusive, startDate);
+
+        var endExclusive = toInclusive.AddDays(1);
+        var selectedSaleType = NormalizeSalesItemSaleType(saleType);
+        var search = string.IsNullOrWhiteSpace(itemSearch) ? string.Empty : itemSearch.Trim();
+
+        var query =
+            from d in _db.SalesInvoiceDetails.AsNoTracking()
+            join inv in _db.SalesInvoices.AsNoTracking() on d.SalesInvoiceUid equals inv.Uid
+            join c in _db.Customers.AsNoTracking() on inv.CustomerUid equals c.Uid into cj
+            from c in cj.DefaultIfEmpty()
+            join p in _db.Products.AsNoTracking() on d.ProductUid equals p.Uid into pj
+            from p in pj.DefaultIfEmpty()
+            join u in _db.ProductUnits.AsNoTracking() on p.UnitUid equals u.Uid into uj
+            from u in uj.DefaultIfEmpty()
+            where inv.InvoiceDate >= startDate
+                  && inv.InvoiceDate < endExclusive
+                  && inv.InvoiceStatus != "Cancelled"
+                  && inv.InvoiceStatus != SalesReturnsController.ReturnStatus
+                  && inv.InvoiceStatus != WastageController.WastageStatus
+            select new { d, inv, c, p, u };
+
+        if (selectedSaleType is "Cash" or "Walk-in")
+        {
+            query = query.Where(x => x.c != null &&
+                (x.c.CustomerCode == "C001" ||
+                 x.c.CustomerName.Contains("Walk-in") ||
+                 x.c.CustomerName.Contains("Walk-In") ||
+                 x.c.CustomerName.Contains("Walk In")));
+        }
+        else if (selectedSaleType == "Monthly")
+        {
+            query = query.Where(x => x.c != null &&
+                x.c.CustomerCode != "C001" &&
+                !x.c.CustomerName.Contains("Walk-in") &&
+                !x.c.CustomerName.Contains("Walk-In") &&
+                !x.c.CustomerName.Contains("Walk In") &&
+                x.inv.Remarks != null &&
+                x.inv.Remarks.StartsWith("Monthly Supply"));
+        }
+        else if (selectedSaleType == "Credit")
+        {
+            query = query.Where(x => x.c != null &&
+                x.c.CustomerCode != "C001" &&
+                !x.c.CustomerName.Contains("Walk-in") &&
+                !x.c.CustomerName.Contains("Walk-In") &&
+                !x.c.CustomerName.Contains("Walk In") &&
+                (x.inv.Remarks == null || !x.inv.Remarks.StartsWith("Monthly Supply")));
+        }
+
+        if (!string.IsNullOrEmpty(search))
+        {
+            query = query.Where(x =>
+                (x.d.ProductName != null && x.d.ProductName.Contains(search)) ||
+                (x.p != null && x.p.ProductName.Contains(search)));
+        }
+
+        var rows = await query
+            .GroupBy(x => new
+            {
+                ProductUid = x.d.ProductUid,
+                ProductCode = x.d.ProductCode ?? (x.p != null ? x.p.ProductCode : string.Empty),
+                ProductName = x.d.ProductName ?? (x.p != null ? x.p.ProductName : null) ?? x.d.ProductCode ?? "—",
+                Unit = x.u != null
+                    ? (!string.IsNullOrWhiteSpace(x.u.UnitCode) ? x.u.UnitCode : x.u.UnitName)
+                    : "—"
+            })
+            .Select(g => new InventoryReportRowViewModel
+            {
+                ProductCode = g.Key.ProductCode ?? string.Empty,
+                ProductName = g.Key.ProductName,
+                Unit = g.Key.Unit ?? "—",
+                QuantitySold = g.Sum(x => x.d.Quantity),
+                Amount = g.Sum(x => x.d.LineTotal)
+            })
+            .OrderBy(x => x.ProductName)
+            .ThenBy(x => x.ProductCode)
+            .ToListAsync(ct);
+
+        return new InventoryReportViewModel
+        {
+            DateFrom = startDate,
+            DateTo = toInclusive,
+            SaleType = selectedSaleType,
+            ItemSearch = search,
+            SaleTypes = BuildSalesItemSaleTypeOptions(selectedSaleType),
+            Rows = rows,
+            PrintedAt = DateTime.Now
+        };
+    }
+
+    [HttpGet]
     public async Task<IActionResult> DailyReport(DateTime? date, string? saleType, CancellationToken ct)
     {
         EnsureReportsNav();
         ViewData["Title"] = "Daily Report";
 
         var selectedDate = (date ?? DateTime.Today).Date;
-        var selectedSaleType = string.IsNullOrWhiteSpace(saleType)
-            ? "All"
-            : NormalizeSaleType(saleType);
+        var selectedSaleType = NormalizeSalesItemSaleType(saleType);
         var dayStart = selectedDate;
         var dayEnd = dayStart.AddDays(1);
 
@@ -548,7 +667,18 @@ public class ReportsController : Controller
                 x.c.CustomerCode != "C001" &&
                 !x.c.CustomerName.Contains("Walk-in") &&
                 !x.c.CustomerName.Contains("Walk-In") &&
-                !x.c.CustomerName.Contains("Walk In"));
+                !x.c.CustomerName.Contains("Walk In") &&
+                x.inv.Remarks != null &&
+                x.inv.Remarks.StartsWith("Monthly Supply"));
+        }
+        else if (selectedSaleType == "Credit")
+        {
+            query = query.Where(x => x.c != null &&
+                x.c.CustomerCode != "C001" &&
+                !x.c.CustomerName.Contains("Walk-in") &&
+                !x.c.CustomerName.Contains("Walk-In") &&
+                !x.c.CustomerName.Contains("Walk In") &&
+                (x.inv.Remarks == null || !x.inv.Remarks.StartsWith("Monthly Supply")));
         }
 
         var raw = await query
@@ -584,7 +714,7 @@ public class ReportsController : Controller
         {
             Date = selectedDate,
             SaleType = selectedSaleType,
-            SaleTypes = BuildSaleTypeOptions(selectedSaleType),
+            SaleTypes = BuildSalesItemSaleTypeOptions(selectedSaleType),
             Rows = rows,
             TotalQuantity = rows.Sum(x => x.Quantity),
             TotalAmount = rows.Sum(x => x.Amount),

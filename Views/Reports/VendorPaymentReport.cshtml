@@ -59,7 +59,7 @@
         <div class="border rounded px-2 py-2 h-100 report-metric report-metric--extra">
             <div class="small mb-0">Period</div>
             <div class="fs-6 fw-semibold mb-0">
-                @Model.DateFrom.ToString("dd MMM yyyy") – @Model.DateTo.ToString("dd MMM yyyy")
+                @Model.DateFrom.ToString("dd-MMM-yyyy") – @Model.DateTo.ToString("dd-MMM-yyyy")
             </div>
         </div>
     </div>
@@ -83,7 +83,7 @@
         {
             <tr>
                 <td colspan="7" class="text-muted text-center py-3">
-                    No vendor payments for @Model.DateFrom.ToString("dd MMM yyyy") – @Model.DateTo.ToString("dd MMM yyyy").
+                    No vendor payments for @Model.DateFrom.ToString("dd-MMM-yyyy") – @Model.DateTo.ToString("dd-MMM-yyyy").
                 </td>
             </tr>
         }

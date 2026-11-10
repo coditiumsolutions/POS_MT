@@ -400,6 +400,8 @@ public class POSController : Controller
                 x.BrandName,
                 x.Quantity,
                 x.UnitPrice,
+                deliveryCharges = x.DeliveryCharges,
+                itemTotal = Math.Round((x.Quantity * x.UnitPrice) + x.DeliveryCharges, 0, MidpointRounding.AwayFromZero),
                 x.IsOverride,
                 x.IsSkipped
             }),
@@ -447,7 +449,8 @@ public class POSController : Controller
                     name = string.IsNullOrWhiteSpace(x.ProductName) ? x.ProductCode : x.ProductName,
                     qty = x.Quantity,
                     price = x.UnitPrice,
-                    total = Math.Round(x.Quantity * x.UnitPrice, 2, MidpointRounding.AwayFromZero)
+                    deliveryCharges = x.DeliveryCharges,
+                    total = Math.Round((x.Quantity * x.UnitPrice) + x.DeliveryCharges, 0, MidpointRounding.AwayFromZero)
                 })
                 .ToList();
 
@@ -456,6 +459,7 @@ public class POSController : Controller
                 customerUid = uid,
                 lines,
                 totalQty = lines.Sum(x => x.qty),
+                totalDeliveryCharges = lines.Sum(x => x.deliveryCharges),
                 totalAmount = lines.Sum(x => x.total)
             };
         });
@@ -1406,6 +1410,7 @@ public class POSController : Controller
         public string? BrandName { get; set; }
         public decimal Quantity { get; set; }
         public decimal UnitPrice { get; set; }
+        public decimal DeliveryCharges { get; set; }
         public bool IsOverride { get; set; }
         public bool IsSkipped { get; set; }
     }
@@ -1433,6 +1438,9 @@ public class POSController : Controller
                 usedProducts.Add(productUid);
             }
 
+            var templateDelivery = line.DeliveryCharges ?? 0m;
+            if (templateDelivery < 0) templateDelivery = 0;
+
             if (productUid > 0 && overrideByProduct.TryGetValue(productUid, out var ov))
             {
                 if (ov.Quantity <= 0)
@@ -1445,6 +1453,7 @@ public class POSController : Controller
                         BrandName = ov.BrandName,
                         Quantity = 0,
                         UnitPrice = ov.UnitPrice > 0 ? ov.UnitPrice : line.UnitPrice,
+                        DeliveryCharges = templateDelivery,
                         IsOverride = true,
                         IsSkipped = true
                     });
@@ -1459,6 +1468,7 @@ public class POSController : Controller
                     BrandName = ov.BrandName ?? line.BrandName,
                     Quantity = ov.Quantity,
                     UnitPrice = ov.UnitPrice > 0 ? ov.UnitPrice : line.UnitPrice,
+                    DeliveryCharges = templateDelivery,
                     IsOverride = true
                 });
                 continue;
@@ -1477,6 +1487,7 @@ public class POSController : Controller
                 BrandName = line.BrandName,
                 Quantity = line.Quantity,
                 UnitPrice = line.UnitPrice,
+                DeliveryCharges = templateDelivery,
                 IsOverride = false
             });
         }
@@ -1496,6 +1507,7 @@ public class POSController : Controller
                 BrandName = ov.BrandName,
                 Quantity = ov.Quantity,
                 UnitPrice = ov.UnitPrice,
+                DeliveryCharges = 0,
                 IsOverride = true
             });
         }

@@ -1816,6 +1816,8 @@ body.pos-panel-splitter-active * {
 
 .pos-sale-total-row {
   display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
@@ -1829,7 +1831,7 @@ body.pos-panel-splitter-active * {
 
 .pos-sale-quantity-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.75rem;
   margin: 0;
@@ -1838,10 +1840,13 @@ body.pos-panel-splitter-active * {
   border-top: 1px solid #e2e8f0;
 }
 
-.pos-sale-quantity-row span {
+.pos-sale-quantity-row > span {
   color: #2563eb;
   font-weight: 700;
-  font-size: 1.2rem;
+  font-size: 1.05rem;
+  line-height: 1.3;
+  flex: 0 0 auto;
+  max-width: 42%;
 }
 
 .pos-sale-quantity-row .pos-sale-quantity-value,
@@ -1851,14 +1856,67 @@ body.pos-panel-splitter-active * {
   font-size: 1.45rem !important;
 }
 
+.pos-sale-remaining-list {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+}
+
+.pos-sale-remaining-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.pos-sale-remaining-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  line-height: 1.25;
+}
+
+.pos-sale-remaining-name {
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 7.5rem;
+}
+
+.pos-sale-remaining-qty {
+  color: #2563eb;
+  font-size: 1.05rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  min-width: 2.25rem;
+}
+
+.pos-sale-remaining-item.is-zero .pos-sale-remaining-qty {
+  color: #d97706;
+}
+
+.pos-sale-remaining-item.is-negative .pos-sale-remaining-qty {
+  color: #dc2626;
+}
+
 .pos-sale-discount-row label,
 .pos-sale-tender-row label {
   margin: 0;
   font-weight: 600;
+  flex: 1 1 auto;
+  white-space: nowrap;
 }
 
 .pos-sale-discount-input {
+  flex: 0 0 auto;
   width: 7.5rem;
+  max-width: 45%;
   text-align: right;
   font-weight: 600;
   color: #1d4ed8;
@@ -2282,15 +2340,36 @@ body.pos-panel-splitter-active * {
   padding: 0.25rem 0.75rem;
   font-size: 0.875rem;
   line-height: 1.25;
-  background-color: var(--pos-sidebar);
-  border-color: var(--pos-sidebar);
+  background-color: var(--pos-accent);
+  border-color: var(--pos-accent);
   color: #fff;
 }
 
 .crud-form-actions .crud-form-btn:hover,
 .crud-form-actions .crud-form-btn:focus {
-  background-color: #1e293b;
-  border-color: #1e293b;
+  background-color: #0d5f58;
+  border-color: #0d5f58;
+  color: #fff;
+}
+
+a.btn.users-add-btn {
+  min-width: 9.5rem;
+  height: 1.85rem;
+  padding: 0.1rem 1.1rem;
+  line-height: 1.2;
+  font-size: 0.8125rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--pos-accent);
+  border-color: var(--pos-accent);
+  color: #fff;
+}
+
+a.btn.users-add-btn:hover,
+a.btn.users-add-btn:focus {
+  background-color: #0d5f58;
+  border-color: #0d5f58;
   color: #fff;
 }
 

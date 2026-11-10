@@ -18,8 +18,8 @@
                    value="@Model.Date.ToString("yyyy-MM-dd")" />
         </div>
         <div class="col-md-2 col-sm-6">
-            <label class="form-label small mb-1" for="SaleType">Sale Type</label>
-            <select asp-for="SaleType" asp-items="Model.SaleTypes" class="form-select form-select-sm" id="SaleType"></select>
+            <label class="form-label small mb-1" for="SaleType">Customer Type</label>
+            <select asp-for="SaleType" asp-items="Model.SaleTypes" class="form-select form-select-sm" id="SaleType" name="saleType"></select>
         </div>
         <div class="col-md-auto col-sm-6">
             <div class="d-flex gap-2">

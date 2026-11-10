@@ -138,10 +138,29 @@
             line-height: 1.2;
         }
 
-        .items {
+        .qty-list {
             margin: 0;
-            font-size: 0.8rem;
-            line-height: 1.3;
+            padding: 0;
+            list-style: none;
+        }
+
+        .qty-list li {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.75rem;
+            line-height: 1.35;
+        }
+
+        .qty-list .item-name {
+            font-weight: 600;
+        }
+
+        .qty-list .item-qty {
+            font-variant-numeric: tabular-nums;
+            font-weight: 700;
+            white-space: nowrap;
+            min-width: 2.5rem;
+            text-align: right;
         }
 
         .signoff {
@@ -218,8 +237,8 @@
                     <table>
                         <thead>
                             <tr>
-                                <th style="width:50%">Customer</th>
-                                <th style="width:50%">Area</th>
+                                <th style="width:45%">Customer</th>
+                                <th style="width:55%">Quantity</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -230,7 +249,25 @@
                                     <div class="name">@customer.CustomerName</div>
                                     <div class="muted">@customer.CustomerCode@(string.IsNullOrWhiteSpace(customer.Phone) ? "" : " · " + customer.Phone)</div>
                                 </td>
-                                <td>@(string.IsNullOrWhiteSpace(customer.Area) ? "—" : customer.Area)</td>
+                                <td>
+                                    @if (customer.Items.Count == 0)
+                                    {
+                                        <span class="muted">—</span>
+                                    }
+                                    else
+                                    {
+                                        <ul class="qty-list">
+                                        @foreach (var item in customer.Items)
+                                        {
+                                            var itemName = string.IsNullOrWhiteSpace(item.ProductName) ? item.ProductCode : item.ProductName;
+                                            <li>
+                                                <span class="item-name">@itemName</span>
+                                                <span class="item-qty">@item.Quantity.ToString("0.###")</span>
+                                            </li>
+                                        }
+                                        </ul>
+                                    }
+                                </td>
                             </tr>
                         }
                         </tbody>

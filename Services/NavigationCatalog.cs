@@ -106,6 +106,7 @@ public static class NavigationCatalog
         [
             new("Sales Item", "Reports", "SalesItem", IconClass: "bi-cart4"),
             new("Daily Report", "Reports", "DailyReport", IconClass: "bi-calendar-day"),
+            new("Inventory Report", "Reports", "InventoryReport", IconClass: "bi-boxes"),
             new("Payment Report", "Reports", "PaymentReport", IconClass: "bi-cash-coin"),
             new("Vendor Payments", "Reports", "VendorPaymentReport", IconClass: "bi-wallet2"),
             new("Terminal Report", "Reports", "TerminalReport", IconClass: "bi-display"),

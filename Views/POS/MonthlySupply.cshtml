@@ -137,13 +137,15 @@
                     <th>Area</th>
                     <th>Customer Name</th>
                     <th>Items</th>
+                    <th class="text-end">Delivery Charges</th>
+                    <th class="text-end">Item Total</th>
                 </tr>
             </thead>
             <tbody>
             @if (Model.Customers.Count == 0)
             {
                 <tr>
-                    <td colspan="6" class="text-muted text-center py-4">No monthly customers found.</td>
+                    <td colspan="8" class="text-muted text-center py-4">No monthly customers found.</td>
                 </tr>
             }
             else
@@ -180,9 +182,11 @@
                         <td class="monthly-supply-preview-cell">
                             <div class="monthly-supply-row-preview text-muted" data-preview-for="@c.Uid">…</div>
                         </td>
+                        <td class="text-end monthly-supply-delivery-cell" data-delivery-for="@c.Uid">…</td>
+                        <td class="text-end fw-semibold monthly-supply-total-cell" data-total-for="@c.Uid">…</td>
                     </tr>
                     <tr class="monthly-supply-detail-row d-none" data-detail-for="@c.Uid" aria-hidden="true">
-                        <td colspan="6" class="p-0 border-0">
+                        <td colspan="8" class="p-0 border-0">
                             <div class="monthly-supply-detail-panel">
                                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2 px-3 pt-3">
                                     <strong class="monthly-supply-detail-title">Items — @c.CustomerName</strong>
@@ -381,17 +385,32 @@
                     return parts.join('<span class="monthly-supply-preview-sep"> · </span>');
                 }
 
-                function setRowPreview(customerUid, lines) {
+                function setRowPreview(customerUid, lines, totalDelivery, totalAmount) {
                     const el = document.querySelector('.monthly-supply-row-preview[data-preview-for="' + customerUid + '"]');
-                    if (!el) return;
-                    el.classList.remove('text-muted');
-                    el.innerHTML = buildPreviewHtml(lines);
+                    if (el) {
+                        el.classList.remove('text-muted');
+                        el.innerHTML = buildPreviewHtml(lines);
+                    }
+                    const deliveryEl = document.querySelector('.monthly-supply-delivery-cell[data-delivery-for="' + customerUid + '"]');
+                    if (deliveryEl) {
+                        deliveryEl.classList.remove('text-muted');
+                        deliveryEl.textContent = formatMoney(totalDelivery || 0);
+                    }
+                    const totalEl = document.querySelector('.monthly-supply-total-cell[data-total-for="' + customerUid + '"]');
+                    if (totalEl) {
+                        totalEl.classList.remove('text-muted');
+                        totalEl.textContent = Number(totalAmount || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+                    }
                 }
 
                 function loadRowPreviews() {
                     if (!allCustomerUids.length) return;
                     const day = getSupplyDateValue();
                     document.querySelectorAll('.monthly-supply-row-preview').forEach(function (el) {
+                        el.classList.add('text-muted');
+                        el.textContent = '…';
+                    });
+                    document.querySelectorAll('.monthly-supply-delivery-cell, .monthly-supply-total-cell').forEach(function (el) {
                         el.classList.add('text-muted');
                         el.textContent = '…';
                     });
@@ -403,13 +422,18 @@
                     }).then(function (payload) {
                         const byUid = {};
                         (payload.customers || []).forEach(function (row) {
-                            byUid[row.customerUid] = row.lines || [];
+                            byUid[row.customerUid] = row;
                         });
                         allCustomerUids.forEach(function (uid) {
-                            setRowPreview(uid, byUid[uid] || []);
+                            const row = byUid[uid] || {};
+                            setRowPreview(uid, row.lines || [], row.totalDeliveryCharges || 0, row.totalAmount || 0);
                         });
                     }).catch(function () {
                         document.querySelectorAll('.monthly-supply-row-preview').forEach(function (el) {
+                            el.classList.add('text-muted');
+                            el.textContent = '—';
+                        });
+                        document.querySelectorAll('.monthly-supply-delivery-cell, .monthly-supply-total-cell').forEach(function (el) {
                             el.classList.add('text-muted');
                             el.textContent = '—';
                         });
@@ -423,13 +447,24 @@
                         return !line.isSkipped && Number(line.quantity) > 0;
                     });
 
-                    setRowPreview(customerUid, deliverLines.map(function (line) {
+                    let previewDelivery = 0;
+                    let previewTotal = 0;
+                    const previewLines = deliverLines.map(function (line) {
+                        const qty = Number(line.quantity) || 0;
+                        const price = Number(line.unitPrice) || 0;
+                        const delivery = Number(line.deliveryCharges) || 0;
+                        const itemTotal = line.itemTotal != null
+                            ? Number(line.itemTotal)
+                            : Math.round((qty * price) + delivery);
+                        previewDelivery += delivery;
+                        previewTotal += itemTotal;
                         return {
                             name: line.productName || line.productCode,
-                            qty: line.quantity,
-                            price: line.unitPrice
+                            qty: qty,
+                            price: price
                         };
-                    }));
+                    });
+                    setRowPreview(customerUid, previewLines, previewDelivery, previewTotal);
 
                     if (!deliverLines.length) {
                         host.innerHTML =
@@ -441,13 +476,17 @@
 
                     let rows = '';
                     let totalQty = 0;
+                    let totalDelivery = 0;
                     let totalAmount = 0;
                     deliverLines.forEach(function (line, index) {
                         const qty = Number(line.quantity) || 0;
                         const price = Number(line.unitPrice) || 0;
                         const delivery = Number(line.deliveryCharges) || 0;
-                        const lineTotal = Math.round(((qty * price) + delivery) * 100) / 100;
+                        const lineTotal = line.itemTotal != null
+                            ? Number(line.itemTotal)
+                            : Math.round((qty * price) + delivery);
                         totalQty += qty;
+                        totalDelivery += delivery;
                         totalAmount += lineTotal;
                         const note = line.isOverride ? ' <span class="text-muted small">(day qty)</span>' : '';
                         rows +=
@@ -456,7 +495,8 @@
                             '<td>' + escapeHtml(line.productName || line.productCode || '—') + note + '</td>' +
                             '<td class="text-end">' + formatMoney(qty) + '</td>' +
                             '<td class="text-end">' + formatMoney(price) + '</td>' +
-                            '<td class="text-end">' + formatMoney(lineTotal) + '</td>' +
+                            '<td class="text-end">' + formatMoney(delivery) + '</td>' +
+                            '<td class="text-end fw-semibold">' + Number(lineTotal).toLocaleString(undefined, { maximumFractionDigits: 0 }) + '</td>' +
                             '</tr>';
                     });
 
@@ -469,17 +509,19 @@
                         '<th>Item</th>' +
                         '<th class="text-end">Qty</th>' +
                         '<th class="text-end">Price</th>' +
-                        '<th class="text-end">Total</th>' +
+                        '<th class="text-end">Delivery Charges</th>' +
+                        '<th class="text-end">Item Total</th>' +
                         '</tr></thead>' +
                         '<tbody>' + rows + '</tbody>' +
                         '<tfoot><tr class="fw-semibold">' +
                         '<td></td><td class="text-end">Total</td>' +
                         '<td class="text-end">' + formatMoney(totalQty) + '</td>' +
                         '<td></td>' +
-                        '<td class="text-end">' + formatMoney(totalAmount) + '</td>' +
+                        '<td class="text-end">' + formatMoney(totalDelivery) + '</td>' +
+                        '<td class="text-end">' + Number(totalAmount).toLocaleString(undefined, { maximumFractionDigits: 0 }) + '</td>' +
                         '</tr></tfoot>' +
                         '</table></div>' +
-                        '<p class="text-muted small mb-0 mt-2">For ' + escapeHtml(day) + ' · ' + deliverLines.length + ' item(s)</p>' +
+                        '<p class="text-muted small mb-0 mt-2">For ' + escapeHtml(day) + ' · ' + deliverLines.length + ' item(s) · Item Total = (Qty × Price) + Delivery Charges</p>' +
                         '</div>';
                 }
 

@@ -71,4 +71,94 @@ public class ExpensesController : Controller {
 
     return RedirectToAction(nameof(Index), new { dateFrom, dateTo });
   }
+
+  /// <summary>Creates (or reactivates) an expense category for the Create/Edit dropdown.</summary>
+  [HttpPost, ValidateAntiForgeryToken]
+  public async Task<IActionResult> AddCategory([FromForm] string? categoryName, CancellationToken ct)
+  {
+    var name = (categoryName ?? string.Empty).Trim();
+    if (string.IsNullOrWhiteSpace(name))
+      return BadRequest(new { success = false, message = "Category name is required." });
+
+    if (name.Length > 150)
+      return BadRequest(new { success = false, message = "Category name is too long." });
+
+    var existing = await _db.ExpenseCategories
+      .FirstOrDefaultAsync(x => x.CategoryName == name, ct);
+
+    if (existing is null)
+    {
+      // Case-insensitive match when DB collation is case-insensitive; otherwise scan.
+      var all = await _db.ExpenseCategories.AsNoTracking().Select(x => new { x.Uid, x.CategoryName, x.IsActive }).ToListAsync(ct);
+      var match = all.FirstOrDefault(x => string.Equals(x.CategoryName, name, StringComparison.OrdinalIgnoreCase));
+      if (match is not null)
+        existing = await _db.ExpenseCategories.FirstOrDefaultAsync(x => x.Uid == match.Uid, ct);
+    }
+
+    if (existing is not null)
+    {
+      if (!existing.IsActive)
+      {
+        existing.IsActive = true;
+        await _db.SaveChangesAsync(ct);
+        await _audit.WriteAsync("Update", "ExpenseCategories", existing.Uid.ToString(),
+          $"Reactivated category {existing.CategoryCode}", ct);
+      }
+
+      return Ok(new
+      {
+        success = true,
+        uid = existing.Uid,
+        name = existing.CategoryName,
+        created = false,
+        message = "Category already exists."
+      });
+    }
+
+    var code = BuildCategoryCode(name);
+    var n = 1;
+    while (await _db.ExpenseCategories.AnyAsync(x => x.CategoryCode == code, ct))
+    {
+      var suffix = n.ToString();
+      var baseLen = Math.Min(50 - 1 - suffix.Length, code.Length);
+      code = $"{code[..baseLen]}-{suffix}";
+      n++;
+      if (n > 99)
+      {
+        code = $"EXP-{DateTime.Now:yyyyMMddHHmmss}";
+        break;
+      }
+    }
+
+    var entity = new ExpenseCategory
+    {
+      CategoryCode = code,
+      CategoryName = name,
+      IsActive = true
+    };
+    _db.ExpenseCategories.Add(entity);
+    await _db.SaveChangesAsync(ct);
+    await _audit.WriteAsync("Create", "ExpenseCategories", entity.Uid.ToString(),
+      $"Created {entity.CategoryCode} from Expenses form", ct);
+
+    return Ok(new
+    {
+      success = true,
+      uid = entity.Uid,
+      name = entity.CategoryName,
+      created = true,
+      message = "Category added."
+    });
+  }
+
+  private static string BuildCategoryCode(string categoryName)
+  {
+    var chars = categoryName
+      .Where(ch => char.IsLetterOrDigit(ch))
+      .Select(char.ToUpperInvariant)
+      .Take(50)
+      .ToArray();
+    var code = new string(chars);
+    return string.IsNullOrWhiteSpace(code) ? $"EXP-{DateTime.Now:yyyyMMddHHmmss}" : code;
+  }
 }

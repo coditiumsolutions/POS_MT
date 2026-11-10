@@ -250,13 +250,14 @@
                             <th class="text-end">Price</th>
                         }
                         <th class="text-center">Qty</th>
+                        <th class="text-end">Remaining</th>
                         <th class="text-end">Line</th>
                         <th class="text-center" style="width:3rem;"></th>
                     </tr>
                 </thead>
                 <tbody id="basketBody">
                     <tr id="basketEmptyRow">
-                        <td colspan="@(Model.EnablePanelToggle ? 4 : 5)" class="text-muted text-center py-4">Basket is empty.</td>
+                        <td colspan="@(Model.EnablePanelToggle ? 5 : 6)" class="text-muted text-center py-4">Basket is empty.</td>
                     </tr>
                 </tbody>
             </table>
@@ -300,9 +301,11 @@
                     </div>
                 }
             </div>
-            <div class="pos-sale-quantity-row">
-                <span>Quantity</span>
-                <strong id="basketQuantity" class="pos-sale-quantity-value">0</strong>
+            <div class="pos-sale-quantity-row pos-sale-remaining-row">
+                <span>Quantity Remaining</span>
+                <div id="basketRemainingQty" class="pos-sale-remaining-list" aria-live="polite">
+                    <strong class="pos-sale-quantity-value">—</strong>
+                </div>
             </div>
         </div>
     </section>
@@ -326,7 +329,7 @@
     const basketEmptyRow = document.getElementById('basketEmptyRow');
     const basketPanelTitle = document.getElementById('basketPanelTitle');
     const basketTotalEl = document.getElementById('basketTotal');
-    const basketQuantityEl = document.getElementById('basketQuantity');
+    const basketRemainingQtyEl = document.getElementById('basketRemainingQty');
     const basketNetEl = document.getElementById('basketNet');
     const basketDiscountEl = document.getElementById('basketDiscount');
     const basketCustomerGivenEl = document.getElementById('basketCustomerGiven');
@@ -580,13 +583,49 @@
         return String(Math.round(v * 100) / 100);
     }
 
-    function basketQuantityTotal() {
-        let total = 0;
+    function shortRemainingName(name) {
+        const text = String(name || 'Item').trim();
+        return text.length > 18 ? text.slice(0, 16) + '…' : text;
+    }
+
+    function catalogStockFor(uid) {
+        const row = productsTable?.querySelector('.pos-product-row[data-uid="' + uid + '"]');
+        if (!row) return null;
+        const stockRaw = parseFloat(row.getAttribute('data-stock'));
+        return Number.isFinite(stockRaw) ? stockRaw : 0;
+    }
+
+    function itemRemaining(item) {
+        const catalogStock = catalogStockFor(item.uid);
+        if (catalogStock != null) {
+            item.stock = catalogStock;
+        }
+        const stock = Number(item.stock);
+        const qty = Number(item.qty);
+        return (Number.isFinite(stock) ? stock : 0) - (Number.isFinite(qty) ? qty : 0);
+    }
+
+    function renderRemainingQuantities() {
+        if (!basketRemainingQtyEl) return;
+        if (basket.size === 0) {
+            basketRemainingQtyEl.innerHTML = '<strong class="pos-sale-quantity-value">—</strong>';
+            return;
+        }
+
+        let html = '<ul class="pos-sale-remaining-items">';
         basket.forEach(function (item) {
-            const q = Number(item.qty);
-            if (Number.isFinite(q)) total += q;
+            const remaining = itemRemaining(item);
+            const cls = remaining < 0 ? ' is-negative' : (remaining === 0 ? ' is-zero' : '');
+            html +=
+                '<li class="pos-sale-remaining-item' + cls + '">' +
+                '<span class="pos-sale-remaining-name" title="' + escapeHtml(item.name || item.code || '') + '">' +
+                escapeHtml(shortRemainingName(item.name || item.code || 'Item')) +
+                '</span>' +
+                '<strong class="pos-sale-remaining-qty">' + formatStockQty(remaining) + ' left</strong>' +
+                '</li>';
         });
-        return total;
+        html += '</ul>';
+        basketRemainingQtyEl.innerHTML = html;
     }
 
     function updateBasketTitle(availableQty) {
@@ -599,9 +638,7 @@
         if (basketPanelTitle) {
             basketPanelTitle.textContent = 'Sale = ' + formatTodaySale(todaySaleAmount);
         }
-        if (basketQuantityEl) {
-            basketQuantityEl.textContent = formatStockQty(basketQuantityTotal());
-        }
+        renderRemainingQuantities();
     }
 
     function isPricedByDozen(rowOrItem) {
@@ -830,6 +867,12 @@
         basket.forEach(function (item) {
             const line = amountFromQty(item.qty, item.price, item.pricedByDozen);
             total += line;
+            const remaining = itemRemaining(item);
+            const remainingCls = remaining < 0 ? ' text-danger' : (remaining === 0 ? ' text-warning' : '');
+            const remainingCell =
+                '<td class="text-end fw-semibold pos-basket-remaining' + remainingCls + '" title="Stock left after this basket qty">' +
+                formatStockQty(remaining) +
+                '</td>';
             const priceInput =
                 '<input type="number" class="form-control form-control-sm pos-price-input" data-uid="' + item.uid +
                 '" min="0.01" step="0.01" inputmode="decimal" value="' + Number(item.price).toFixed(2) +
@@ -848,6 +891,7 @@
                     '" min="0.001" step="0.001" inputmode="decimal" value="' + formatQty(item.qty) + '" title="Enter quantity e.g. 0.5 or 0.25" />' +
                     '<button type="button" class="btn btn-sm btn-outline-secondary" data-action="inc" data-uid="' + item.uid + '" title="Increase"><i class="bi bi-plus-lg"></i></button>' +
                     '</div></td>' +
+                    remainingCell +
                     '<td class="text-end">' +
                     '<input type="number" class="form-control form-control-sm pos-line-input" data-uid="' + item.uid +
                     '" min="0.01" step="0.01" inputmode="decimal" value="' + line.toFixed(2) +
@@ -868,6 +912,7 @@
                     '" min="0.001" step="0.001" inputmode="decimal" value="' + formatQty(item.qty) + '" title="Enter quantity e.g. 0.5 or 0.25" />' +
                     '<button type="button" class="btn btn-sm btn-outline-secondary" data-action="inc" data-uid="' + item.uid + '" title="Increase"><i class="bi bi-plus-lg"></i></button>' +
                     '</div></td>' +
+                    remainingCell +
                     '<td class="text-end">' +
                     '<input type="number" class="form-control form-control-sm pos-line-input" data-uid="' + item.uid +
                     '" min="0.01" step="0.01" inputmode="decimal" value="' + line.toFixed(2) +

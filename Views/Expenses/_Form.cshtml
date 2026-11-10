@@ -45,7 +45,27 @@
                 </div>
                 <label asp-for="ExpenseCategoryUid" class="invoice-meta-title"></label>
                 <div class="invoice-meta-field">
-                    <select asp-for="ExpenseCategoryUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Categories"></select>
+                    <div class="d-flex gap-1 align-items-start">
+                        <select asp-for="ExpenseCategoryUid"
+                                class="form-select form-select-sm invoice-meta-input flex-grow-1"
+                                asp-items="ViewBag.Categories"
+                                id="ExpenseCategoryUid"></select>
+                        <button type="button"
+                                id="btnAddExpenseCategory"
+                                class="btn btn-sm btn-outline-primary text-nowrap"
+                                title="Add a missing expense category">
+                            Add category
+                        </button>
+                        <a class="btn btn-sm btn-outline-secondary text-nowrap"
+                           asp-controller="ExpenseCategories"
+                           asp-action="Index"
+                           title="Open Expense Categories"
+                           target="_blank"
+                           rel="noopener">
+                            Categories
+                        </a>
+                    </div>
+                    <span class="form-text">Missing category? Add it here.</span>
                     <span asp-validation-for="ExpenseCategoryUid" class="text-danger"></span>
                 </div>
             </div>
@@ -94,27 +114,87 @@
 <script>
 (function () {
     var root = document.getElementById('expenseTabs');
-    if (!root) return;
-    var buttons = root.querySelectorAll('.product-tab-btn');
-    var panels = root.querySelectorAll('.product-tab-panel');
+    if (root) {
+        var buttons = root.querySelectorAll('.product-tab-btn');
+        var panels = root.querySelectorAll('.product-tab-panel');
 
-    function activate(tab) {
+        function activate(tab) {
+            buttons.forEach(function (btn) {
+                var on = btn.getAttribute('data-tab') === tab;
+                btn.classList.toggle('active', on);
+                btn.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            panels.forEach(function (panel) {
+                var on = panel.getAttribute('data-panel') === tab;
+                panel.classList.toggle('active', on);
+                panel.hidden = !on;
+            });
+        }
+
         buttons.forEach(function (btn) {
-            var on = btn.getAttribute('data-tab') === tab;
-            btn.classList.toggle('active', on);
-            btn.setAttribute('aria-selected', on ? 'true' : 'false');
-        });
-        panels.forEach(function (panel) {
-            var on = panel.getAttribute('data-panel') === tab;
-            panel.classList.toggle('active', on);
-            panel.hidden = !on;
+            btn.addEventListener('click', function () {
+                activate(btn.getAttribute('data-tab') || 'basic');
+            });
         });
     }
 
-    buttons.forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            activate(btn.getAttribute('data-tab') || 'basic');
-        });
+    var addBtn = document.getElementById('btnAddExpenseCategory');
+    var categorySelect = document.getElementById('ExpenseCategoryUid');
+    if (!addBtn || !categorySelect) return;
+
+    var token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+    var addUrl = '@Url.Action("AddCategory", "Expenses")';
+
+    addBtn.addEventListener('click', async function () {
+        var raw = window.prompt('Enter new expense category name:');
+        if (raw == null) return;
+        var name = (raw || '').trim();
+        if (!name) {
+            window.alert('Category name is required.');
+            return;
+        }
+
+        addBtn.disabled = true;
+        try {
+            var body = new URLSearchParams();
+            body.set('categoryName', name);
+            body.set('__RequestVerificationToken', token);
+
+            var response = await fetch(addUrl, {
+                method: 'POST',
+                headers: {
+                    'RequestVerificationToken': token,
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                },
+                body: body.toString()
+            });
+
+            var rawText = await response.text();
+            var result = null;
+            try { result = rawText ? JSON.parse(rawText) : null; } catch (e) { /* ignore */ }
+
+            if (!response.ok || !result || !result.success) {
+                window.alert((result && result.message) || 'Could not add category.');
+                return;
+            }
+
+            var uid = String(result.uid);
+            var label = result.name || name;
+            var option = Array.from(categorySelect.options).find(function (o) {
+                return o.value === uid;
+            });
+            if (!option) {
+                option = new Option(label, uid, true, true);
+                categorySelect.add(option);
+            } else {
+                option.text = label;
+            }
+            categorySelect.value = uid;
+        } catch (err) {
+            window.alert('Could not add category. Try again or open Categories.');
+        } finally {
+            addBtn.disabled = false;
+        }
     });
 })();
 </script>
