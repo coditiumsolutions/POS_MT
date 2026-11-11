@@ -127,7 +127,7 @@
                            aria-label="Select invoice @item.InvoiceNo" />
                 </td>
                 <td data-order="@item.InvoiceDate.ToString("yyyy-MM-dd HH:mm:ss")">@item.InvoiceDate.ToString("dd-MMM-yyyy HH:mm")</td>
-                <td>@item.CustomerName</td>
+                <td>@(string.IsNullOrWhiteSpace(item.CustomerName) ? "—" : item.CustomerName)</td>
                 <td>@item.CustomerType</td>
                 <td class="text-end">@item.NetAmount.ToString("N2")</td>
                 <td class="text-end">@item.PaidAmount.ToString("N2")</td>

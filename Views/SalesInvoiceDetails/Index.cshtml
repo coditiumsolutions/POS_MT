@@ -77,7 +77,7 @@
         <thead>
             <tr>
                 <th>Date</th>
-                <th>Customer</th>
+                <th>Customer Name</th>
                 <th>Type</th>
                 <th>Product</th>
                 <th class="text-end">Qty</th>
@@ -92,7 +92,7 @@
         {
             <tr>
                 <td>@item.InvoiceDate.ToString("yyyy-MM-dd")</td>
-                <td>@item.CustomerName</td>
+                <td>@(string.IsNullOrWhiteSpace(item.CustomerName) ? "—" : item.CustomerName)</td>
                 <td>@item.CustomerType</td>
                 <td>
                     <div class="fw-semibold">@item.ProductName</div>

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using POS_MT.Data;
+using POS_MT.Helpers;
 using POS_MT.Interfaces;
 using POS_MT.Models;
 using POS_MT.Options;
@@ -311,6 +312,7 @@ public class POSController : Controller
             .Select(x => new MonthlySupplyItemRowViewModel
             {
                 Uid = x.Uid,
+                ProductUid = x.ProductUid ?? 0,
                 CustomerCode = x.CustomerCode,
                 CustomerName = x.CustomerName,
                 ProductCode = x.ProductCode,
@@ -321,6 +323,10 @@ public class POSController : Controller
                 DeliveryCharges = x.DeliveryCharges ?? 0m
             })
             .ToListAsync(ct);
+
+        var dozenIds = await GetDozenPricedProductIdsAsync(items.Select(x => x.ProductUid), ct);
+        foreach (var item in items)
+            item.PricedByDozen = dozenIds.Contains(item.ProductUid);
 
         return Json(items);
     }
@@ -353,6 +359,7 @@ public class POSController : Controller
             .OrderBy(x => x.ProductName)
             .ToListAsync(ct);
         var effective = BuildEffectiveMonthlySupplyLines(templateRows, overrideRows);
+        var dozenIds = await GetDozenPricedProductIdsAsync(effective.Select(x => x.ProductUid), ct);
 
         var products = await _db.Products.AsNoTracking()
             .Where(x => x.IsActive)
@@ -393,18 +400,24 @@ public class POSController : Controller
                 x.UnitPrice,
                 x.Remarks
             }),
-            effective = effective.Select(x => new
+            effective = effective.Select(x =>
             {
-                x.ProductUid,
-                x.ProductCode,
-                x.ProductName,
-                x.BrandName,
-                x.Quantity,
-                x.UnitPrice,
-                deliveryCharges = x.DeliveryCharges,
-                itemTotal = Math.Round((x.Quantity * x.UnitPrice) + x.DeliveryCharges, 0, MidpointRounding.AwayFromZero),
-                x.IsOverride,
-                x.IsSkipped
+                var pricedByDozen = dozenIds.Contains(x.ProductUid);
+                return new
+                {
+                    x.ProductUid,
+                    x.ProductCode,
+                    x.ProductName,
+                    x.BrandName,
+                    x.Quantity,
+                    x.UnitPrice,
+                    deliveryCharges = x.DeliveryCharges,
+                    pricedByDozen,
+                    itemTotal = DozenPricing.ItemTotalWithDelivery(
+                        x.Quantity, x.UnitPrice, x.DeliveryCharges, pricedByDozen),
+                    x.IsOverride,
+                    x.IsSkipped
+                };
             }),
             products
         });
@@ -565,19 +578,31 @@ public class POSController : Controller
             .Where(x => ids.Contains(x.CustomerUid) && x.SupplyDate == day)
             .ToListAsync(ct);
 
+        var productIds = templates.Select(x => x.ProductUid ?? 0)
+            .Concat(overrides.Select(x => x.ProductUid))
+            .Where(x => x > 0)
+            .Distinct();
+        var dozenIds = await GetDozenPricedProductIdsAsync(productIds, ct);
+
         var customers = ids.Select(uid =>
         {
             var lines = BuildEffectiveMonthlySupplyLines(
                     templates.Where(x => x.CustomerUid == uid).OrderBy(x => x.ProductName).ToList(),
                     overrides.Where(x => x.CustomerUid == uid).OrderBy(x => x.ProductName).ToList())
                 .Where(x => !x.IsSkipped && x.Quantity > 0)
-                .Select(x => new
+                .Select(x =>
                 {
-                    name = string.IsNullOrWhiteSpace(x.ProductName) ? x.ProductCode : x.ProductName,
-                    qty = x.Quantity,
-                    price = x.UnitPrice,
-                    deliveryCharges = x.DeliveryCharges,
-                    total = Math.Round((x.Quantity * x.UnitPrice) + x.DeliveryCharges, 0, MidpointRounding.AwayFromZero)
+                    var pricedByDozen = dozenIds.Contains(x.ProductUid);
+                    return new
+                    {
+                        name = string.IsNullOrWhiteSpace(x.ProductName) ? x.ProductCode : x.ProductName,
+                        qty = x.Quantity,
+                        price = x.UnitPrice,
+                        deliveryCharges = x.DeliveryCharges,
+                        pricedByDozen,
+                        total = DozenPricing.ItemTotalWithDelivery(
+                            x.Quantity, x.UnitPrice, x.DeliveryCharges, pricedByDozen)
+                    };
                 })
                 .ToList();
 
@@ -822,9 +847,11 @@ public class POSController : Controller
                 var effectiveLines = BuildEffectiveMonthlySupplyLines(monthlyItems, dayOverrides)
                     .Where(x => !x.IsSkipped && x.Quantity > 0 && x.ProductUid > 0)
                     .ToList();
+                var dozenIdsForCustomer = await GetDozenPricedProductIdsAsync(
+                    effectiveLines.Select(x => x.ProductUid), ct);
                 if (effectiveLines.Count == 0)
                 {
-                    skipped.Add($"{customer.CustomerName} (no supply lines for {supplyDay:yyyy-MM-dd} � add standing items or clear skip overrides)");
+                    skipped.Add($"{customer.CustomerName} (no supply lines for {supplyDay:yyyy-MM-dd} — add standing items or clear skip overrides)");
                     continue;
                 }
 
@@ -910,7 +937,8 @@ public class POSController : Controller
                     products.TryGetValue(line.ProductUid, out var product);
                     var quantity = line.Quantity < 0.1m ? 0.1m : line.Quantity;
                     var unitPrice = line.UnitPrice;
-                    var lineTotal = Math.Round(unitPrice * quantity, 2);
+                    var pricedByDozen = dozenIdsForCustomer.Contains(line.ProductUid);
+                    var lineTotal = DozenPricing.LineAmount(quantity, unitPrice, pricedByDozen);
                     var previousQty = 0m;
 
                     if (existingByProduct.TryGetValue(line.ProductUid, out var detail))
@@ -1281,6 +1309,7 @@ public class POSController : Controller
             .Select(x => new MonthlySupplyItemRowViewModel
             {
                 Uid = x.Uid,
+                ProductUid = x.ProductUid ?? 0,
                 CustomerCode = x.CustomerCode,
                 CustomerName = x.CustomerName,
                 ProductCode = x.ProductCode,
@@ -1292,7 +1321,13 @@ public class POSController : Controller
             })
             .ToListAsync(ct);
 
+        var dozenIds = await GetDozenPricedProductIdsAsync(
+            items.Select(x => x.ProductUid).Concat(products.Select(p => p.Uid)), ct);
+        foreach (var item in items)
+            item.PricedByDozen = dozenIds.Contains(item.ProductUid);
+
         ViewBag.ProductPrices = products.ToDictionary(x => x.Uid.ToString(), x => x.SalePrice);
+        ViewBag.DozenPricedProductIds = dozenIds.ToDictionary(x => x.ToString(), _ => true);
 
         return View(new MonthlySupplyItemsPageViewModel
         {
@@ -1527,6 +1562,36 @@ public class POSController : Controller
             .Where(x => x > 0)
             .Distinct()
             .ToList();
+    }
+
+    /// <summary>Product IDs whose unit is Dozen — sale price is per dozen; qty is pieces.</summary>
+    private async Task<HashSet<int>> GetDozenPricedProductIdsAsync(
+        IEnumerable<int> productUids,
+        CancellationToken ct)
+    {
+        var ids = productUids.Where(x => x > 0).Distinct().ToList();
+        if (ids.Count == 0)
+            return [];
+
+        var products = await _db.Products.AsNoTracking()
+            .Where(x => ids.Contains(x.Uid) && x.UnitUid != null)
+            .Select(x => new { x.Uid, UnitUid = x.UnitUid!.Value })
+            .ToListAsync(ct);
+        if (products.Count == 0)
+            return [];
+
+        var unitIds = products.Select(x => x.UnitUid).Distinct().ToList();
+        var dozenUnitIds = await _db.ProductUnits.AsNoTracking()
+            .Where(u => unitIds.Contains(u.Uid)
+                        && ((u.UnitName != null && u.UnitName.ToLower().Contains("dozen"))
+                            || (u.UnitCode != null && u.UnitCode.ToLower().Contains("doz"))))
+            .Select(u => u.Uid)
+            .ToListAsync(ct);
+        if (dozenUnitIds.Count == 0)
+            return [];
+
+        var dozenUnitSet = dozenUnitIds.ToHashSet();
+        return products.Where(x => dozenUnitSet.Contains(x.UnitUid)).Select(x => x.Uid).ToHashSet();
     }
 
     private sealed class EffectiveMonthlySupplyLine

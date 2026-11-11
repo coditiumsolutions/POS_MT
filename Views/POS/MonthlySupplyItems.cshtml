@@ -4,6 +4,8 @@
     ViewData["Title"] = "Monthly Supply Items";
     var priceMap = ViewBag.ProductPrices as Dictionary<string, decimal> ?? new Dictionary<string, decimal>();
     var priceJson = JsonSerializer.Serialize(priceMap);
+    var dozenMap = ViewBag.DozenPricedProductIds as Dictionary<string, bool> ?? new Dictionary<string, bool>();
+    var dozenJson = JsonSerializer.Serialize(dozenMap);
     var fromCustomers = string.Equals(Model.ReturnTo, "Customers", StringComparison.OrdinalIgnoreCase);
 }
 
@@ -114,6 +116,7 @@
             <table class="table table-striped table-hover w-100 align-middle mb-0" id="monthlySupplyItemsTable">
                 <thead>
                     <tr>
+                        <th>Customer Name</th>
                         <th>Product Code</th>
                         <th>Product Name</th>
                         <th>Brand</th>
@@ -128,7 +131,7 @@
                 @if (Model.Items.Count == 0)
                 {
                     <tr>
-                        <td colspan="8" class="text-muted text-center py-4">No items yet for this customer.</td>
+                        <td colspan="9" class="text-muted text-center py-4">No items yet for this customer.</td>
                     </tr>
                 }
                 else
@@ -136,6 +139,7 @@
                     foreach (var item in Model.Items)
                     {
                         <tr>
+                            <td>@(string.IsNullOrWhiteSpace(item.CustomerName) ? Model.ActiveCustomerName : item.CustomerName)</td>
                             <td>@item.ProductCode</td>
                             <td>@item.ProductName</td>
                             <td>@(string.IsNullOrWhiteSpace(item.BrandName) ? "—" : item.BrandName)</td>
@@ -179,6 +183,7 @@
     <script>
         (function () {
             const prices = @Html.Raw(priceJson);
+            const dozenPriced = @Html.Raw(dozenJson);
             const productSelect = document.getElementById('ProductUid');
             const qty = document.getElementById('Quantity');
             const unitPrice = document.getElementById('UnitPrice');
@@ -191,15 +196,26 @@
                 return Number.isFinite(v) ? v : 0;
             }
 
+            function isDozen(productUid) {
+                return !!(productUid && dozenPriced[String(productUid)]);
+            }
+
             function syncItemTotal() {
-                const total = (num(qty) * num(unitPrice)) + num(delivery);
-                itemTotal.value = String(Math.round(total));
+                const q = num(qty);
+                const p = num(unitPrice);
+                const d = num(delivery);
+                // Dozen products (Eggs): price is per dozen; qty is pieces (12 eggs = 300).
+                const amount = isDozen(productSelect.value) ? (p * (q / 12)) : (q * p);
+                itemTotal.value = String(Math.round(amount + d));
             }
 
             productSelect.addEventListener('change', function () {
                 const key = productSelect.value;
                 if (key && prices[key] != null) {
                     unitPrice.value = Number(prices[key]).toFixed(2);
+                }
+                if (isDozen(key) && num(qty) === 1) {
+                    qty.value = '12';
                 }
                 syncItemTotal();
             });

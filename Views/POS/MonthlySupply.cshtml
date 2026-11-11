@@ -465,9 +465,10 @@
                         const qty = Number(line.quantity) || 0;
                         const price = Number(line.unitPrice) || 0;
                         const delivery = Number(line.deliveryCharges) || 0;
+                        const pricedByDozen = !!line.pricedByDozen;
                         const itemTotal = line.itemTotal != null
                             ? Number(line.itemTotal)
-                            : Math.round((qty * price) + delivery);
+                            : Math.round((pricedByDozen ? (price * (qty / 12)) : (qty * price)) + delivery);
                         previewDelivery += delivery;
                         previewTotal += itemTotal;
                         return {
@@ -494,19 +495,21 @@
                         const qty = Number(line.quantity) || 0;
                         const price = Number(line.unitPrice) || 0;
                         const delivery = Number(line.deliveryCharges) || 0;
+                        const pricedByDozen = !!line.pricedByDozen;
                         const lineTotal = line.itemTotal != null
                             ? Number(line.itemTotal)
-                            : Math.round((qty * price) + delivery);
+                            : Math.round((pricedByDozen ? (price * (qty / 12)) : (qty * price)) + delivery);
                         totalQty += qty;
                         totalDelivery += delivery;
                         totalAmount += lineTotal;
                         const note = line.isOverride ? ' <span class="text-muted small">(day qty)</span>' : '';
+                        const qtyHint = pricedByDozen ? ' <span class="text-muted small">(pcs)</span>' : '';
                         rows +=
                             '<tr>' +
                             '<td class="text-muted">' + (index + 1) + '</td>' +
                             '<td>' + escapeHtml(line.productName || line.productCode || '—') + note + '</td>' +
-                            '<td class="text-end">' + formatMoney(qty) + '</td>' +
-                            '<td class="text-end">' + formatMoney(price) + '</td>' +
+                            '<td class="text-end">' + formatMoney(qty) + qtyHint + '</td>' +
+                            '<td class="text-end">' + formatMoney(price) + (pricedByDozen ? ' <span class="text-muted small">/doz</span>' : '') + '</td>' +
                             '<td class="text-end">' + formatMoney(delivery) + '</td>' +
                             '<td class="text-end fw-semibold">' + Number(lineTotal).toLocaleString(undefined, { maximumFractionDigits: 0 }) + '</td>' +
                             '</tr>';
@@ -533,7 +536,7 @@
                         '<td class="text-end">' + Number(totalAmount).toLocaleString(undefined, { maximumFractionDigits: 0 }) + '</td>' +
                         '</tr></tfoot>' +
                         '</table></div>' +
-                        '<p class="text-muted small mb-0 mt-2">For ' + escapeHtml(day) + ' · ' + deliverLines.length + ' item(s) · Item Total = (Qty × Price) + Delivery Charges</p>' +
+                        '<p class="text-muted small mb-0 mt-2">For ' + escapeHtml(day) + ' · ' + deliverLines.length + ' item(s) · Piece items: Qty × Price · Eggs/dozen: Price × (Qty ÷ 12) + Delivery</p>' +
                         '</div>';
                 }
 

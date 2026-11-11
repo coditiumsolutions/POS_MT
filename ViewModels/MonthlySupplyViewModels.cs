@@ -79,6 +79,7 @@ public sealed class DeliveryHandoverItemViewModel
 public sealed class MonthlySupplyItemRowViewModel
 {
     public int Uid { get; set; }
+    public int ProductUid { get; set; }
     public string CustomerCode { get; set; } = string.Empty;
     public string CustomerName { get; set; } = string.Empty;
     public string ProductCode { get; set; } = string.Empty;
@@ -88,8 +89,15 @@ public sealed class MonthlySupplyItemRowViewModel
     public decimal UnitPrice { get; set; }
     public decimal DeliveryCharges { get; set; }
 
-    /// <summary>(Quantity × UnitPrice) + DeliveryCharges, rounded to whole number.</summary>
-    public decimal ItemTotal => Math.Round((Quantity * UnitPrice) + DeliveryCharges, 0, MidpointRounding.AwayFromZero);
+    /// <summary>True when sale price is per dozen and quantity is in pieces (e.g. Eggs).</summary>
+    public bool PricedByDozen { get; set; }
+
+    /// <summary>
+    /// Piece products: (Qty × Price) + Delivery.
+    /// Dozen products: (Price × Qty/12) + Delivery. Rounded to whole number.
+    /// </summary>
+    public decimal ItemTotal => Helpers.DozenPricing.ItemTotalWithDelivery(
+        Quantity, UnitPrice, DeliveryCharges, PricedByDozen);
 }
 
 public sealed class MonthlySupplyUpdateItemRequest
