@@ -52,7 +52,7 @@ public class SalesInvoiceDetailsController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> Index(string? customerType, int? month, DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
+    public async Task<IActionResult> Index(string? customerType, int? month, DateTime? dateFrom, DateTime? dateTo, string? search, CancellationToken ct)
     {
         EnsureSalesInvoiceNav();
         ViewData["Title"] = "Invoice Details";
@@ -131,6 +131,32 @@ public class SalesInvoiceDetailsController : Controller
             query = query.Where(x => x.inv.InvoiceDate.Month == month.Value);
         }
 
+        var searchTerm = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            // Keyword search: each word must match somewhere (LIKE '%word%'), so
+            // "Ghauri Shahid" finds "Shahid Ghauri" as well as exact phrases.
+            var keywords = searchTerm
+                .Split([' ', '\t', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(x => x.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(8)
+                .ToList();
+
+            foreach (var word in keywords)
+            {
+                var term = word;
+                query = query.Where(x =>
+                    x.inv.InvoiceNo.Contains(term) ||
+                    x.inv.InvoiceStatus.Contains(term) ||
+                    (x.inv.Remarks != null && x.inv.Remarks.Contains(term)) ||
+                    (x.c != null && x.c.CustomerName.Contains(term)) ||
+                    (x.c != null && x.c.CustomerCode.Contains(term)) ||
+                    (x.d.ProductName != null && x.d.ProductName.Contains(term)) ||
+                    (x.d.ProductCode != null && x.d.ProductCode.Contains(term)));
+            }
+        }
+
         var raw = await query
             .OrderByDescending(x => x.inv.InvoiceDate)
             .ThenByDescending(x => x.inv.Uid)
@@ -190,6 +216,7 @@ public class SalesInvoiceDetailsController : Controller
             Month = month is >= 1 and <= 12 ? month : null,
             DateFrom = fromDay,
             DateTo = toInclusive,
+            Search = searchTerm,
             Rows = rows
         });
     }
@@ -249,7 +276,7 @@ public class SalesInvoiceDetailsController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Delete(int id, string? customerType, int? month, DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
+    public async Task<IActionResult> Delete(int id, string? customerType, int? month, DateTime? dateFrom, DateTime? dateTo, string? search, CancellationToken ct)
     {
         EnsureSalesInvoiceNav();
         var detail = await _db.SalesInvoiceDetails.FirstOrDefaultAsync(x => x.Uid == id, ct);
@@ -261,7 +288,8 @@ public class SalesInvoiceDetailsController : Controller
                 customerType,
                 month,
                 dateFrom = dateFrom?.ToString("yyyy-MM-dd"),
-                dateTo = dateTo?.ToString("yyyy-MM-dd")
+                dateTo = dateTo?.ToString("yyyy-MM-dd"),
+                search
             });
         }
 
@@ -314,7 +342,8 @@ public class SalesInvoiceDetailsController : Controller
             customerType,
             month,
             dateFrom = dateFrom?.ToString("yyyy-MM-dd"),
-            dateTo = dateTo?.ToString("yyyy-MM-dd")
+            dateTo = dateTo?.ToString("yyyy-MM-dd"),
+            search
         });
     }
 }

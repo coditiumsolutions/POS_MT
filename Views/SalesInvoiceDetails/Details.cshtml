@@ -3,46 +3,75 @@
     ViewData["Title"] = "Invoice Detail";
 }
 
-<h1 class="page-heading mb-3">Invoice Detail</h1>
+<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+    <span class="sales-invoices-heading">Invoice Detail</span>
+</div>
 
-<div class="row g-3">
-    <div class="col-lg-6">
-        <div class="bg-white border rounded p-3 h-100">
-            <h2 class="h5 mb-3">Sales Invoice Detail</h2>
-            <dl class="row mb-0">
-                <dt class="col-sm-4">Detail UID</dt><dd class="col-sm-8">@Model.DetailUid</dd>
-                <dt class="col-sm-4">Product Code</dt><dd class="col-sm-8">@Model.ProductCode</dd>
-                <dt class="col-sm-4">Product Name</dt><dd class="col-sm-8">@Model.ProductName</dd>
-                <dt class="col-sm-4">Quantity</dt><dd class="col-sm-8">@Model.Quantity.ToString("N3")</dd>
-                <dt class="col-sm-4">Unit Price</dt><dd class="col-sm-8">@Model.UnitPrice.ToString("N2")</dd>
-                <dt class="col-sm-4">Discount %</dt><dd class="col-sm-8">@Model.DiscountPercent.ToString("N2")</dd>
-                <dt class="col-sm-4">Discount Amount</dt><dd class="col-sm-8">@Model.DiscountAmount.ToString("N2")</dd>
-                <dt class="col-sm-4">Tax %</dt><dd class="col-sm-8">@Model.TaxPercent.ToString("N2")</dd>
-                <dt class="col-sm-4">Tax Amount</dt><dd class="col-sm-8">@Model.TaxAmount.ToString("N2")</dd>
-                <dt class="col-sm-4">Line Total</dt><dd class="col-sm-8 fw-semibold">@Model.LineTotal.ToString("N2")</dd>
-                <dt class="col-sm-4">Cost Price</dt><dd class="col-sm-8">@Model.CostPrice.ToString("N2")</dd>
-                <dt class="col-sm-4">Line Remarks</dt><dd class="col-sm-8">@(string.IsNullOrWhiteSpace(Model.DetailRemarks) ? "—" : Model.DetailRemarks)</dd>
-            </dl>
+<div class="bg-white border rounded p-3 invoice-detail-report">
+    <div class="invoice-detail-grid" role="list">
+        <div class="invoice-detail-row" role="listitem">
+            <div class="invoice-detail-label">Detail UID</div>
+            <div class="invoice-detail-value">@Model.DetailUid</div>
+            <div class="invoice-detail-label">Invoice No</div>
+            <div class="invoice-detail-value">@Model.InvoiceNo</div>
         </div>
-    </div>
-    <div class="col-lg-6">
-        <div class="bg-white border rounded p-3 h-100">
-            <h2 class="h5 mb-3">Sales Invoice</h2>
-            <dl class="row mb-0">
-                <dt class="col-sm-4">Invoice No</dt><dd class="col-sm-8">@Model.InvoiceNo</dd>
-                <dt class="col-sm-4">Invoice Date</dt><dd class="col-sm-8">@Model.InvoiceDate.ToString("yyyy-MM-dd HH:mm")</dd>
-                <dt class="col-sm-4">Invoice Status</dt><dd class="col-sm-8">@Model.InvoiceStatus</dd>
-                <dt class="col-sm-4">Payment Status</dt><dd class="col-sm-8">@Model.PaymentStatus</dd>
-                <dt class="col-sm-4">Invoice Net</dt><dd class="col-sm-8">@Model.InvoiceNetAmount.ToString("N2")</dd>
-                <dt class="col-sm-4">Invoice Remarks</dt><dd class="col-sm-8">@(string.IsNullOrWhiteSpace(Model.InvoiceRemarks) ? "—" : Model.InvoiceRemarks)</dd>
-            </dl>
-
-            <h2 class="h5 mt-4 mb-3">Customer</h2>
-            <dl class="row mb-0">
-                <dt class="col-sm-4">Customer Code</dt><dd class="col-sm-8">@Model.CustomerCode</dd>
-                <dt class="col-sm-4">Customer Name</dt><dd class="col-sm-8">@Model.CustomerName</dd>
-                <dt class="col-sm-4">Customer Type</dt><dd class="col-sm-8">@Model.CustomerType</dd>
-            </dl>
+        <div class="invoice-detail-row" role="listitem">
+            <div class="invoice-detail-label">Invoice Date</div>
+            <div class="invoice-detail-value">@Model.InvoiceDate.ToString("yyyy-MM-dd HH:mm")</div>
+            <div class="invoice-detail-label">Customer Name</div>
+            <div class="invoice-detail-value">@Model.CustomerName</div>
+        </div>
+        <div class="invoice-detail-row" role="listitem">
+            <div class="invoice-detail-label">Customer Code</div>
+            <div class="invoice-detail-value">@Model.CustomerCode</div>
+            <div class="invoice-detail-label">Customer Type</div>
+            <div class="invoice-detail-value">@Model.CustomerType</div>
+        </div>
+        <div class="invoice-detail-row" role="listitem">
+            <div class="invoice-detail-label">Product Code</div>
+            <div class="invoice-detail-value">@Model.ProductCode</div>
+            <div class="invoice-detail-label">Product Name</div>
+            <div class="invoice-detail-value">@Model.ProductName</div>
+        </div>
+        <div class="invoice-detail-row" role="listitem">
+            <div class="invoice-detail-label">Quantity</div>
+            <div class="invoice-detail-value">@Model.Quantity.ToString("N3")</div>
+            <div class="invoice-detail-label">Unit Price</div>
+            <div class="invoice-detail-value">@Model.UnitPrice.ToString("N2")</div>
+        </div>
+        <div class="invoice-detail-row" role="listitem">
+            <div class="invoice-detail-label">Discount %</div>
+            <div class="invoice-detail-value">@Model.DiscountPercent.ToString("N2")</div>
+            <div class="invoice-detail-label">Discount Amount</div>
+            <div class="invoice-detail-value">@Model.DiscountAmount.ToString("N2")</div>
+        </div>
+        <div class="invoice-detail-row" role="listitem">
+            <div class="invoice-detail-label">Tax %</div>
+            <div class="invoice-detail-value">@Model.TaxPercent.ToString("N2")</div>
+            <div class="invoice-detail-label">Tax Amount</div>
+            <div class="invoice-detail-value">@Model.TaxAmount.ToString("N2")</div>
+        </div>
+        <div class="invoice-detail-row" role="listitem">
+            <div class="invoice-detail-label">Line Total</div>
+            <div class="invoice-detail-value fw-semibold">@Model.LineTotal.ToString("N2")</div>
+            <div class="invoice-detail-label">Cost Price</div>
+            <div class="invoice-detail-value">@Model.CostPrice.ToString("N2")</div>
+        </div>
+        <div class="invoice-detail-row" role="listitem">
+            <div class="invoice-detail-label">Invoice Status</div>
+            <div class="invoice-detail-value">@Model.InvoiceStatus</div>
+            <div class="invoice-detail-label">Payment Status</div>
+            <div class="invoice-detail-value">@Model.PaymentStatus</div>
+        </div>
+        <div class="invoice-detail-row" role="listitem">
+            <div class="invoice-detail-label">Invoice Net</div>
+            <div class="invoice-detail-value invoice-detail-value--net">@Model.InvoiceNetAmount.ToString("N2")</div>
+            <div class="invoice-detail-label">Line Remarks</div>
+            <div class="invoice-detail-value">@(string.IsNullOrWhiteSpace(Model.DetailRemarks) ? "—" : Model.DetailRemarks)</div>
+        </div>
+        <div class="invoice-detail-row invoice-detail-row--last" role="listitem">
+            <div class="invoice-detail-label">Invoice Remarks</div>
+            <div class="invoice-detail-value invoice-detail-value--span">@(string.IsNullOrWhiteSpace(Model.InvoiceRemarks) ? "—" : Model.InvoiceRemarks)</div>
         </div>
     </div>
 </div>
