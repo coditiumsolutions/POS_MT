@@ -78,6 +78,28 @@ public sealed class EmployeeSchemaService : IEmployeeSchemaService
                         CreatedDate TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                     );
                     """, cancellationToken);
+                await _db.Database.ExecuteSqlRawAsync("""
+                    CREATE TABLE IF NOT EXISTS EmployeeAttendance (
+                        uid INTEGER PRIMARY KEY AUTOINCREMENT,
+                        EmployeeUID INTEGER NOT NULL,
+                        BranchUID INTEGER NOT NULL,
+                        AttendanceDate TEXT NOT NULL,
+                        Status TEXT NOT NULL DEFAULT 'Present',
+                        UserUID INTEGER NULL,
+                        CreatedDate TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
+                    """, cancellationToken);
+                try
+                {
+                    await _db.Database.ExecuteSqlRawAsync(
+                        "DROP INDEX IF EXISTS UX_EmployeeAttendance_Employee_Date_Branch;",
+                        cancellationToken);
+                }
+                catch { /* ignore */ }
+                await _db.Database.ExecuteSqlRawAsync("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS UX_EmployeeAttendance_Employee_Date
+                    ON EmployeeAttendance(EmployeeUID, AttendanceDate);
+                    """, cancellationToken);
             }
             else
             {
@@ -165,6 +187,37 @@ public sealed class EmployeeSchemaService : IEmployeeSchemaService
                         CREATE INDEX IX_EmployeePayments_PaymentDate ON dbo.EmployeePayments([PaymentDate]);
                         CREATE INDEX IX_EmployeePayments_PaymentNo ON dbo.EmployeePayments([PaymentNo]);
                     END
+                    """, cancellationToken);
+
+                await _db.Database.ExecuteSqlRawAsync("""
+                    IF OBJECT_ID(N'dbo.EmployeeAttendance', N'U') IS NULL
+                    BEGIN
+                        CREATE TABLE dbo.EmployeeAttendance (
+                            [uid] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+                            [EmployeeUID] INT NOT NULL,
+                            [BranchUID] INT NOT NULL,
+                            [AttendanceDate] DATETIME2(0) NOT NULL,
+                            [Status] NVARCHAR(30) NOT NULL CONSTRAINT DF_EmployeeAttendance_Status DEFAULT (N'Present'),
+                            [UserUID] INT NULL,
+                            [CreatedDate] DATETIME2(0) NOT NULL CONSTRAINT DF_EmployeeAttendance_CreatedDate DEFAULT (sysdatetime())
+                        );
+                        CREATE UNIQUE INDEX UX_EmployeeAttendance_Employee_Date
+                            ON dbo.EmployeeAttendance([EmployeeUID], [AttendanceDate]);
+                        CREATE INDEX IX_EmployeeAttendance_AttendanceDate ON dbo.EmployeeAttendance([AttendanceDate]);
+                        CREATE INDEX IX_EmployeeAttendance_BranchUID ON dbo.EmployeeAttendance([BranchUID]);
+                        CREATE INDEX IX_EmployeeAttendance_EmployeeUID ON dbo.EmployeeAttendance([EmployeeUID]);
+                    END
+                    """, cancellationToken);
+
+                await _db.Database.ExecuteSqlRawAsync("""
+                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_EmployeeAttendance_Employee_Date_Branch' AND object_id = OBJECT_ID(N'dbo.EmployeeAttendance'))
+                        DROP INDEX UX_EmployeeAttendance_Employee_Date_Branch ON dbo.EmployeeAttendance;
+                    """, cancellationToken);
+                await _db.Database.ExecuteSqlRawAsync("""
+                    IF OBJECT_ID(N'dbo.EmployeeAttendance', N'U') IS NOT NULL
+                       AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_EmployeeAttendance_Employee_Date' AND object_id = OBJECT_ID(N'dbo.EmployeeAttendance'))
+                        CREATE UNIQUE INDEX UX_EmployeeAttendance_Employee_Date
+                            ON dbo.EmployeeAttendance([EmployeeUID], [AttendanceDate]);
                     """, cancellationToken);
             }
         }

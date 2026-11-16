@@ -266,9 +266,14 @@
             <div><span>Discount</span><span>@Model.DiscountAmount.ToString("N2")</span></div>
             <div><span>Tax</span><span>@Model.TaxAmount.ToString("N2")</span></div>
             <div><span>Other / Delivery</span><span>@Model.OtherCharges.ToString("N2")</span></div>
-            <div class="net"><span>Net Amount</span><span>@Model.NetAmount.ToString("N2")</span></div>
-            <div><span>Paid</span><span>@Model.PaidAmount.ToString("N2")</span></div>
-            <div><span>Balance</span><span>@Model.BalanceAmount.ToString("N2")</span></div>
+            <div class="net"><span>This Bill (Net)</span><span>@Model.NetAmount.ToString("N2")</span></div>
+            <div><span>Paid (this bill)</span><span>@Model.PaidAmount.ToString("N2")</span></div>
+            <div><span>Balance (this bill)</span><span>@Model.BalanceAmount.ToString("N2")</span></div>
+            @if (Model.PreviousBalanceAmount > 0 || CustomerClassification.IsMonthlySupplyInvoice(Model.Remarks) || CustomerClassification.IsOpeningBalanceInvoice(Model.Remarks))
+            {
+                <div><span>Previous Balance</span><span>@Model.PreviousBalanceAmount.ToString("N2")</span></div>
+                <div class="net"><span>Total Due</span><span>@Model.GrandTotalDue.ToString("N2")</span></div>
+            }
         </div>
 
         @if (Model.Payments.Count > 0)
@@ -306,10 +311,6 @@
             </table>
         }
 
-        @if (!string.IsNullOrWhiteSpace(Model.Remarks))
-        {
-            <div class="footer-note">Remarks: @Model.Remarks</div>
-        }
     </div>
 </body>
 </html>

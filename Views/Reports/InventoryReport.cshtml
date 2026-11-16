@@ -87,8 +87,23 @@
     </div>
 </div>
 
+<style>
+    #inventoryReportTable.report-grid-table tbody tr > td {
+        background-color: #fff !important;
+        border-bottom: 2px solid #2563eb !important;
+    }
+    #inventoryReportTable.report-grid-table tbody tr:hover > td {
+        background-color: #fff !important;
+        border-bottom-color: #1d4ed8 !important;
+    }
+    #inventoryReportTable.report-grid-table tbody tr > td.report-col-amount {
+        background-color: #fff !important;
+        color: #0f172a;
+    }
+</style>
+
 <div class="table-responsive bg-white border rounded p-2">
-    <table id="inventoryReportTable" class="table table-sm table-striped table-hover align-middle w-100 mb-0 report-grid-table">
+    <table id="inventoryReportTable" class="table table-sm table-hover align-middle w-100 mb-0 report-grid-table">
         <thead>
             <tr>
                 <th>Item</th>

@@ -110,6 +110,10 @@ public sealed class CustomerAdvanceService : ICustomerAdvanceService
         if (invoice.CustomerUid is not int customerUid || customerUid <= 0)
             return 0m;
 
+        // Monthly Supply is settled at month end — do not auto-clear mid-month.
+        if (CustomerClassification.IsMonthlySupplyInvoice(invoice.Remarks))
+            return 0m;
+
         var due = Math.Max(0, invoice.NetAmount - invoice.PaidAmount);
         if (due <= 0)
             return 0m;
@@ -145,6 +149,107 @@ public sealed class CustomerAdvanceService : ICustomerAdvanceService
         });
 
         return apply;
+    }
+
+    public async Task<decimal> AutoApplyAdvanceFifoAsync(
+        int customerUid,
+        int? userUid = null,
+        int? terminalUid = null,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureSchemaAsync(cancellationToken);
+        if (customerUid <= 0)
+            return 0m;
+
+        var unpaid = await _db.SalesInvoices
+            .Where(x => x.CustomerUid == customerUid
+                        && x.InvoiceStatus != "Cancelled"
+                        && x.BalanceAmount > 0)
+            .OrderBy(x => x.InvoiceDate)
+            .ThenBy(x => x.Uid)
+            .ToListAsync(cancellationToken);
+
+        var totalApplied = 0m;
+        foreach (var invoice in unpaid)
+        {
+            if (CustomerClassification.IsMonthlySupplyInvoice(invoice.Remarks))
+                continue;
+
+            var applied = await AutoApplyAdvanceToInvoiceAsync(invoice, userUid, terminalUid, cancellationToken);
+            if (applied <= 0)
+                break;
+            totalApplied += applied;
+        }
+
+        return totalApplied;
+    }
+
+    public async Task<decimal> ReverseAutoAppliedAdvancesOnMonthlySupplyAsync(
+        int customerUid,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureSchemaAsync(cancellationToken);
+        if (customerUid <= 0)
+            return 0m;
+
+        var monthlyInvoices = await _db.SalesInvoices
+            .Where(x => x.CustomerUid == customerUid
+                        && x.InvoiceStatus != "Cancelled"
+                        && x.Remarks != null
+                        && x.Remarks.StartsWith("Monthly Supply"))
+            .ToListAsync(cancellationToken);
+
+        if (monthlyInvoices.Count == 0)
+            return 0m;
+
+        var invoiceIds = monthlyInvoices.Select(x => x.Uid).ToList();
+        var autoPayments = await _db.CustomerPayments
+            .Where(x => x.SalesInvoiceUid != null
+                        && invoiceIds.Contains(x.SalesInvoiceUid.Value)
+                        && x.Remarks != null
+                        && x.Remarks.StartsWith("Auto-applied advance"))
+            .ToListAsync(cancellationToken);
+
+        foreach (var invoice in monthlyInvoices)
+        {
+            var paidManual = await _db.CustomerPayments.AsNoTracking()
+                .Where(x => x.SalesInvoiceUid == invoice.Uid
+                            && (x.Remarks == null
+                                || !x.Remarks.StartsWith("Auto-applied advance")))
+                .SumAsync(x => (decimal?)x.AppliedToInvoiceAmount, cancellationToken) ?? 0m;
+
+            invoice.PaidAmount = paidManual;
+            invoice.BalanceAmount = Math.Max(0, invoice.NetAmount - paidManual);
+            invoice.PaymentStatus = paidManual <= 0
+                ? "Unpaid"
+                : paidManual >= invoice.NetAmount ? "Paid" : "Partial";
+            invoice.UpdatedDate = DateTime.Now;
+        }
+
+        var restored = 0m;
+        if (autoPayments.Count > 0)
+        {
+            var customer = await _db.Customers.FirstOrDefaultAsync(x => x.Uid == customerUid, cancellationToken);
+            foreach (var payment in autoPayments)
+            {
+                var applied = payment.AppliedToInvoiceAmount > 0
+                    ? payment.AppliedToInvoiceAmount
+                    : payment.Amount;
+                if (applied > 0)
+                {
+                    restored += applied;
+                    if (customer is not null)
+                        customer.AdvanceBalance += applied;
+                }
+            }
+
+            if (customer is not null)
+                customer.UpdatedDate = DateTime.Now;
+
+            _db.CustomerPayments.RemoveRange(autoPayments);
+        }
+
+        return restored;
     }
 
     private async Task ReversePaymentEffectAsync(

@@ -224,7 +224,7 @@ public class VendorsController : Controller
         }
 
         TempData["Success"] = $"Paid {amount:N2} to {vendor.VendorName}. Remaining on {invoice.PurchaseInvoiceNo}: {invoice.BalanceAmount:N2}.";
-        return RedirectToAction(nameof(Pay), new { id = vendor.Uid });
+        return RedirectToAction(nameof(Pay), new { id = vendor.Uid, purchaseInvoiceUid = invoice.Uid });
     }
 
     private async Task<VendorPayViewModel> BuildVendorPayViewModelAsync(
@@ -244,11 +244,13 @@ public class VendorsController : Controller
             {
                 Uid = x.Uid,
                 PurchaseInvoiceNo = x.PurchaseInvoiceNo,
+                VendorInvoiceNo = x.VendorInvoiceNo,
                 PurchaseDate = x.PurchaseDate,
                 NetAmount = x.NetAmount,
                 PaidAmount = x.PaidAmount,
                 BalanceAmount = x.BalanceAmount,
-                PaymentStatus = x.PaymentStatus
+                PaymentStatus = x.PaymentStatus,
+                Remarks = x.Remarks
             })
             .ToListAsync(ct);
 
@@ -257,21 +259,26 @@ public class VendorsController : Controller
             var computedBalance = Math.Max(0, inv.NetAmount - inv.PaidAmount);
             if (inv.BalanceAmount != computedBalance)
                 inv.BalanceAmount = computedBalance;
-            if (string.IsNullOrWhiteSpace(inv.PaymentStatus) || inv.PaymentStatus == "Unpaid")
-            {
-                inv.PaymentStatus = inv.PaidAmount <= 0
-                    ? "Unpaid"
-                    : inv.PaidAmount >= inv.NetAmount && inv.NetAmount > 0 ? "Paid" : "Partial";
-            }
+            inv.PaymentStatus = inv.PaidAmount <= 0
+                ? "Unpaid"
+                : inv.PaidAmount >= inv.NetAmount && inv.NetAmount > 0 ? "Paid" : "Partial";
         }
 
-        // Prefer invoices still owed; if none, still show unpaid/partial (even when stored totals were 0).
+        // Prefer unpaid/partial invoices for payment; if none, still show recent bills so Print works.
         var openInvoices = invoices
             .Where(x => x.BalanceAmount > 0
-                        || !string.Equals(x.PaymentStatus, "Paid", StringComparison.OrdinalIgnoreCase))
+                        || (selectedInvoiceUid is > 0 && x.Uid == selectedInvoiceUid.Value))
+            .OrderBy(x => x.PurchaseDate)
+            .ThenBy(x => x.Uid)
             .ToList();
         if (openInvoices.Count == 0)
-            openInvoices = invoices;
+        {
+            openInvoices = invoices
+                .OrderByDescending(x => x.PurchaseDate)
+                .ThenByDescending(x => x.Uid)
+                .Take(25)
+                .ToList();
+        }
 
         var payments = await (
             from p in _db.VendorPayments.AsNoTracking()
@@ -295,6 +302,7 @@ public class VendorsController : Controller
 
         var selected = selectedInvoiceUid is > 0
             ? openInvoices.FirstOrDefault(x => x.Uid == selectedInvoiceUid.Value)
+              ?? invoices.FirstOrDefault(x => x.Uid == selectedInvoiceUid.Value)
             : openInvoices.FirstOrDefault(x => x.BalanceAmount > 0) ?? openInvoices.FirstOrDefault();
 
         var payAmount = amount is > 0
@@ -316,7 +324,9 @@ public class VendorsController : Controller
             InvoiceOptions = openInvoices.Select(x => new SelectListItem
             {
                 Value = x.Uid.ToString(),
-                Text = $"{x.PurchaseInvoiceNo} — Bal {x.BalanceAmount:N2} ({x.PaymentStatus})",
+                Text = string.IsNullOrWhiteSpace(x.VendorInvoiceNo)
+                    ? $"{x.PurchaseInvoiceNo} — Due {x.BalanceAmount:N2} ({x.PaymentStatus})"
+                    : $"{x.VendorInvoiceNo} / {x.PurchaseInvoiceNo} — Due {x.BalanceAmount:N2} ({x.PaymentStatus})",
                 Selected = selected != null && x.Uid == selected.Uid
             }).ToList(),
             PaymentMethodOptions = await BuildDistinctPaymentMethodOptionsAsync(ct)

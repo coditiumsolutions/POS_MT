@@ -27,6 +27,62 @@ public class ExpensesController : Controller {
 
     return View(await query.OrderByDescending(x => x.ExpenseDate).ThenByDescending(x => x.Uid).ToListAsync(ct));
   }
+
+  /// <summary>Compact printable expenses report (browser Print / Save as PDF).</summary>
+  [HttpGet]
+  public async Task<IActionResult> Print(DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
+  {
+    ViewData["Title"] = "Expenses Report";
+    var model = await BuildPrintModelAsync(dateFrom, dateTo, ct);
+    return View(model);
+  }
+
+  private async Task<ExpensePrintViewModel> BuildPrintModelAsync(DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
+  {
+    var fromDay = dateFrom?.Date;
+    var toInclusive = dateTo?.Date;
+    var toExclusive = toInclusive?.AddDays(1);
+
+    var query =
+      from e in _db.Expenses.AsNoTracking()
+      join c in _db.ExpenseCategories.AsNoTracking() on e.ExpenseCategoryUid equals c.Uid into cj
+      from c in cj.DefaultIfEmpty()
+      join b in _db.Branches.AsNoTracking() on e.BranchUid equals b.Uid into bj
+      from b in bj.DefaultIfEmpty()
+      join pm in _db.PaymentMethods.AsNoTracking() on e.PaymentMethodUid equals pm.Uid into pmj
+      from pm in pmj.DefaultIfEmpty()
+      select new { e, c, b, pm };
+
+    if (fromDay.HasValue)
+      query = query.Where(x => x.e.ExpenseDate >= fromDay.Value);
+    if (toExclusive.HasValue)
+      query = query.Where(x => x.e.ExpenseDate < toExclusive.Value);
+
+    var rows = await query
+      .OrderByDescending(x => x.e.ExpenseDate)
+      .ThenByDescending(x => x.e.Uid)
+      .Select(x => new ExpensePrintRowViewModel
+      {
+        ExpenseNo = x.e.ExpenseNo,
+        ExpenseDate = x.e.ExpenseDate,
+        CategoryName = x.c != null ? x.c.CategoryName : null,
+        BranchName = x.b != null ? x.b.BranchName : null,
+        Description = x.e.Description,
+        PaymentMethod = x.pm != null ? x.pm.PaymentName : null,
+        Amount = x.e.Amount
+      })
+      .ToListAsync(ct);
+
+    return new ExpensePrintViewModel
+    {
+      DateFrom = fromDay,
+      DateTo = toInclusive,
+      PrintedAt = DateTime.Now,
+      ExpenseCount = rows.Count,
+      TotalAmount = rows.Sum(x => x.Amount),
+      Rows = rows
+    };
+  }
   public async Task<IActionResult> Create(CancellationToken ct){ await LoadLookups(ct); return View(new ExpenseFormViewModel{ExpenseDate=DateTime.Now, ExpenseNo=$"EX-{DateTime.Now:yyyyMMddHHmmss}"}); }
   [HttpPost, ValidateAntiForgeryToken]
   public async Task<IActionResult> Create(ExpenseFormViewModel model, CancellationToken ct){

@@ -22,10 +22,15 @@ public sealed class InventoryLedgerService : IInventoryLedgerService
 
     public async Task<int> ResolveWarehouseUidAsync(int? preferredWarehouseUid, int? branchUid, CancellationToken cancellationToken = default)
     {
+        // Preferred warehouse is used only when it belongs to the selected branch (when a branch is set).
         if (preferredWarehouseUid is > 0)
         {
-            var preferred = await _db.Warehouses.AsNoTracking()
-                .Where(x => x.Uid == preferredWarehouseUid && x.IsActive)
+            var preferredQuery = _db.Warehouses.AsNoTracking()
+                .Where(x => x.Uid == preferredWarehouseUid && x.IsActive);
+            if (branchUid is > 0)
+                preferredQuery = preferredQuery.Where(x => x.BranchUid == branchUid);
+
+            var preferred = await preferredQuery
                 .Select(x => (int?)x.Uid)
                 .FirstOrDefaultAsync(cancellationToken);
             if (preferred is > 0)
@@ -41,6 +46,9 @@ public sealed class InventoryLedgerService : IInventoryLedgerService
                 .FirstOrDefaultAsync(cancellationToken);
             if (byBranch is > 0)
                 return byBranch.Value;
+
+            throw new InvalidOperationException(
+                "No active warehouse found for the selected branch. Create a warehouse linked to that branch first.");
         }
 
         var any = await _db.Warehouses.AsNoTracking()
@@ -287,6 +295,85 @@ public sealed class InventoryLedgerService : IInventoryLedgerService
                 CreatedDate = now
             });
         }
+    }
+
+    public async Task ApplyPurchaseQuantityDeltaAsync(
+        int purchaseInvoiceUid,
+        string purchaseInvoiceNo,
+        int warehouseUid,
+        InventoryLineMovement lineDelta,
+        int? userUid,
+        int? terminalUid,
+        CancellationToken cancellationToken = default)
+    {
+        if (lineDelta.ProductUid <= 0 || lineDelta.Quantity == 0 || warehouseUid <= 0)
+            return;
+
+        var now = DateTime.Now;
+        var name = string.IsNullOrWhiteSpace(lineDelta.ProductName)
+            ? lineDelta.ProductUid.ToString()
+            : lineDelta.ProductName.Trim();
+        var unitCost = lineDelta.UnitCost;
+        var inv = await GetOrCreateInventoryAsync(lineDelta.ProductUid, warehouseUid, now, cancellationToken);
+
+        if (lineDelta.Quantity > 0)
+        {
+            var qty = lineDelta.Quantity;
+            var previousQty = inv.CurrentQuantity;
+            var previousValue = previousQty * inv.AverageCost;
+
+            inv.QuantityIn += qty;
+            inv.CurrentQuantity += qty;
+            inv.LastPurchasePrice = unitCost;
+            inv.AverageCost = inv.CurrentQuantity <= 0
+                ? unitCost
+                : Math.Round((previousValue + qty * unitCost) / inv.CurrentQuantity, 2);
+            inv.LastStockDate = now;
+            inv.UpdatedDate = now;
+
+            _db.InventoryTransactions.Add(new InventoryTransaction
+            {
+                TransactionDate = now,
+                ProductUid = lineDelta.ProductUid,
+                WarehouseUid = warehouseUid,
+                TransactionType = TxPurchase,
+                ReferenceUid = purchaseInvoiceUid,
+                ReferenceNo = purchaseInvoiceNo,
+                QuantityIn = qty,
+                QuantityOut = 0,
+                BalanceQuantity = inv.CurrentQuantity,
+                UnitCost = unitCost,
+                Remarks = $"Edit purchase {purchaseInvoiceNo} ({name})",
+                UserUid = userUid,
+                TerminalUid = terminalUid,
+                CreatedDate = now
+            });
+            return;
+        }
+
+        var deduct = Math.Abs(lineDelta.Quantity);
+        inv.QuantityOut += deduct;
+        inv.CurrentQuantity -= deduct;
+        inv.LastStockDate = now;
+        inv.UpdatedDate = now;
+
+        _db.InventoryTransactions.Add(new InventoryTransaction
+        {
+            TransactionDate = now,
+            ProductUid = lineDelta.ProductUid,
+            WarehouseUid = warehouseUid,
+            TransactionType = TxPurchaseReversal,
+            ReferenceUid = purchaseInvoiceUid,
+            ReferenceNo = purchaseInvoiceNo,
+            QuantityIn = 0,
+            QuantityOut = deduct,
+            BalanceQuantity = inv.CurrentQuantity,
+            UnitCost = unitCost,
+            Remarks = $"Edit purchase {purchaseInvoiceNo} ({name})",
+            UserUid = userUid,
+            TerminalUid = terminalUid,
+            CreatedDate = now
+        });
     }
 
     public async Task ReversePurchaseAsync(

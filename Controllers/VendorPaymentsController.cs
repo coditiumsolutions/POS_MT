@@ -196,6 +196,65 @@ public class VendorPaymentsController : Controller
         return e is null ? NotFound() : View(e);
     }
 
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(
+        int id,
+        DateTime? dateFrom,
+        DateTime? dateTo,
+        string? navArea,
+        string? returnTo,
+        CancellationToken ct)
+    {
+        var payment = await _db.VendorPayments.FirstOrDefaultAsync(x => x.Uid == id, ct);
+        if (payment is null)
+        {
+            TempData["Error"] = "Vendor payment was not found.";
+            return RedirectAfterDelete(dateFrom, dateTo, navArea, returnTo);
+        }
+
+        var paymentNo = payment.PaymentNo;
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            if (payment.PurchaseInvoiceUid is int purchaseInvoiceUid)
+            {
+                await ApplyToPurchaseInvoiceAsync(purchaseInvoiceUid, -payment.Amount, ct);
+            }
+
+            _db.VendorPayments.Remove(payment);
+            await _db.SaveChangesAsync(ct);
+            await _audit.WriteAsync("Delete", "VendorPayments", id.ToString(),
+                $"Deleted vendor payment {paymentNo}", ct);
+            await tx.CommitAsync(ct);
+            TempData["Success"] = $"Vendor payment {paymentNo} deleted.";
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync(ct);
+            TempData["Error"] = "Delete failed: " + (ex.InnerException?.Message ?? ex.Message);
+        }
+
+        return RedirectAfterDelete(dateFrom, dateTo, navArea, returnTo);
+    }
+
+    private IActionResult RedirectAfterDelete(DateTime? dateFrom, DateTime? dateTo, string? navArea, string? returnTo)
+    {
+        if (string.Equals(returnTo, "Report", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(navArea, "Vendors", StringComparison.OrdinalIgnoreCase)
+            || dateFrom.HasValue
+            || dateTo.HasValue)
+        {
+            return RedirectToAction("VendorPaymentReport", "Reports", new
+            {
+                dateFrom = dateFrom?.ToString("yyyy-MM-dd"),
+                dateTo = dateTo?.ToString("yyyy-MM-dd"),
+                navArea
+            });
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
+
     private void ValidatePayment(VendorPaymentFormViewModel model)
     {
         if (model.Amount <= 0)

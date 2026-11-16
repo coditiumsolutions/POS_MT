@@ -1,0 +1,284 @@
+@model EmployeeAttendanceMarkPageViewModel
+@{
+    ViewData["Title"] = "Mark Attendance";
+    var availableCount = Model.Employees.Count(e => !Model.AlreadyPresentUids.Contains(e.Uid));
+    var alreadyCount = Model.AlreadyPresentUids.Count;
+}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+    <div>
+        <h1 class="page-heading mb-1">Mark Attendance</h1>
+        <p class="text-muted mb-0">Select a branch and date, check employees, then save attendance. One attendance per employee per calendar date.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <a class="btn btn-outline-secondary btn-sm" asp-action="Index">View Attendance</a>
+        <span class="text-muted small">Selected: <strong id="attendanceSelectedCount">0</strong></span>
+    </div>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div id="attendanceReasonAlert" class="alert alert-warning @(Model.BranchUid is > 0 && availableCount > 0 ? "d-none" : "")" role="alert">
+    <span id="attendanceReasonText">
+        @if (Model.BranchUid is null or 0)
+        {
+            <text>Select a branch to mark attendance.</text>
+        }
+        else if (Model.Employees.Count == 0)
+        {
+            <text>No active employees found.</text>
+        }
+        else if (availableCount == 0)
+        {
+            <text>All employees are already marked present for @Model.AttendanceDate.ToString("dd-MMM-yyyy"). Duplicate attendance (same employee + date) is not allowed.</text>
+        }
+    </span>
+</div>
+
+<form asp-action="Mark" method="post" id="attendanceMarkForm">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="attendanceDate" id="attendanceDateHidden" value="@Model.AttendanceDate.ToString("yyyy-MM-dd")" />
+    <input type="hidden" name="branchUid" id="attendanceBranchHidden" value="@(Model.BranchUid ?? 0)" />
+</form>
+
+<div class="mb-3 d-flex flex-wrap gap-2 align-items-end">
+    <form asp-action="Mark" method="get" class="d-flex flex-wrap gap-2 align-items-end" id="attendanceMarkFilterForm">
+        <div>
+            <label class="form-label small text-muted mb-1" for="attendanceBranch">Branch</label>
+            <select id="attendanceBranch"
+                    name="branchUid"
+                    class="form-select form-select-sm"
+                    style="width:auto; min-width:11rem;"
+                    asp-items="Model.BranchOptions"
+                    onchange="this.form.submit()"></select>
+        </div>
+        <div>
+            <label class="form-label small text-muted mb-1" for="attendanceDate">Attendance date</label>
+            <input type="date"
+                   id="attendanceDate"
+                   name="attendanceDate"
+                   class="form-control form-control-sm"
+                   value="@Model.AttendanceDate.ToString("yyyy-MM-dd")"
+                   onchange="this.form.submit()"
+                   required />
+        </div>
+    </form>
+    <div style="width: 10rem;">
+        <label class="form-label small text-muted mb-1" for="attendanceEmployeeFilter">Filter</label>
+        <input type="search"
+               id="attendanceEmployeeFilter"
+               class="form-control form-control-sm"
+               placeholder="Filter…"
+               autocomplete="off" />
+    </div>
+    <button type="submit"
+            form="attendanceMarkForm"
+            class="btn btn-sm btn-primary"
+            id="attendanceSaveBtn"
+            disabled>
+        Save Attendance
+    </button>
+</div>
+
+@if (alreadyCount > 0)
+{
+    <p class="text-muted small mb-2">
+        @alreadyCount employee(s) already marked for @Model.AttendanceDate.ToString("dd-MMM-yyyy") — checkboxes are locked to prevent duplicates.
+        @availableCount available to mark.
+    </p>
+}
+
+<div class="table-responsive bg-white border rounded p-2">
+    <table id="attendanceMarkTable" class="table table-hover w-100 align-middle mb-0">
+        <thead>
+            <tr>
+                <th style="width:42px">
+                    <input type="checkbox" id="attendanceSelectAll" class="form-check-input" title="Select all available" />
+                </th>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Mobile</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+        @if (Model.Employees.Count == 0)
+        {
+            <tr>
+                <td colspan="5" class="text-muted text-center py-4">No active employees found.</td>
+            </tr>
+        }
+        else
+        {
+            @foreach (var emp in Model.Employees)
+            {
+                var already = Model.AlreadyPresentUids.Contains(emp.Uid);
+                var markedBranch = already && Model.AlreadyPresentBranchNames.TryGetValue(emp.Uid, out var bn) ? bn : null;
+                <tr class="attendance-employee-row" data-employee-name="@emp.EmployeeName" data-employee-code="@emp.EmployeeCode">
+                    <td>
+                        <input type="checkbox"
+                               class="form-check-input attendance-select-check"
+                               form="attendanceMarkForm"
+                               name="SelectedEmployeeUids"
+                               value="@emp.Uid"
+                               @(already ? "disabled" : null)
+                               title="@(already ? "Already marked present for this date — duplicate not allowed" : "Select employee")" />
+                    </td>
+                    <td>@emp.EmployeeCode</td>
+                    <td>@emp.EmployeeName</td>
+                    <td>@(emp.MobileNo1 ?? "—")</td>
+                    <td>
+                        @if (already)
+                        {
+                            <span class="badge text-bg-success">Present</span>
+                            @if (!string.IsNullOrWhiteSpace(markedBranch))
+                            {
+                                <span class="text-muted small ms-1">(@markedBranch)</span>
+                            }
+                        }
+                        else
+                        {
+                            <span class="text-muted">—</span>
+                        }
+                    </td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    const selectAll = document.getElementById('attendanceSelectAll');
+    const countLabel = document.getElementById('attendanceSelectedCount');
+    const saveBtn = document.getElementById('attendanceSaveBtn');
+    const form = document.getElementById('attendanceMarkForm');
+    const filterInput = document.getElementById('attendanceEmployeeFilter');
+    const branchHidden = document.getElementById('attendanceBranchHidden');
+    const reasonAlert = document.getElementById('attendanceReasonAlert');
+    const reasonText = document.getElementById('attendanceReasonText');
+    const availableCount = @availableCount;
+    const attendanceDateLabel = '@Model.AttendanceDate.ToString("dd-MMM-yyyy")';
+
+    function checks() {
+        return Array.from(document.querySelectorAll('.attendance-select-check:not([disabled])'));
+    }
+
+    function hasBranch() {
+        return branchHidden && Number(branchHidden.value) > 0;
+    }
+
+    function setReason(message) {
+        if (!reasonAlert || !reasonText) return;
+        if (!message) {
+            reasonAlert.classList.add('d-none');
+            reasonText.textContent = '';
+            return;
+        }
+        reasonText.textContent = message;
+        reasonAlert.classList.remove('d-none');
+    }
+
+    function refresh() {
+        const available = checks();
+        const selected = available.filter(function (c) { return c.checked; }).length;
+        if (countLabel) countLabel.textContent = String(selected);
+
+        const branchOk = hasBranch();
+        if (saveBtn) {
+            saveBtn.disabled = selected === 0 || !branchOk;
+        }
+
+        if (!branchOk) {
+            setReason('Select a branch to mark attendance.');
+        } else if (availableCount === 0) {
+            setReason('All employees are already marked present for ' + attendanceDateLabel + '. Duplicate attendance (same employee + date) is not allowed.');
+        } else if (selected === 0) {
+            setReason('Select one or more employees who are not already marked for ' + attendanceDateLabel + ', then click Save Attendance.');
+        } else {
+            setReason('');
+        }
+
+        if (selectAll) {
+            selectAll.disabled = available.length === 0;
+            selectAll.checked = available.length > 0 && selected === available.length;
+            selectAll.indeterminate = selected > 0 && selected < available.length;
+        }
+    }
+
+    if (selectAll) {
+        selectAll.addEventListener('change', function () {
+            if (selectAll.disabled) {
+                setReason('No employees available to mark for ' + attendanceDateLabel + '. Duplicate attendance is not allowed.');
+                return;
+            }
+            checks().forEach(function (c) {
+                const row = c.closest('.attendance-employee-row');
+                if (row && row.style.display === 'none') return;
+                c.checked = selectAll.checked;
+            });
+            refresh();
+        });
+    }
+
+    document.addEventListener('change', function (e) {
+        if (e.target && e.target.classList && e.target.classList.contains('attendance-select-check')) {
+            refresh();
+        }
+    });
+
+    document.addEventListener('click', function (e) {
+        var t = e.target;
+        if (!t || !t.classList || !t.classList.contains('attendance-select-check')) return;
+        if (t.disabled) {
+            setReason('This employee is already marked present for ' + attendanceDateLabel + '. Duplicate attendance (employee code + date) is not allowed.');
+        }
+    });
+
+    if (filterInput) {
+        filterInput.addEventListener('input', function () {
+            const q = filterInput.value.trim().toLowerCase();
+            document.querySelectorAll('.attendance-employee-row').forEach(function (row) {
+                const name = (row.getAttribute('data-employee-name') || '').toLowerCase();
+                const code = (row.getAttribute('data-employee-code') || '').toLowerCase();
+                row.style.display = (!q || name.indexOf(q) !== -1 || code.indexOf(q) !== -1) ? '' : 'none';
+            });
+        });
+    }
+
+    if (form) {
+        form.addEventListener('submit', function (e) {
+            if (!hasBranch()) {
+                e.preventDefault();
+                setReason('Select a branch to mark attendance.');
+                return;
+            }
+            if (checks().filter(function (c) { return c.checked; }).length === 0) {
+                e.preventDefault();
+                if (availableCount === 0) {
+                    setReason('All employees are already marked present for ' + attendanceDateLabel + '. Duplicate attendance is not allowed.');
+                } else {
+                    setReason('Select one or more employees who are not already marked for ' + attendanceDateLabel + '.');
+                }
+            }
+        });
+    }
+
+    refresh();
+})();
+</script>
+}

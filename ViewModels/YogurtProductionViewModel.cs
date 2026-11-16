@@ -4,6 +4,12 @@ namespace POS_MT.ViewModels;
 
 public sealed class YogurtProductionViewModel
 {
+    /// <summary>Date the yogurt was produced (used on sales invoice and stock movements).</summary>
+    [Required]
+    [DataType(DataType.Date)]
+    [Display(Name = "Production Date")]
+    public DateTime ProductionDate { get; set; } = DateTime.Today;
+
     /// <summary>Fresh Yogurt quantity to produce (kg).</summary>
     [Required]
     [Range(0.001, 100000, ErrorMessage = "Yogurt quantity must be greater than zero.")]

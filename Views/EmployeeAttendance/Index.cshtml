@@ -1,0 +1,89 @@
+@model EmployeeAttendanceListPageViewModel
+@{
+    ViewData["Title"] = "Attendance";
+}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+    <div>
+        <h1 class="page-heading mb-1">Attendance</h1>
+        <p class="text-muted mb-0">View employee attendance by date range and branch.</p>
+    </div>
+    <a class="btn btn-primary btn-sm" asp-action="Mark">Mark Attendance</a>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success">@TempData["Success"]</div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger">@TempData["Error"]</div>
+}
+
+<form asp-action="Index" method="get" class="mb-3 d-flex flex-wrap gap-2 align-items-end">
+    <div>
+        <label class="form-label small text-muted mb-1" for="fromDate">From</label>
+        <input type="date"
+               id="fromDate"
+               name="fromDate"
+               class="form-control form-control-sm"
+               value="@Model.FromDate.ToString("yyyy-MM-dd")"
+               required />
+    </div>
+    <div>
+        <label class="form-label small text-muted mb-1" for="toDate">To</label>
+        <input type="date"
+               id="toDate"
+               name="toDate"
+               class="form-control form-control-sm"
+               value="@Model.ToDate.ToString("yyyy-MM-dd")"
+               required />
+    </div>
+    <div>
+        <label class="form-label small text-muted mb-1" for="branchUid">Branch</label>
+        <select id="branchUid"
+                name="branchUid"
+                class="form-select form-select-sm"
+                style="width:auto; min-width:11rem;"
+                asp-items="Model.BranchOptions"></select>
+    </div>
+    <button type="submit" class="btn btn-sm btn-primary">Apply</button>
+</form>
+
+<div class="table-responsive bg-white border rounded p-2">
+    <table id="crudTable" class="table table-hover w-100 inventory-grid">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Code</th>
+                <th>Employee</th>
+                <th>Branch</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+        @if (Model.Rows.Count == 0)
+        {
+            <tr>
+                <td colspan="5" class="text-muted text-center py-4">No attendance found for the selected filters.</td>
+            </tr>
+        }
+        else
+        {
+            @foreach (var row in Model.Rows)
+            {
+                <tr>
+                    <td>@row.AttendanceDate.ToString("dd-MMM-yyyy")</td>
+                    <td>@row.EmployeeCode</td>
+                    <td>@row.EmployeeName</td>
+                    <td>@row.BranchName</td>
+                    <td><span class="badge text-bg-success">@row.Status</span></td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+    <script>posDataTable('#crudTable', { lengthBelow: true });</script>
+}

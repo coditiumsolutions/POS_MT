@@ -49,9 +49,13 @@ public class YogurtProductionController : Controller
     {
         _navContext.SetArea("Purchases");
         ViewData["Title"] = "Yogurt Production";
-        var model = await BuildPageModelAsync(0, ct);
+        var model = await BuildPageModelAsync(0, DateTime.Today, ct);
         return View(model);
     }
+
+    /// <summary>Alias so /YogurtProduction/Produce opens the production form.</summary>
+    [HttpGet]
+    public IActionResult Produce() => RedirectToAction(nameof(Index));
 
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -63,7 +67,11 @@ public class YogurtProductionController : Controller
         if (model.YogurtQuantity <= 0)
             ModelState.AddModelError(nameof(model.YogurtQuantity), "Enter Fresh Yogurt quantity (kg).");
 
-        var page = await BuildPageModelAsync(model.YogurtQuantity, ct);
+        var productionDate = model.ProductionDate == default ? DateTime.Today : model.ProductionDate.Date;
+        if (productionDate > DateTime.Today.AddDays(1))
+            ModelState.AddModelError(nameof(model.ProductionDate), "Production date cannot be far in the future.");
+
+        var page = await BuildPageModelAsync(model.YogurtQuantity, productionDate, ct);
         if (page.MilkProductUid is null || page.YogurtProductUid is null)
         {
             ModelState.AddModelError(string.Empty,
@@ -75,6 +83,7 @@ public class YogurtProductionController : Controller
         var milkQty = MilkForYogurt(yogurtQty);
         page.YogurtQuantity = yogurtQty;
         page.MilkQuantity = milkQty;
+        page.ProductionDate = productionDate;
 
         if (!ModelState.IsValid)
             return View("Index", page);
@@ -112,21 +121,23 @@ public class YogurtProductionController : Controller
             .FirstOrDefaultAsync(ct);
 
         var yogurtLineTotal = Math.Round(yogurtQty * yogurt.SalePrice, 2);
-        var invoiceNo = $"YOG-{DateTime.Now:yyyyMMddHHmmssfff}";
+        var stamp = DateTime.Now;
+        var invoiceNo = $"YOG-{productionDate:yyyyMMdd}-{stamp:HHmmssfff}";
         while (await _db.SalesInvoices.AnyAsync(x => x.InvoiceNo == invoiceNo, ct))
-            invoiceNo = $"YOG-{DateTime.Now:yyyyMMddHHmmssfff}-{Random.Shared.Next(10, 99)}";
+            invoiceNo = $"YOG-{productionDate:yyyyMMdd}-{stamp:HHmmssfff}-{Random.Shared.Next(10, 99)}";
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
         try
         {
-            var now = DateTime.Now;
+            // Keep wall-clock time on the chosen production day for invoice/stock chronology.
+            var productionAt = productionDate.Date.Add(stamp.TimeOfDay);
             var remarks = $"{ProductionRemarkPrefix}: {milkQty:0.###} kg {milk.ProductName} → {yogurtQty:0.###} kg {yogurt.ProductName} (40:32)";
 
             var invoice = new SalesInvoice
             {
                 ClientTransactionId = Guid.NewGuid(),
                 InvoiceNo = invoiceNo,
-                InvoiceDate = now,
+                InvoiceDate = productionAt,
                 BranchUid = branchUid,
                 Branch = branchName,
                 CustomerUid = shopCustomerUid,
@@ -144,7 +155,7 @@ public class YogurtProductionController : Controller
                 PaymentStatus = "Paid",
                 InvoiceStatus = "Completed",
                 Remarks = remarks,
-                CreatedDate = now
+                CreatedDate = stamp
             };
             _db.SalesInvoices.Add(invoice);
             await _db.SaveChangesAsync(ct);
@@ -186,26 +197,29 @@ public class YogurtProductionController : Controller
 
             await AdjustInventoryAsync(
                 warehouseUid, milk.Uid, milk.ProductName, milkQty, yogurt.Uid, yogurt.ProductName, yogurtQty,
-                invoice.Uid, invoiceNo, userUid, terminalUid, now, ct);
+                invoice.Uid, invoiceNo, userUid, terminalUid, productionAt, ct);
 
             await _db.SaveChangesAsync(ct);
             await _audit.WriteAsync("Create", "SalesInvoices", invoice.Uid.ToString(), remarks, ct);
             await tx.CommitAsync(ct);
 
             TempData["Success"] =
-                $"Produced {yogurtQty:0.###} kg yogurt (used {milkQty:0.###} kg milk). Sales invoice {invoiceNo} created.";
+                $"Produced {yogurtQty:0.###} kg yogurt on {productionDate:dd-MMM-yyyy} (used {milkQty:0.###} kg milk). Sales invoice {invoiceNo} created.";
             return RedirectToAction("Details", "SalesInvoices", new { id = invoice.Uid });
         }
         catch (Exception ex)
         {
             await tx.RollbackAsync(ct);
             ModelState.AddModelError(string.Empty, ex.Message);
-            page = await BuildPageModelAsync(yogurtQty, ct);
+            page = await BuildPageModelAsync(yogurtQty, productionDate, ct);
             return View("Index", page);
         }
     }
 
-    private async Task<YogurtProductionViewModel> BuildPageModelAsync(decimal yogurtQty, CancellationToken ct)
+    private async Task<YogurtProductionViewModel> BuildPageModelAsync(
+        decimal yogurtQty,
+        DateTime? productionDate,
+        CancellationToken ct)
     {
         var milk = await FindMilkProductAsync(ct);
         var yogurt = await FindYogurtProductAsync(ct);
@@ -248,6 +262,7 @@ public class YogurtProductionController : Controller
         var yQty = yogurtQty > 0 ? Math.Round(yogurtQty, 3) : 0m;
         return new YogurtProductionViewModel
         {
+            ProductionDate = (productionDate ?? DateTime.Today).Date,
             YogurtQuantity = yQty,
             MilkQuantity = yQty > 0 ? MilkForYogurt(yQty) : 0m,
             MilkProductUid = milk?.Uid,

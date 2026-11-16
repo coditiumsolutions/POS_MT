@@ -2,77 +2,672 @@
 @{
     ViewData["Title"] = "Customer Details";
     string Text(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+    var outstandingDues = ViewBag.OutstandingDues as decimal? ?? 0m;
+    var unpaidInvoices = ViewBag.UnpaidInvoices as List<CustomerUnpaidInvoiceRowViewModel> ?? [];
+    var currentMonthBills = ViewBag.CurrentMonthBills as List<CustomerBillHistoryRowViewModel> ?? [];
+    var previousMonthBills = ViewBag.PreviousMonthBills as List<CustomerBillHistoryRowViewModel> ?? [];
+    var currentMonthLabel = ViewBag.CurrentMonthLabel as string ?? DateTime.Today.ToString("MMMM yyyy");
+    var previousMonthLabel = ViewBag.PreviousMonthLabel as string ?? DateTime.Today.AddMonths(-1).ToString("MMMM yyyy");
+    var isSystemCustomer = string.Equals(Model.CustomerCode, "C001", StringComparison.OrdinalIgnoreCase)
+        || (!string.IsNullOrWhiteSpace(Model.CustomerName)
+            && (Model.CustomerName.Contains("Walk-in", StringComparison.OrdinalIgnoreCase)
+                || Model.CustomerName.Contains("Walk In", StringComparison.OrdinalIgnoreCase)));
 }
+<style>
+    /* Shared typography for all Customer Details tabs */
+    .customer-details-compact {
+        --cd-font: 0.95rem;
+        --cd-title-font: 0.95rem;
+        --cd-line: 1.35;
+    }
+
+    .customer-details-compact .invoice-meta-form .invoice-meta-row {
+        padding: 0.26rem 0;
+    }
+    .customer-details-compact .invoice-meta-form .invoice-meta-title,
+    .customer-details-compact .invoice-meta-readonly .invoice-meta-field,
+    .customer-details-compact .invoice-meta-section-title,
+    .customer-details-compact .fw-semibold,
+    .customer-details-compact .table,
+    .customer-details-compact .text-muted,
+    .customer-details-compact p {
+        font-size: var(--cd-font);
+        line-height: var(--cd-line);
+    }
+    .customer-details-compact .invoice-meta-section .invoice-meta-grid {
+        padding: 0.25rem 0.75rem;
+    }
+
+    .customer-details-compact > .product-tab-buttons {
+        gap: 0.2rem;
+        margin-bottom: 0.75rem;
+        padding: 0;
+        border-bottom: 2px solid #cbd5e1;
+        background: transparent;
+        border-radius: 0;
+    }
+
+    .customer-details-compact > .product-tab-buttons .product-tab-btn {
+        margin-bottom: -2px;
+        border: 1px solid transparent;
+        border-bottom: 2px solid transparent;
+        border-radius: 0.4rem 0.4rem 0 0;
+        font-size: var(--cd-font);
+        font-weight: 500;
+        padding: 0.5rem 0.95rem;
+        box-shadow: none;
+    }
+
+    /* Overview — blue */
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-overview {
+        color: #1e40af;
+        background: #dbeafe;
+        border-color: #93c5fd #93c5fd transparent;
+    }
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-overview:hover,
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-overview.active {
+        color: #fff;
+        background: #2563eb;
+        border-color: #1d4ed8 #1d4ed8 #fff;
+    }
+
+    /* Other Details — slate/indigo */
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-other {
+        color: #4338ca;
+        background: #e0e7ff;
+        border-color: #a5b4fc #a5b4fc transparent;
+    }
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-other:hover,
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-other.active {
+        color: #fff;
+        background: #4f46e5;
+        border-color: #4338ca #4338ca #fff;
+    }
+
+    /* Arrears — red */
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-arrears {
+        color: #b91c1c;
+        background: #fee2e2;
+        border-color: #fca5a5 #fca5a5 transparent;
+    }
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-arrears:hover,
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-arrears.active {
+        color: #fff;
+        background: #dc2626;
+        border-color: #b91c1c #b91c1c #fff;
+    }
+
+    /* Advance — green */
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-advance {
+        color: #15803d;
+        background: #dcfce7;
+        border-color: #86efac #86efac transparent;
+    }
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-advance:hover,
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-advance.active {
+        color: #fff;
+        background: #16a34a;
+        border-color: #15803d #15803d #fff;
+    }
+
+    /* Current Month Bills — amber */
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-current-bills {
+        color: #b45309;
+        background: #fef3c7;
+        border-color: #fcd34d #fcd34d transparent;
+    }
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-current-bills:hover,
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-current-bills.active {
+        color: #fff;
+        background: #d97706;
+        border-color: #b45309 #b45309 #fff;
+    }
+
+    /* Previous Month Bills — teal */
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-previous-bills {
+        color: #0f766e;
+        background: #ccfbf1;
+        border-color: #5eead4 #5eead4 transparent;
+    }
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-previous-bills:hover,
+    .customer-details-compact > .product-tab-buttons .product-tab-btn.tab-previous-bills.active {
+        color: #fff;
+        background: #0d9488;
+        border-color: #0f766e #0f766e #fff;
+    }
+
+    .arrears-advance-form .aa-field {
+        display: grid;
+        grid-template-columns: 7.75rem minmax(0, 1fr);
+        gap: 0.55rem;
+        align-items: center;
+        padding: 0.32rem 0;
+        border-bottom: 1px solid #cbd5e1;
+    }
+
+    .arrears-advance-form .aa-field:last-of-type {
+        margin-bottom: 0.55rem;
+    }
+
+    .arrears-advance-form .aa-field label {
+        margin: 0;
+        font-size: var(--cd-font);
+        color: #475569;
+        font-weight: 400;
+    }
+
+    .arrears-advance-form .aa-field .form-control {
+        border: 1px solid #94a3b8;
+        border-radius: 0.3rem;
+        box-shadow: none;
+        padding: 0.28rem 0.5rem;
+        background: #fff;
+        font-size: var(--cd-font);
+        min-height: 2.05rem;
+        height: 2.05rem;
+    }
+
+    .arrears-advance-form .aa-field .form-control:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 0.12rem rgba(59, 130, 246, 0.18);
+        background: #fff;
+    }
+
+    .arrears-advance-form .aa-actions {
+        padding-top: 0.25rem;
+    }
+
+    .arrears-advance-form .aa-actions .btn {
+        font-size: var(--cd-font);
+        padding: 0.32rem 0.9rem;
+        min-width: 7.75rem;
+    }
+
+    .aa-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 0.45rem;
+        padding: 0.75rem 0.9rem;
+        background: #fff;
+    }
+
+    .aa-card.aa-card-arrears {
+        border-color: #fecaca;
+        background: #fff7f7;
+    }
+
+    .aa-card.aa-card-advance {
+        border-color: #bbf7d0;
+        background: #f7fff9;
+    }
+
+    .aa-card-title {
+        font-weight: 600;
+        font-size: var(--cd-title-font);
+        margin-bottom: 0.3rem;
+    }
+
+    .aa-card p.text-muted {
+        font-size: var(--cd-font);
+        margin-bottom: 0.5rem;
+    }
+
+    .aa-card-arrears .aa-card-title { color: #b91c1c; }
+    .aa-card-advance .aa-card-title { color: #15803d; }
+
+    .customer-details-actions .customer-action-btn {
+        min-width: 10.5rem;
+        width: 10.5rem;
+        text-align: center;
+        color: #fff !important;
+        border: none;
+        font-weight: 500;
+        font-size: var(--cd-font);
+    }
+
+    .customer-details-actions .customer-action-btn-edit {
+        background-color: #2563eb !important;
+    }
+    .customer-details-actions .customer-action-btn-edit:hover {
+        background-color: #1d4ed8 !important;
+    }
+
+    .customer-details-actions .customer-action-btn-items {
+        background-color: #16a34a !important;
+    }
+    .customer-details-actions .customer-action-btn-items:hover {
+        background-color: #15803d !important;
+    }
+
+    .customer-details-actions .customer-action-btn-deactivate {
+        background-color: #d97706 !important;
+    }
+    .customer-details-actions .customer-action-btn-deactivate:hover {
+        background-color: #b45309 !important;
+    }
+
+    .customer-details-compact .overview-advance-title {
+        color: #15803d !important;
+        font-size: var(--cd-font) !important;
+        font-weight: 600 !important;
+    }
+
+    .customer-details-compact .overview-advance-value {
+        display: inline-block;
+        color: #166534 !important;
+        font-size: var(--cd-font) !important;
+        font-weight: 700 !important;
+        line-height: var(--cd-line);
+        padding: 0.12rem 0.4rem;
+        border-radius: 0.3rem;
+        background: #dcfce7;
+        border: 1px solid #86efac;
+    }
+
+    .customer-details-compact .overview-dues-title {
+        color: #b91c1c !important;
+        font-size: var(--cd-font) !important;
+        font-weight: 600 !important;
+    }
+
+    .customer-details-compact .overview-dues-value {
+        display: inline-block;
+        color: #991b1b !important;
+        font-size: var(--cd-font) !important;
+        font-weight: 700 !important;
+        line-height: var(--cd-line);
+        padding: 0.12rem 0.4rem;
+        border-radius: 0.3rem;
+        background: #fee2e2;
+        border: 1px solid #fca5a5;
+    }
+
+    .customer-details-compact .table.table-sm {
+        font-size: var(--cd-font);
+    }
+</style>
+
 <h1 class="page-heading invoice-details-heading mb-3">Customer Details</h1>
-<div class="bg-white border rounded p-3">
-    <div class="invoice-meta-grid invoice-meta-form invoice-meta-readonly">
-        <div class="invoice-meta-row">
-            <div class="invoice-meta-title">Customer Code</div>
-            <div class="invoice-meta-field">@Model.CustomerCode</div>
-            <div class="invoice-meta-title">Customer Name</div>
-            <div class="invoice-meta-field">@Model.CustomerName</div>
-        </div>
-        <div class="invoice-meta-row">
-            <div class="invoice-meta-title">Mobile No</div>
-            <div class="invoice-meta-field">@Text(Model.MobileNo)</div>
-            <div class="invoice-meta-title">Phone No</div>
-            <div class="invoice-meta-field">@Text(Model.PhoneNo)</div>
-        </div>
-        <div class="invoice-meta-row">
-            <div class="invoice-meta-title">Email</div>
-            <div class="invoice-meta-field">@Text(Model.Email)</div>
-            <div class="invoice-meta-title">City</div>
-            <div class="invoice-meta-field">@Text(Model.City)</div>
-        </div>
-        <div class="invoice-meta-row">
-            <div class="invoice-meta-title">Area</div>
-            <div class="invoice-meta-field">@Text(Model.Area)</div>
-            <div class="invoice-meta-title">Address</div>
-            <div class="invoice-meta-field">@Text(Model.Address)</div>
-        </div>
-        <div class="invoice-meta-row">
-            <div class="invoice-meta-title">NTN</div>
-            <div class="invoice-meta-field">@Text(Model.Ntn)</div>
-            <div class="invoice-meta-title"></div>
-            <div class="invoice-meta-field"></div>
-        </div>
-        <div class="invoice-meta-row">
-            <div class="invoice-meta-title">Opening Balance</div>
-            <div class="invoice-meta-field">@Model.OpeningBalance.ToString("N2")</div>
-            <div class="invoice-meta-title">Advance Credit</div>
-            <div class="invoice-meta-field fw-semibold text-success">@Model.AdvanceBalance.ToString("N2")</div>
-        </div>
-        <div class="invoice-meta-row">
-            <div class="invoice-meta-title">Credit Limit</div>
-            <div class="invoice-meta-field">@Model.CreditLimit.ToString("N2")</div>
-            <div class="invoice-meta-title"></div>
-            <div class="invoice-meta-field"></div>
-        </div>
-        <div class="invoice-meta-row">
-            <div class="invoice-meta-title">Discount %</div>
-            <div class="invoice-meta-field">@Model.DiscountPercent.ToString("N2")</div>
-            <div class="invoice-meta-title">Active</div>
-            <div class="invoice-meta-field">@(Model.IsActive ? "Yes" : "No")</div>
+
+@if (TempData["Success"] is string ok)
+{
+    <div class="alert alert-success">@ok</div>
+}
+@if (TempData["Error"] is string err)
+{
+    <div class="alert alert-danger">@err</div>
+}
+
+<div class="product-tabs customer-details-compact" id="customerDetailsTabs">
+    <div class="product-tab-buttons" role="tablist" aria-label="Customer detail tabs">
+        <button type="button" class="product-tab-btn tab-overview active" data-tab="overview" role="tab" aria-selected="true" aria-controls="cust-panel-overview">Overview</button>
+        <button type="button" class="product-tab-btn tab-other" data-tab="other" role="tab" aria-selected="false" aria-controls="cust-panel-other">Other Details</button>
+        <button type="button" class="product-tab-btn tab-arrears" data-tab="arrears" role="tab" aria-selected="false" aria-controls="cust-panel-arrears">Arrears</button>
+        <button type="button" class="product-tab-btn tab-advance" data-tab="advance" role="tab" aria-selected="false" aria-controls="cust-panel-advance">Advance</button>
+        <button type="button" class="product-tab-btn tab-current-bills" data-tab="current-bills" role="tab" aria-selected="false" aria-controls="cust-panel-current-bills">Current Month Bills</button>
+        <button type="button" class="product-tab-btn tab-previous-bills" data-tab="previous-bills" role="tab" aria-selected="false" aria-controls="cust-panel-previous-bills">Previous Month Bills</button>
+    </div>
+
+    <div class="product-tab-panel active" id="cust-panel-overview" data-panel="overview" role="tabpanel">
+        <div class="bg-white border rounded p-3">
+            <div class="invoice-meta-section">
+                <div class="invoice-meta-grid invoice-meta-form invoice-meta-readonly">
+                    <div class="invoice-meta-row">
+                        <div class="invoice-meta-title">Customer Name</div>
+                        <div class="invoice-meta-field">@Model.CustomerName</div>
+                        <div class="invoice-meta-title">Discount %</div>
+                        <div class="invoice-meta-field">@Model.DiscountPercent.ToString("N2")</div>
+                    </div>
+                    <div class="invoice-meta-row">
+                        <div class="invoice-meta-title">Mobile No</div>
+                        <div class="invoice-meta-field">@Text(Model.MobileNo)</div>
+                        <div class="invoice-meta-title">Phone No</div>
+                        <div class="invoice-meta-field">@Text(Model.PhoneNo)</div>
+                    </div>
+                    <div class="invoice-meta-row">
+                        <div class="invoice-meta-title">Opening Balance</div>
+                        <div class="invoice-meta-field">@Model.OpeningBalance.ToString("N2")</div>
+                        <div class="invoice-meta-title">Credit Limit</div>
+                        <div class="invoice-meta-field">@Model.CreditLimit.ToString("N2")</div>
+                    </div>
+                    <div class="invoice-meta-row">
+                        <div class="invoice-meta-title overview-advance-title">Advance Credit</div>
+                        <div class="invoice-meta-field">
+                            <span class="overview-advance-value">@Model.AdvanceBalance.ToString("N2")</span>
+                        </div>
+                        <div class="invoice-meta-title overview-dues-title">Outstanding Dues</div>
+                        <div class="invoice-meta-field">
+                            <span class="overview-dues-value">@outstandingDues.ToString("N2")</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @if (unpaidInvoices.Count > 0)
+            {
+                <div class="mt-3">
+                    <div class="fw-semibold mb-2">Unpaid invoices</div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Invoice</th>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th class="text-end">Balance</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            @foreach (var row in unpaidInvoices)
+                            {
+                                <tr>
+                                    <td>@row.InvoiceNo</td>
+                                    <td>@row.InvoiceDate.ToString("dd MMM yyyy")</td>
+                                    <td>@row.Label</td>
+                                    <td class="text-end">@row.BalanceAmount.ToString("N2")</td>
+                                    <td>
+                                        <a class="btn btn-sm btn-outline-primary"
+                                           asp-controller="SalesInvoices"
+                                           asp-action="Print"
+                                           asp-route-id="@row.Uid"
+                                           target="_blank">Print</a>
+                                    </td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+
         </div>
     </div>
-    <div class="mt-3 d-flex gap-2 flex-wrap align-items-center">
-        <a class="btn btn-primary" asp-action="Edit" asp-route-id="@Model.Uid">Edit</a>
-        <a class="btn btn-outline-primary" asp-controller="CustomerPayments" asp-action="Create" asp-route-customerUid="@Model.Uid">Add Advance / Payment</a>
-        <a class="btn btn-outline-secondary" asp-action="Index">Back</a>
-        @{
-            var isSystemCustomer = string.Equals(Model.CustomerCode, "C001", StringComparison.OrdinalIgnoreCase)
-                || (!string.IsNullOrWhiteSpace(Model.CustomerName)
-                    && (Model.CustomerName.Contains("Walk-in", StringComparison.OrdinalIgnoreCase)
-                        || Model.CustomerName.Contains("Walk In", StringComparison.OrdinalIgnoreCase)));
-        }
-        @if (!isSystemCustomer)
-        {
-            <form asp-action="Delete" asp-route-id="@Model.Uid" method="post" class="ms-auto">
-                @Html.AntiForgeryToken()
-                <button type="submit"
-                        class="btn btn-outline-danger"
-                        onclick="return confirm('Delete this customer and related sales, payments, and monthly supply records?');">Delete</button>
-            </form>
-        }
+
+    <div class="product-tab-panel" id="cust-panel-other" data-panel="other" role="tabpanel" hidden>
+        <div class="bg-white border rounded p-3">
+            <div class="invoice-meta-section">
+                <div class="invoice-meta-section-title">Other Details</div>
+                <div class="invoice-meta-grid invoice-meta-form invoice-meta-readonly">
+                    <div class="invoice-meta-row">
+                        <div class="invoice-meta-title">Customer Code</div>
+                        <div class="invoice-meta-field">@Model.CustomerCode</div>
+                        <div class="invoice-meta-title">Email</div>
+                        <div class="invoice-meta-field">@Text(Model.Email)</div>
+                    </div>
+                    <div class="invoice-meta-row">
+                        <div class="invoice-meta-title">City</div>
+                        <div class="invoice-meta-field">@Text(Model.City)</div>
+                        <div class="invoice-meta-title">Area</div>
+                        <div class="invoice-meta-field">@Text(Model.Area)</div>
+                    </div>
+                    <div class="invoice-meta-row">
+                        <div class="invoice-meta-title">Address</div>
+                        <div class="invoice-meta-field">@Text(Model.Address)</div>
+                        <div class="invoice-meta-title">NTN</div>
+                        <div class="invoice-meta-field">@Text(Model.Ntn)</div>
+                    </div>
+                    <div class="invoice-meta-row">
+                        <div class="invoice-meta-title">Active</div>
+                        <div class="invoice-meta-field">@(Model.IsActive ? "Yes" : "No")</div>
+                        <div class="invoice-meta-title"></div>
+                        <div class="invoice-meta-field"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="product-tab-panel" id="cust-panel-arrears" data-panel="arrears" role="tabpanel" hidden>
+        <div class="bg-white border rounded p-3">
+            @if (isSystemCustomer)
+            {
+                <p class="text-muted mb-0">Arrears cannot be posted for the walk-in customer.</p>
+            }
+            else
+            {
+                <div class="aa-card aa-card-arrears">
+                    <div class="aa-card-title">Post previous / opening balance (Arrears)</div>
+                    <p class="text-muted small mb-2">
+                        Creates an unpaid invoice. Shows as <strong>Previous Balance</strong> on monthly bills.
+                    </p>
+                    <form asp-action="CreateOpeningBalanceInvoice" asp-route-id="@Model.Uid" method="post" class="arrears-advance-form">
+                        @Html.AntiForgeryToken()
+                        <div class="aa-field">
+                            <label for="obAmount">Amount</label>
+                            <input id="obAmount" name="amount" type="number" step="0.01" min="0.01" class="form-control form-control-sm" required />
+                        </div>
+                        <div class="aa-field">
+                            <label for="obAsOf">As of date</label>
+                            <input id="obAsOf" name="asOfDate" type="date" class="form-control form-control-sm" value="@DateTime.Today.AddMonths(-1).ToString("yyyy-MM-dd")" />
+                        </div>
+                        <div class="aa-field">
+                            <label for="obNote">Note (optional)</label>
+                            <input id="obNote" name="note" type="text" maxlength="200" class="form-control form-control-sm" placeholder="e.g. October arrears" />
+                        </div>
+                        <div class="aa-actions">
+                            <button type="submit" class="btn btn-outline-danger btn-sm"
+                                    onclick="return confirm('Post this amount as unpaid previous balance?');">Post Arrears</button>
+                        </div>
+                    </form>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="product-tab-panel" id="cust-panel-advance" data-panel="advance" role="tabpanel" hidden>
+        <div class="bg-white border rounded p-3">
+            @if (isSystemCustomer)
+            {
+                <p class="text-muted mb-0">Advance cannot be posted for the walk-in customer.</p>
+            }
+            else
+            {
+                <div class="aa-card aa-card-advance">
+                    <div class="aa-card-title">Post advance</div>
+                    <p class="text-muted small mb-2">
+                        Adds customer advance credit. If there are unpaid dues, oldest balances are cleared first.
+                    </p>
+                    <form asp-action="CreateAdvancePayment" asp-route-id="@Model.Uid" method="post" class="arrears-advance-form">
+                        @Html.AntiForgeryToken()
+                        <div class="aa-field">
+                            <label for="advAmount">Amount</label>
+                            <input id="advAmount" name="amount" type="number" step="0.01" min="0.01" class="form-control form-control-sm" required />
+                        </div>
+                        <div class="aa-field">
+                            <label for="advDate">Payment date</label>
+                            <input id="advDate" name="paymentDate" type="date" class="form-control form-control-sm" value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                        </div>
+                        <div class="aa-field">
+                            <label for="advNote">Note (optional)</label>
+                            <input id="advNote" name="note" type="text" maxlength="200" class="form-control form-control-sm" placeholder="e.g. prepaid for November" />
+                        </div>
+                        <div class="aa-actions">
+                            <button type="submit" class="btn btn-outline-success btn-sm"
+                                    onclick="return confirm('Post this amount as customer advance?');">Post Advance</button>
+                        </div>
+                    </form>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="product-tab-panel" id="cust-panel-current-bills" data-panel="current-bills" role="tabpanel" hidden>
+        <div class="bg-white border rounded p-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                <div class="fw-semibold mb-0">Current Month Bills — @currentMonthLabel (to date)</div>
+                @if (currentMonthBills.Count > 0)
+                {
+                    var currentMonthInvoiceUid = (currentMonthBills.FirstOrDefault(b => b.IsMonthlyDayBill) ?? currentMonthBills[0]).Uid;
+                    <div class="d-flex gap-2">
+                        <a class="btn btn-sm btn-outline-secondary"
+                           asp-controller="SalesInvoices"
+                           asp-action="Details"
+                           asp-route-id="@currentMonthInvoiceUid"
+                           target="_blank">Open</a>
+                        <a class="btn btn-sm btn-outline-primary"
+                           asp-controller="SalesInvoices"
+                           asp-action="Print"
+                           asp-route-id="@currentMonthInvoiceUid"
+                           target="_blank">Print</a>
+                    </div>
+                }
+            </div>
+            @if (currentMonthBills.Count == 0)
+            {
+                <p class="text-muted mb-0">No bills for @currentMonthLabel.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Invoice No</th>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Items</th>
+                                <th class="text-end">Amount</th>
+                                <th>Payment</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var bill in currentMonthBills)
+                        {
+                            <tr class="@(bill.InvoiceStatus == "Cancelled" ? "table-secondary" : null)">
+                                <td>@bill.InvoiceNo</td>
+                                <td>@bill.InvoiceDate.ToString("dd MMM yyyy")</td>
+                                <td>@bill.Label</td>
+                                <td class="small">@(string.IsNullOrWhiteSpace(bill.ItemsSummary) ? "—" : bill.ItemsSummary)</td>
+                                <td class="text-end fw-semibold">@bill.NetAmount.ToString("N2")</td>
+                                <td>@bill.PaymentStatus</td>
+                                <td>@bill.InvoiceStatus</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="product-tab-panel" id="cust-panel-previous-bills" data-panel="previous-bills" role="tabpanel" hidden>
+        <div class="bg-white border rounded p-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                <div class="fw-semibold mb-0">Previous Month Bills — @previousMonthLabel</div>
+                @if (previousMonthBills.Count > 0)
+                {
+                    var previousMonthInvoiceUid = (previousMonthBills.FirstOrDefault(b => b.IsMonthlyDayBill) ?? previousMonthBills[0]).Uid;
+                    <div class="d-flex gap-2">
+                        <a class="btn btn-sm btn-outline-secondary"
+                           asp-controller="SalesInvoices"
+                           asp-action="Details"
+                           asp-route-id="@previousMonthInvoiceUid"
+                           target="_blank">Open</a>
+                        <a class="btn btn-sm btn-outline-primary"
+                           asp-controller="SalesInvoices"
+                           asp-action="Print"
+                           asp-route-id="@previousMonthInvoiceUid"
+                           target="_blank">Print</a>
+                    </div>
+                }
+            </div>
+            @if (previousMonthBills.Count == 0)
+            {
+                <p class="text-muted mb-0">No bills for @previousMonthLabel.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Invoice No</th>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Items</th>
+                                <th class="text-end">Amount</th>
+                                <th>Payment</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var bill in previousMonthBills)
+                        {
+                            <tr class="@(bill.InvoiceStatus == "Cancelled" ? "table-secondary" : null)">
+                                <td>@bill.InvoiceNo</td>
+                                <td>@bill.InvoiceDate.ToString("dd MMM yyyy")</td>
+                                <td>@bill.Label</td>
+                                <td class="small">@(string.IsNullOrWhiteSpace(bill.ItemsSummary) ? "—" : bill.ItemsSummary)</td>
+                                <td class="text-end fw-semibold">@bill.NetAmount.ToString("N2")</td>
+                                <td>@bill.PaymentStatus</td>
+                                <td>@bill.InvoiceStatus</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
     </div>
 </div>
+
+<div class="mt-3 d-flex gap-2 flex-wrap align-items-center customer-details-actions">
+    <a class="btn customer-action-btn customer-action-btn-edit" asp-action="Edit" asp-route-id="@Model.Uid">Edit</a>
+    @if (Model.IsActive)
+    {
+        <a class="btn customer-action-btn customer-action-btn-items"
+           asp-controller="POS"
+           asp-action="MonthlySupplyItems"
+           asp-route-customerUids="@Model.Uid"
+           asp-route-returnTo="Customers">Items</a>
+        <form asp-action="Deactivate" asp-route-id="@Model.Uid" method="post" class="d-inline">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn customer-action-btn customer-action-btn-deactivate"
+                    onclick="return confirm('Deactivate this customer?');">Deactivate</button>
+        </form>
+    }
+    <a class="btn btn-outline-secondary" asp-action="Index">Back</a>
+    @if (!isSystemCustomer)
+    {
+        <form asp-action="Delete" asp-route-id="@Model.Uid" method="post" class="ms-auto">
+            @Html.AntiForgeryToken()
+            <button type="submit"
+                    class="btn btn-outline-danger"
+                    onclick="return confirm('Delete this customer and related sales, payments, and monthly supply records?');">Delete</button>
+        </form>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            var root = document.getElementById('customerDetailsTabs');
+            if (!root) return;
+            var buttons = root.querySelectorAll('.product-tab-btn');
+            var panels = root.querySelectorAll('.product-tab-panel');
+
+            function activateTab(tab) {
+                buttons.forEach(function (b) {
+                    var on = b.getAttribute('data-tab') === tab;
+                    b.classList.toggle('active', on);
+                    b.setAttribute('aria-selected', on ? 'true' : 'false');
+                });
+                panels.forEach(function (panel) {
+                    var show = panel.getAttribute('data-panel') === tab;
+                    panel.classList.toggle('active', show);
+                    panel.hidden = !show;
+                });
+            }
+
+            buttons.forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    activateTab(btn.getAttribute('data-tab'));
+                });
+            });
+
+            var openTab = '@(TempData["OpenTab"] as string ?? "")';
+            if (openTab) activateTab(openTab);
+        })();
+    </script>
+}

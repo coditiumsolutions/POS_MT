@@ -1,15 +1,46 @@
 @model VendorPayViewModel
 @{
     ViewData["Title"] = "Pay Vendor";
+    var selected = Model.OpenInvoices.FirstOrDefault(x => x.Uid == Model.PurchaseInvoiceUid)
+        ?? Model.OpenInvoices.FirstOrDefault();
+    var noOpenInvoices = Model.OpenInvoices.Count == 0;
+    var selectedDateText = selected?.PurchaseDate.ToString("dd MMM yyyy") ?? "";
+    var selectedLabel = selected == null
+        ? ""
+        : (string.IsNullOrWhiteSpace(selected.VendorInvoiceNo) ? selected.PurchaseInvoiceNo : selected.VendorInvoiceNo);
 }
+<style>
+    .vendor-pay-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+    .vendor-pay-summary .stat { background: #fff; border: 1px solid #e2e8f0; border-radius: 0.45rem; padding: 0.7rem 0.9rem; }
+    .vendor-pay-summary .stat-label { font-size: 0.8rem; color: #64748b; margin-bottom: 0.15rem; }
+    .vendor-pay-summary .stat-value { font-size: 1.15rem; font-weight: 700; color: #0f172a; }
+    .vendor-pay-summary .stat-value.due { color: #b91c1c; }
+    .vendor-pay-summary .stat-value.paid { color: #15803d; }
+    .vendor-pay-step { background: #fff; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem 1.1rem; margin-bottom: 1rem; }
+    .vendor-pay-step-title { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.35rem; color: #1e293b; }
+    .vendor-pay-step-hint { font-size: 0.85rem; color: #64748b; margin-bottom: 0.75rem; }
+    #vendorOpenInvoicesTable tbody tr.vendor-invoice-row { cursor: pointer; }
+    #vendorOpenInvoicesTable tbody tr.vendor-invoice-row.is-selected { background: #eef2ff; outline: 2px solid #6366f1; outline-offset: -2px; }
+    #vendorOpenInvoicesTable tbody tr.vendor-invoice-row:hover { background: #f8fafc; }
+    #vendorOpenInvoicesTable tbody tr.vendor-invoice-row.is-selected:hover { background: #eef2ff; }
+    .vendor-selected-banner { border: 1px solid #c7d2fe; background: #eef2ff; border-radius: 0.4rem; padding: 0.65rem 0.85rem; margin-bottom: 0.85rem; font-size: 0.9rem; }
+    .vendor-selected-banner strong { color: #312e81; }
+    .vendor-selected-banner .due-amt { color: #b91c1c; font-weight: 700; }
+</style>
+
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
     <div>
         <h1 class="page-heading mb-1">Pay Vendor</h1>
         <p class="text-muted mb-0">@Model.VendorCode — @Model.VendorName</p>
     </div>
-    <div class="text-muted small align-self-center">
-        Outstanding <strong>@Model.TotalOutstanding.ToString("N2")</strong>
-        · Paid (all time) <strong>@Model.TotalPaid.ToString("N2")</strong>
+    <div class="d-flex flex-wrap gap-2">
+        <button type="button"
+                id="btnPrintVendorInvoice"
+                class="btn btn-sm btn-outline-dark"
+                data-print-base="@Url.Action("Print", "PurchaseInvoices")">
+            Print invoice
+        </button>
+        <a class="btn btn-sm btn-outline-secondary" asp-action="Index">Back to Vendors</a>
     </div>
 </div>
 
@@ -22,96 +53,81 @@
     <div class="alert alert-danger">@TempData["Error"]</div>
 }
 
-<div class="bg-white border rounded p-3 mb-3">
-    <h2 class="invoice-meta-section-title">Payment</h2>
-    <form asp-action="Pay" method="post" class="mt-2">
-        @Html.AntiForgeryToken()
-        <input type="hidden" asp-for="VendorUid" />
-        <div asp-validation-summary="All" class="text-danger mb-2"></div>
-        <div class="d-flex flex-wrap gap-2 align-items-end">
-            <div>
-                <label asp-for="PurchaseInvoiceUid" class="form-label small text-muted mb-1"></label>
-                <select asp-for="PurchaseInvoiceUid"
-                        class="form-select form-select-sm"
-                        style="width:auto; min-width:14rem;"
-                        asp-items="Model.InvoiceOptions"
-                        id="vendorPayInvoice">
-                    <option value="">-- Select unpaid invoice --</option>
-                </select>
-            </div>
-            <div>
-                <label asp-for="Amount" class="form-label small text-muted mb-1"></label>
-                <input asp-for="Amount" class="form-control form-control-sm" style="width:8.5rem" step="0.01" min="0.01" id="vendorPayAmount" />
-            </div>
-            <div>
-                <label asp-for="PaymentMethodUid" class="form-label small text-muted mb-1"></label>
-                <select asp-for="PaymentMethodUid"
-                        class="form-select form-select-sm"
-                        style="width:auto; min-width:10rem;"
-                        asp-items="Model.PaymentMethodOptions">
-                    <option value="">-- Select --</option>
-                </select>
-            </div>
-            <div>
-                <label asp-for="PaymentDate" class="form-label small text-muted mb-1"></label>
-                <input asp-for="PaymentDate" class="form-control form-control-sm" type="datetime-local" />
-            </div>
-            <div>
-                <label asp-for="ReferenceNo" class="form-label small text-muted mb-1"></label>
-                <input asp-for="ReferenceNo" class="form-control form-control-sm" style="width:10rem" placeholder="Optional" />
-            </div>
-            <button type="submit" class="btn btn-sm btn-primary" style="background-color:#4f46e5;border-color:#4338ca;">
-                Pay Vendor
-            </button>
-            <a class="btn btn-sm btn-outline-secondary" asp-action="Index">Back</a>
-        </div>
-        <div class="mt-2" style="max-width:28rem;">
-            <label asp-for="Remarks" class="form-label small text-muted mb-1"></label>
-            <textarea asp-for="Remarks" class="form-control form-control-sm" rows="2" placeholder="Optional notes"></textarea>
-        </div>
-    </form>
+<div class="vendor-pay-summary">
+    <div class="stat">
+        <div class="stat-label">Outstanding</div>
+        <div class="stat-value due">@Model.TotalOutstanding.ToString("N2")</div>
+    </div>
+    <div class="stat">
+        <div class="stat-label">Open invoices</div>
+        <div class="stat-value">@Model.OpenInvoices.Count</div>
+    </div>
+    <div class="stat">
+        <div class="stat-label">Paid (all time)</div>
+        <div class="stat-value paid">@Model.TotalPaid.ToString("N2")</div>
+    </div>
 </div>
 
-<div class="bg-white border rounded p-3 mb-3">
-    <h2 class="invoice-meta-section-title">Unpaid / partial purchase invoices</h2>
+<div class="vendor-pay-step">
+    <div class="vendor-pay-step-title">1. Select the purchase invoice to pay</div>
+    <p class="vendor-pay-step-hint mb-2">
+        Click a row (or the radio). Use <strong>Vendor bill no</strong> to match the paper invoice from the vendor.
+    </p>
     <div class="table-responsive">
         <table class="table table-sm table-bordered align-middle mb-0" id="vendorOpenInvoicesTable">
-            <thead>
+            <thead class="table-light">
                 <tr>
-                    <th>Invoice No</th>
+                    <th style="width:42px" class="text-center"></th>
                     <th>Date</th>
-                    <th class="text-end">Net</th>
-                    <th class="text-end">Paid</th>
-                    <th class="text-end">Balance</th>
+                    <th>Vendor bill no</th>
+                    <th>Our purchase no</th>
+                    <th class="text-end">Bill amount</th>
+                    <th class="text-end">Already paid</th>
+                    <th class="text-end">Due now</th>
                     <th>Status</th>
-                    <th></th>
                 </tr>
             </thead>
             <tbody>
             @foreach (var inv in Model.OpenInvoices)
             {
-                <tr data-invoice-uid="@inv.Uid" data-balance="@inv.BalanceAmount.ToString(System.Globalization.CultureInfo.InvariantCulture)">
+                var isSelected = selected != null && inv.Uid == selected.Uid;
+                var rowClass = isSelected ? "vendor-invoice-row is-selected" : "vendor-invoice-row";
+                var statusBadge = string.Equals(inv.PaymentStatus, "Partial", StringComparison.OrdinalIgnoreCase)
+                    ? "text-bg-warning"
+                    : "text-bg-danger";
+                var purchaseDateText = inv.PurchaseDate.ToString("dd MMM yyyy");
+                var balanceInvariant = inv.BalanceAmount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var vendorBill = string.IsNullOrWhiteSpace(inv.VendorInvoiceNo) ? "-" : inv.VendorInvoiceNo;
+                <tr class="@rowClass"
+                    data-invoice-uid="@inv.Uid"
+                    data-balance="@balanceInvariant"
+                    data-invoice-no="@inv.PurchaseInvoiceNo"
+                    data-vendor-invoice="@vendorBill"
+                    data-date="@purchaseDateText">
+                    <td class="text-center">
+                        @if (isSelected)
+                        {
+                            <input type="radio" class="form-check-input vendor-invoice-select" name="selectedOpenInvoice" value="@inv.Uid" checked="checked" aria-label="Select invoice" />
+                        }
+                        else
+                        {
+                            <input type="radio" class="form-check-input vendor-invoice-select" name="selectedOpenInvoice" value="@inv.Uid" aria-label="Select invoice" />
+                        }
+                    </td>
+                    <td>@purchaseDateText</td>
+                    <td class="fw-semibold">@vendorBill</td>
                     <td>@inv.PurchaseInvoiceNo</td>
-                    <td>@inv.PurchaseDate.ToString("yyyy-MM-dd")</td>
                     <td class="text-end">@inv.NetAmount.ToString("N2")</td>
                     <td class="text-end">@inv.PaidAmount.ToString("N2")</td>
-                    <td class="text-end">@inv.BalanceAmount.ToString("N2")</td>
-                    <td>@inv.PaymentStatus</td>
-                    <td>
-                        <button type="button"
-                                class="btn btn-sm btn-outline-primary vendor-pick-invoice"
-                                data-uid="@inv.Uid"
-                                data-balance="@inv.BalanceAmount.ToString(System.Globalization.CultureInfo.InvariantCulture)">
-                            Use
-                        </button>
-                    </td>
+                    <td class="text-end fw-semibold text-danger">@inv.BalanceAmount.ToString("N2")</td>
+                    <td><span class="badge @statusBadge">@inv.PaymentStatus</span></td>
                 </tr>
             }
-            @if (Model.OpenInvoices.Count == 0)
+            @if (noOpenInvoices)
             {
                 <tr>
-                    <td colspan="7" class="text-muted text-center py-3">
-                        No purchase invoices for this vendor yet. Create one under Purchases, then return here to pay.
+                    <td colspan="8" class="text-muted text-center py-3">
+                        No unpaid purchase invoices for this vendor. Create a purchase under Purchases, then return here to pay.
                     </td>
                 </tr>
             }
@@ -120,11 +136,80 @@
     </div>
 </div>
 
-<div class="bg-white border rounded p-3">
-    <h2 class="invoice-meta-section-title">Payment history</h2>
+<div class="vendor-pay-step">
+    <div class="vendor-pay-step-title">2. Enter payment details</div>
+    <p class="vendor-pay-step-hint">Amount defaults to the full due on the selected invoice. Change it for a partial payment.</p>
+
+    <form asp-action="Pay" method="post" id="vendorPayForm">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="VendorUid" />
+        <input type="hidden" asp-for="PurchaseInvoiceUid" id="vendorPayInvoiceUid" />
+        <div asp-validation-summary="All" class="text-danger mb-2"></div>
+
+        @if (!noOpenInvoices && selected != null)
+        {
+            <div class="vendor-selected-banner" id="vendorSelectedBanner">
+                <span>Paying:</span>
+                <strong id="selInvoiceLabel">@selectedLabel <span class="text-muted fw-normal">(@selected.PurchaseInvoiceNo)</span></strong>
+                <span class="mx-1">·</span>
+                <span id="selInvoiceDate">@selectedDateText</span>
+                <span class="mx-1">·</span>
+                Due <span class="due-amt" id="selInvoiceDue">@selected.BalanceAmount.ToString("N2")</span>
+            </div>
+        }
+        else
+        {
+            <div class="vendor-selected-banner" id="vendorSelectedBanner">
+                <span class="text-muted">Select an invoice above to continue.</span>
+            </div>
+        }
+
+        <div class="row g-2 align-items-end">
+            <div class="col-auto">
+                <label asp-for="Amount" class="form-label small text-muted mb-1"></label>
+                <div class="input-group input-group-sm" style="width:11rem">
+                    <input asp-for="Amount" class="form-control" step="0.01" min="0.01" id="vendorPayAmount" />
+                    <button type="button" class="btn btn-outline-secondary" id="btnPayFullDue" title="Fill full due amount">Full due</button>
+                </div>
+            </div>
+            <div class="col-auto">
+                <label asp-for="PaymentMethodUid" class="form-label small text-muted mb-1"></label>
+                <select asp-for="PaymentMethodUid" class="form-select form-select-sm" style="width:auto; min-width:10rem;" asp-items="Model.PaymentMethodOptions">
+                    <option value="">-- Select --</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <label asp-for="PaymentDate" class="form-label small text-muted mb-1"></label>
+                <input asp-for="PaymentDate" class="form-control form-control-sm" type="datetime-local" />
+            </div>
+            <div class="col-auto">
+                <label asp-for="ReferenceNo" class="form-label small text-muted mb-1"></label>
+                <input asp-for="ReferenceNo" class="form-control form-control-sm" style="width:10rem" placeholder="Cheque / ref" />
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-primary" style="background-color:#4f46e5;border-color:#4338ca;" id="btnSubmitPay">
+                    Record payment
+                </button>
+            </div>
+            <div class="col-auto">
+                <button type="button" class="btn btn-sm btn-outline-dark" id="btnPrintVendorInvoiceInline">
+                    Print invoice
+                </button>
+            </div>
+        </div>
+        <div class="mt-2" style="max-width:28rem;">
+            <label asp-for="Remarks" class="form-label small text-muted mb-1"></label>
+            <textarea asp-for="Remarks" class="form-control form-control-sm" rows="2" placeholder="Optional notes"></textarea>
+        </div>
+    </form>
+</div>
+
+<div class="vendor-pay-step mb-0">
+    <div class="vendor-pay-step-title">Payment history</div>
+    <p class="vendor-pay-step-hint">Recent payments recorded for this vendor.</p>
     <div class="table-responsive">
         <table class="table table-sm table-bordered align-middle mb-0">
-            <thead>
+            <thead class="table-light">
                 <tr>
                     <th>Payment No</th>
                     <th>Date</th>
@@ -136,12 +221,14 @@
             <tbody>
             @foreach (var p in Model.Payments)
             {
+                var payDateText = p.PaymentDate.ToString("dd MMM yyyy HH:mm");
+                var payRef = string.IsNullOrWhiteSpace(p.ReferenceNo) ? "-" : p.ReferenceNo;
                 <tr>
                     <td>@p.PaymentNo</td>
-                    <td>@p.PaymentDate.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>@payDateText</td>
                     <td>@p.PurchaseInvoiceNo</td>
                     <td class="text-end">@p.Amount.ToString("N2")</td>
-                    <td>@(string.IsNullOrWhiteSpace(p.ReferenceNo) ? "—" : p.ReferenceNo)</td>
+                    <td>@payRef</td>
                 </tr>
             }
             @if (Model.Payments.Count == 0)
@@ -157,30 +244,5 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
-    <script>
-        (function () {
-            var invoiceSelect = document.getElementById('vendorPayInvoice');
-            var amountInput = document.getElementById('vendorPayAmount');
-            document.querySelectorAll('.vendor-pick-invoice').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    var uid = btn.getAttribute('data-uid');
-                    var balance = btn.getAttribute('data-balance');
-                    if (invoiceSelect && uid) invoiceSelect.value = uid;
-                    if (amountInput && balance) amountInput.value = Number(balance).toFixed(2);
-                });
-            });
-            var balances = {
-                @foreach (var inv in Model.OpenInvoices)
-                {
-                    <text>@inv.Uid: @inv.BalanceAmount.ToString(System.Globalization.CultureInfo.InvariantCulture),</text>
-                }
-            };
-            if (invoiceSelect && amountInput) {
-                invoiceSelect.addEventListener('change', function () {
-                    var bal = balances[invoiceSelect.value];
-                    if (bal != null) amountInput.value = Number(bal).toFixed(2);
-                });
-            }
-        })();
-    </script>
+    <script src="~/js/vendor-pay.js" asp-append-version="true"></script>
 }

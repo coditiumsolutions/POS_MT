@@ -41,9 +41,12 @@ public sealed class VendorOpenInvoiceRowViewModel
 {
     public int Uid { get; set; }
     public string PurchaseInvoiceNo { get; set; } = string.Empty;
+    /// <summary>Vendor's own bill / invoice number (easier to recognize than internal purchase no).</summary>
+    public string? VendorInvoiceNo { get; set; }
     public DateTime PurchaseDate { get; set; }
     public decimal NetAmount { get; set; }
     public decimal PaidAmount { get; set; }
     public decimal BalanceAmount { get; set; }
     public string PaymentStatus { get; set; } = string.Empty;
+    public string? Remarks { get; set; }
 }

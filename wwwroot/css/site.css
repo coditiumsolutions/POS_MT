@@ -597,10 +597,14 @@ a.pos-nav-link:hover {
 
 .module-section {
   margin-bottom: 0.85rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 2px solid #3b82f6;
 }
 
 .module-section:last-child {
   margin-bottom: 0.15rem;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .module-section-head {
@@ -611,7 +615,7 @@ a.pos-nav-link:hover {
   margin: 0;
   font-size: 1.25rem;
   font-weight: 700;
-  color: #0f172a;
+  color: #2563eb;
 }
 
 .module-section-subtitle {
@@ -719,13 +723,6 @@ a.pos-nav-link:hover {
 .module-grid > .module-card:nth-child(10n + 8) { --module-accent: #475569; }
 .module-grid > .module-card:nth-child(10n + 9) { --module-accent: #0ea5e9; }
 .module-grid > .module-card:nth-child(10n + 10) { --module-accent: #65a30d; }
-
-.module-section:nth-of-type(6n + 1) .module-section-title { color: #0f766e; }
-.module-section:nth-of-type(6n + 2) .module-section-title { color: #c2410c; }
-.module-section:nth-of-type(6n + 3) .module-section-title { color: #1d4ed8; }
-.module-section:nth-of-type(6n + 4) .module-section-title { color: #b45309; }
-.module-section:nth-of-type(6n + 5) .module-section-title { color: #6d28d9; }
-.module-section:nth-of-type(6n + 6) .module-section-title { color: #334155; }
 
 .module-card:hover {
   transform: translateY(-1px);

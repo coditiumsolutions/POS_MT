@@ -49,6 +49,8 @@ public static class NavigationCatalog
         [
             new("All Employees", "Employees", IconClass: "bi-people"),
             new("Add Employee", "Employees", "Create", IconClass: "bi-person-plus"),
+            new("Mark Attendance", "EmployeeAttendance", "Mark", IconClass: "bi-calendar-check"),
+            new("Attendance", "EmployeeAttendance", IconClass: "bi-calendar3"),
             new("Salary Payments", "EmployeePayments", IconClass: "bi-cash-coin")
         ]),
         new("Adjustments", "Adjustments",
@@ -66,6 +68,7 @@ public static class NavigationCatalog
             new("Sales", "SalesInvoices", IconClass: "bi-receipt"),
             new("Expenses", "Expenses", IconClass: "bi-credit-card"),
             new("Employees", "Employees", IconClass: "bi-person-badge"),
+            new("Attendance", "EmployeeAttendance", IconClass: "bi-calendar3"),
             new("Reports", "Reports", "SalesItem", IconClass: "bi-graph-up")
         ])
     ];
@@ -76,7 +79,8 @@ public static class NavigationCatalog
         new("Vendors", "Vendors",
         [
             new("Add Vendor", "Vendors", "Create", IconClass: "bi-plus-circle"),
-            new("All Vendor", "Vendors", IconClass: "bi-truck")
+            new("All Vendor", "Vendors", IconClass: "bi-truck"),
+            new("Vendor Payments", "Reports", "VendorPaymentReport", IconClass: "bi-wallet2", NavArea: "Vendors")
         ]),
         new("Products", "Products",
         [
@@ -106,7 +110,7 @@ public static class NavigationCatalog
         [
             new("Sales Item", "Reports", "SalesItem", IconClass: "bi-cart4"),
             new("Daily Report", "Reports", "DailyReport", IconClass: "bi-calendar-day"),
-            new("Inventory Report", "Reports", "InventoryReport", IconClass: "bi-boxes"),
+            new("Home Delivery", "Reports", "InventoryReport", IconClass: "bi-boxes"),
             new("Payment Report", "Reports", "PaymentReport", IconClass: "bi-cash-coin"),
             new("Vendor Payments", "Reports", "VendorPaymentReport", IconClass: "bi-wallet2"),
             new("Terminal Report", "Reports", "TerminalReport", IconClass: "bi-display"),
@@ -144,6 +148,8 @@ public static class NavigationCatalog
         new("HR & Payroll", "Employees, salary, allowances, and payments",
         [
             new("Employees", "bi-person-badge", "Employees"),
+            new("Mark Attendance", "bi-calendar-check", "EmployeeAttendance", "Mark"),
+            new("Attendance", "bi-calendar3", "EmployeeAttendance"),
             new("Salary Payments", "bi-cash-coin", "EmployeePayments")
         ]),
         new("Organization", "Users, terminals, branches, and warehouses",

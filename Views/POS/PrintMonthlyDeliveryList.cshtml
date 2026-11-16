@@ -15,6 +15,7 @@
             --ink: #0f172a;
             --muted: #64748b;
             --line: #cbd5e1;
+            --paper: 72mm;
         }
 
         * { box-sizing: border-box; }
@@ -27,10 +28,10 @@
         }
 
         .toolbar {
-            width: 210mm;
-            margin: 12px auto 0;
+            width: var(--paper);
+            margin: 8px auto 0;
             display: flex;
-            gap: 0.5rem;
+            gap: 0.35rem;
             justify-content: flex-end;
         }
 
@@ -39,8 +40,8 @@
             background: #0f172a;
             color: #fff;
             border-radius: 4px;
-            padding: 0.4rem 0.9rem;
-            font-size: 0.875rem;
+            padding: 0.3rem 0.65rem;
+            font-size: 0.75rem;
             cursor: pointer;
         }
 
@@ -50,146 +51,168 @@
         }
 
         .sheet {
-            width: 210mm;
-            min-height: 297mm;
-            margin: 12px auto;
-            padding: 12mm 12mm 14mm;
+            width: var(--paper);
+            margin: 8px auto;
+            padding: 3mm 2.5mm 4mm;
             background: #fff;
             box-shadow: 0 1px 8px rgba(15, 23, 42, 0.12);
         }
 
         h1 {
             margin: 0;
-            font-size: 1.35rem;
+            font-size: 0.95rem;
+            line-height: 1.2;
         }
 
         .sub {
-            margin-top: 0.2rem;
+            margin-top: 0.15rem;
             color: var(--muted);
-            font-size: 0.85rem;
+            font-size: 0.65rem;
+            line-height: 1.25;
         }
 
         .header {
-            display: flex;
-            justify-content: space-between;
-            gap: 1rem;
-            border-bottom: 2px solid var(--ink);
-            padding-bottom: 0.6rem;
-            margin-bottom: 0.75rem;
+            display: block;
+            border-bottom: 1.5px solid var(--ink);
+            padding-bottom: 0.4rem;
+            margin-bottom: 0.45rem;
         }
 
         .meta {
-            text-align: right;
-            font-size: 0.85rem;
+            margin-top: 0.35rem;
+            text-align: left;
+            font-size: 0.68rem;
+            line-height: 1.3;
         }
 
-        .meta strong { display: block; font-size: 1rem; }
+        .meta strong {
+            display: block;
+            font-size: 0.8rem;
+        }
 
         .area-block {
-            margin-top: 0.85rem;
+            margin-top: 0.55rem;
             break-inside: avoid;
         }
 
         .area-block:first-of-type { margin-top: 0; }
 
         .area-title {
-            margin: 0 0 0.35rem;
-            padding: 0.3rem 0.45rem;
+            margin: 0 0 0.25rem;
+            padding: 0.2rem 0.3rem;
             background: #0f172a;
             color: #fff;
-            font-size: 0.9rem;
+            font-size: 0.7rem;
             font-weight: 700;
-            letter-spacing: 0.02em;
+            letter-spacing: 0.01em;
+            line-height: 1.25;
         }
 
         .area-meta {
             color: #cbd5e1;
             font-weight: 500;
-            font-size: 0.75rem;
+            font-size: 0.62rem;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 0.8rem;
+            font-size: 0.68rem;
+            table-layout: fixed;
         }
 
         th, td {
             border: 1px solid var(--line);
-            padding: 0.18rem 0.35rem;
+            padding: 0.18rem 0.22rem;
             vertical-align: middle;
             text-align: left;
-            line-height: 1.25;
+            line-height: 1.2;
+            word-wrap: break-word;
+            overflow-wrap: anywhere;
         }
 
         th {
             background: #f8fafc;
-            font-size: 0.7rem;
+            font-size: 0.58rem;
             letter-spacing: 0.02em;
             text-transform: uppercase;
-            padding: 0.2rem 0.35rem;
+            padding: 0.15rem 0.22rem;
         }
 
-        .name { font-weight: 700; line-height: 1.2; }
+        th.qty-col,
+        td.qty-col {
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .name {
+            font-weight: 700;
+            line-height: 1.15;
+            font-size: 0.7rem;
+        }
 
         .muted {
             color: var(--muted);
-            font-size: 0.72rem;
-            line-height: 1.2;
+            font-size: 0.6rem;
+            line-height: 1.15;
         }
 
         .qty-list {
             margin: 0;
             padding: 0;
             list-style: none;
-        }
-
-        .qty-list li {
             display: flex;
-            justify-content: space-between;
-            gap: 0.75rem;
-            line-height: 1.35;
-        }
-
-        .qty-list .item-name {
-            font-weight: 600;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.1rem;
         }
 
         .qty-list .item-qty {
             font-variant-numeric: tabular-nums;
-            font-weight: 700;
+            font-weight: 800;
             white-space: nowrap;
-            min-width: 2.5rem;
-            text-align: right;
+            text-align: center;
+            font-size: 1.15rem;
+            line-height: 1.15;
         }
 
         .signoff {
-            margin-top: 1.25rem;
+            margin-top: 0.85rem;
             display: flex;
-            justify-content: space-between;
-            gap: 2rem;
-            font-size: 0.85rem;
+            flex-direction: column;
+            gap: 0.75rem;
+            font-size: 0.68rem;
         }
 
         .signoff span {
-            flex: 1;
             border-top: 1px solid var(--ink);
-            padding-top: 0.35rem;
+            padding-top: 0.25rem;
         }
 
         .empty {
-            padding: 1rem 0;
+            padding: 0.6rem 0;
+            color: var(--muted);
+            font-size: 0.72rem;
+        }
+
+        .summary {
+            margin-top: 0.45rem;
+            font-size: 0.6rem;
             color: var(--muted);
         }
 
-        @@page { size: A4 portrait; margin: 10mm; }
+        @@page {
+            size: 80mm auto;
+            margin: 2mm;
+        }
 
         @@media print {
             body { background: #fff; }
             .toolbar { display: none !important; }
             .sheet {
-                width: auto;
-                min-height: auto;
+                width: 100%;
+                max-width: 76mm;
                 margin: 0;
                 padding: 0;
                 box-shadow: none;
@@ -207,8 +230,8 @@
     <div class="sheet">
         <div class="header">
             <div>
-                <h1>Delivery list (Area wise)</h1>
-                <div class="sub">@Model.ShopName · hand this sheet to the person delivering</div>
+                <h1>Delivery list</h1>
+                <div class="sub">@Model.ShopName · for delivery</div>
             </div>
             <div class="meta">
                 <strong>@Model.SupplyDate.ToString("dd-MMM-yyyy")</strong>
@@ -237,8 +260,8 @@
                     <table>
                         <thead>
                             <tr>
-                                <th style="width:45%">Customer</th>
-                                <th style="width:55%">Quantity</th>
+                                <th style="width:62%">Customer</th>
+                                <th class="qty-col" style="width:38%">Quantity</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -249,7 +272,7 @@
                                     <div class="name">@customer.CustomerName</div>
                                     <div class="muted">@customer.CustomerCode@(string.IsNullOrWhiteSpace(customer.Phone) ? "" : " · " + customer.Phone)</div>
                                 </td>
-                                <td>
+                                <td class="qty-col">
                                     @if (customer.Items.Count == 0)
                                     {
                                         <span class="muted">—</span>
@@ -259,11 +282,7 @@
                                         <ul class="qty-list">
                                         @foreach (var item in customer.Items)
                                         {
-                                            var itemName = string.IsNullOrWhiteSpace(item.ProductName) ? item.ProductCode : item.ProductName;
-                                            <li>
-                                                <span class="item-name">@itemName</span>
-                                                <span class="item-qty">@item.Quantity.ToString("0.###")</span>
-                                            </li>
+                                            <li><span class="item-qty">@item.Quantity.ToString("0.###")</span></li>
                                         }
                                         </ul>
                                     }
@@ -274,7 +293,7 @@
                     </table>
                 </div>
             }
-            <p class="muted" style="margin-top:0.6rem">
+            <p class="summary">
                 @areaGroups.Count area@(areaGroups.Count == 1 ? "" : "s") ·
                 @Model.Customers.Count customer@(Model.Customers.Count == 1 ? "" : "s").
             </p>

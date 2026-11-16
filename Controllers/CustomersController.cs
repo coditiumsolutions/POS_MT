@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -5,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using POS_MT.Data;
 using POS_MT.Interfaces;
 using POS_MT.Models;
+using POS_MT.Services;
 using POS_MT.ViewModels;
 
 namespace POS_MT.Controllers;
@@ -158,7 +161,393 @@ public class CustomersController : Controller
         EnsureCustomersNav();
         await _advance.EnsureSchemaAsync(ct);
         var entity = await _db.Customers.AsNoTracking().FirstOrDefaultAsync(x => x.Uid == id, ct);
-        return entity is null ? NotFound() : View(entity);
+        if (entity is null)
+            return NotFound();
+
+        // Monthly Supply is lump-sum at month end — clear any mid-month auto-advance "Paid" state.
+        await _advance.ReverseAutoAppliedAdvancesOnMonthlySupplyAsync(id, ct);
+        await _db.SaveChangesAsync(ct);
+
+        await PopulateCustomerDetailsExtrasAsync(id, ct);
+        return View(entity);
+    }
+
+    /// <summary>
+    /// Posts an unpaid header-only sales invoice for prior-month / opening arrears.
+    /// Shows as Previous Balance on later monthly bills; payments clear it via FIFO.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateOpeningBalanceInvoice(
+        int id,
+        decimal amount,
+        DateTime? asOfDate,
+        string? note,
+        CancellationToken ct)
+    {
+        EnsureCustomersNav();
+        await _advance.EnsureSchemaAsync(ct);
+
+        var customer = await _db.Customers.FirstOrDefaultAsync(x => x.Uid == id, ct);
+        if (customer is null)
+            return NotFound();
+
+        if (amount <= 0)
+        {
+            TempData["Error"] = "Opening / previous balance amount must be greater than zero.";
+            TempData["OpenTab"] = "arrears";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        if (CustomerClassification.IsWalkIn(customer.CustomerCode, customer.CustomerName))
+        {
+            TempData["Error"] = "Cannot post previous balance for the walk-in customer.";
+            TempData["OpenTab"] = "arrears";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        var invoiceDate = (asOfDate ?? DateTime.Today).Date;
+        var notePart = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        var remarks = notePart is null
+            ? $"{CustomerClassification.OpeningBalanceRemarkPrefix} as of {invoiceDate:yyyy-MM-dd}"
+            : $"{CustomerClassification.OpeningBalanceRemarkPrefix} as of {invoiceDate:yyyy-MM-dd}: {notePart}";
+        if (remarks.Length > 500)
+            remarks = remarks[..500];
+
+        int? userUid = null;
+        if (int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsedUserId))
+            userUid = parsedUserId;
+        var userName = User.Identity?.Name;
+
+        var invoiceNo = $"OB-{DateTime.Now:yyyyMMddHHmmss}";
+        while (await _db.SalesInvoices.AnyAsync(x => x.InvoiceNo == invoiceNo, ct))
+            invoiceNo = $"OB-{DateTime.Now:yyyyMMddHHmmss}-{Random.Shared.Next(10, 99)}";
+
+        var invoice = new SalesInvoice
+        {
+            InvoiceNo = invoiceNo,
+            InvoiceDate = invoiceDate,
+            CustomerUid = customer.Uid,
+            UserUid = userUid,
+            UserName = userName,
+            SubTotal = amount,
+            DiscountAmount = 0,
+            TaxAmount = 0,
+            OtherCharges = 0,
+            NetAmount = amount,
+            PaidAmount = 0,
+            BalanceAmount = amount,
+            PaymentStatus = "Unpaid",
+            InvoiceStatus = "Completed",
+            Remarks = remarks,
+            CreatedDate = DateTime.Now
+        };
+
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            _db.SalesInvoices.Add(invoice);
+            customer.OpeningBalance = amount;
+            customer.UpdatedDate = DateTime.Now;
+            await _db.SaveChangesAsync(ct);
+
+            var applied = await _advance.AutoApplyAdvanceFifoAsync(customer.Uid, userUid, terminalUid: null, ct);
+            await _db.SaveChangesAsync(ct);
+            await _audit.WriteAsync("Create", "SalesInvoices", invoice.Uid.ToString(),
+                $"Opening/previous balance invoice {invoice.InvoiceNo} for {customer.CustomerCode}: {amount:N2}" +
+                (applied > 0 ? $"; advance applied {applied:N2}" : ""), ct);
+            await tx.CommitAsync(ct);
+
+            TempData["Success"] = applied > 0
+                ? $"Previous balance {amount:N2} posted as {invoice.InvoiceNo}. Advance cleared {applied:N2} against dues."
+                : $"Previous balance {amount:N2} posted as unpaid invoice {invoice.InvoiceNo}.";
+            TempData["OpenTab"] = "arrears";
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync(ct);
+            TempData["Error"] = $"Could not post previous balance: {ex.Message}";
+            TempData["OpenTab"] = "arrears";
+        }
+
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
+    /// <summary>
+    /// Posts customer advance credit. Excess also clears oldest unpaid dues (FIFO).
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateAdvancePayment(
+        int id,
+        decimal amount,
+        DateTime? paymentDate,
+        string? note,
+        CancellationToken ct)
+    {
+        EnsureCustomersNav();
+        await _advance.EnsureSchemaAsync(ct);
+
+        var customer = await _db.Customers.AsNoTracking().FirstOrDefaultAsync(x => x.Uid == id, ct);
+        if (customer is null)
+            return NotFound();
+
+        if (amount <= 0)
+        {
+            TempData["Error"] = "Advance amount must be greater than zero.";
+            TempData["OpenTab"] = "advance";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        if (CustomerClassification.IsWalkIn(customer.CustomerCode, customer.CustomerName))
+        {
+            TempData["Error"] = "Cannot post advance for the walk-in customer.";
+            TempData["OpenTab"] = "advance";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        int? userUid = null;
+        if (int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsedUserId))
+            userUid = parsedUserId;
+
+        var payDate = (paymentDate ?? DateTime.Today).Date;
+        var notePart = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        var remarks = notePart is null
+            ? "Advance payment"
+            : $"Advance payment: {notePart}";
+        if (remarks.Length > 500)
+            remarks = remarks[..500];
+
+        var paymentNo = $"ADV-{DateTime.Now:yyyyMMddHHmmss}";
+        while (await _db.CustomerPayments.AnyAsync(x => x.PaymentNo == paymentNo, ct))
+            paymentNo = $"ADV-{DateTime.Now:yyyyMMddHHmmss}-{Random.Shared.Next(10, 99)}";
+
+        var payment = new CustomerPayment
+        {
+            PaymentNo = paymentNo,
+            PaymentDate = payDate,
+            CustomerUid = id,
+            SalesInvoiceUid = null,
+            Amount = amount,
+            AppliedToInvoiceAmount = 0,
+            UserUid = userUid,
+            Remarks = remarks,
+            CreatedDate = DateTime.Now
+        };
+
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            _db.CustomerPayments.Add(payment);
+            await _advance.ApplyNewPaymentAsync(payment, ct);
+            var appliedToDues = await _advance.AutoApplyAdvanceFifoAsync(id, userUid, terminalUid: null, ct);
+            await _db.SaveChangesAsync(ct);
+            await _audit.WriteAsync("Payment", "CustomerPayments", payment.Uid.ToString(),
+                $"Advance {payment.PaymentNo} for {customer.CustomerCode}: {amount:N2}" +
+                (appliedToDues > 0 ? $"; applied to dues {appliedToDues:N2}" : ""), ct);
+            await tx.CommitAsync(ct);
+
+            var balance = await _advance.GetAdvanceBalanceAsync(id, ct);
+            TempData["Success"] = appliedToDues > 0
+                ? $"Advance {amount:N2} posted. Applied {appliedToDues:N2} to unpaid dues; remaining advance credit {balance:N2}."
+                : $"Advance {amount:N2} posted. Advance credit now {balance:N2}.";
+            TempData["OpenTab"] = "advance";
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync(ct);
+            TempData["Error"] = $"Could not post advance: {ex.Message}";
+            TempData["OpenTab"] = "advance";
+        }
+
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
+    private async Task PopulateCustomerDetailsExtrasAsync(int customerUid, CancellationToken ct)
+    {
+        var unpaid = await _db.SalesInvoices.AsNoTracking()
+            .Where(x => x.CustomerUid == customerUid
+                        && x.InvoiceStatus != "Cancelled"
+                        && x.BalanceAmount > 0)
+            .OrderBy(x => x.InvoiceDate)
+            .ThenBy(x => x.Uid)
+            .Select(x => new
+            {
+                x.Uid,
+                x.InvoiceNo,
+                x.InvoiceDate,
+                x.BalanceAmount,
+                x.Remarks
+            })
+            .ToListAsync(ct);
+
+        ViewBag.OutstandingDues = unpaid.Sum(x => x.BalanceAmount);
+        ViewBag.UnpaidInvoices = unpaid
+            .Select(x => new CustomerUnpaidInvoiceRowViewModel
+            {
+                Uid = x.Uid,
+                InvoiceNo = x.InvoiceNo,
+                InvoiceDate = x.InvoiceDate,
+                BalanceAmount = x.BalanceAmount,
+                Label = CustomerClassification.GetSalesTypeLabel("", "", x.Remarks)
+            })
+            .ToList();
+
+        var today = DateTime.Today;
+        var currentMonthStart = new DateTime(today.Year, today.Month, 1);
+        var nextMonthStart = currentMonthStart.AddMonths(1);
+        var previousMonthStart = currentMonthStart.AddMonths(-1);
+
+        // Monthly Supply uses one invoice per month (InvoiceDate = month start) with daily EntryDate lines.
+        // Expand those into day rows so Current/Previous Month tabs show every bill day.
+        ViewBag.CurrentMonthBills = await BuildCustomerBillRowsAsync(
+            customerUid, currentMonthStart, today, ct);
+        ViewBag.PreviousMonthBills = await BuildCustomerBillRowsAsync(
+            customerUid, previousMonthStart, currentMonthStart.AddDays(-1), ct);
+
+        ViewBag.CurrentMonthLabel = currentMonthStart.ToString("MMMM yyyy");
+        ViewBag.PreviousMonthLabel = previousMonthStart.ToString("MMMM yyyy");
+    }
+
+    private const string MonthlyEntryDatePrefix = "EntryDate:";
+
+    private async Task<List<CustomerBillHistoryRowViewModel>> BuildCustomerBillRowsAsync(
+        int customerUid,
+        DateTime rangeStart,
+        DateTime rangeEndInclusive,
+        CancellationToken ct)
+    {
+        var rangeEndExclusive = rangeEndInclusive.Date.AddDays(1);
+        var monthStart = new DateTime(rangeStart.Year, rangeStart.Month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+
+        // Pull invoices that belong to this calendar month window (header date or monthly-supply month).
+        var invoices = await _db.SalesInvoices.AsNoTracking()
+            .Where(x => x.CustomerUid == customerUid
+                        && x.InvoiceStatus != SalesReturnsController.ReturnStatus
+                        && x.InvoiceStatus != WastageController.WastageStatus
+                        && x.InvoiceDate >= monthStart
+                        && x.InvoiceDate < monthEnd)
+            .OrderByDescending(x => x.InvoiceDate)
+            .ThenByDescending(x => x.Uid)
+            .Select(x => new
+            {
+                x.Uid,
+                x.InvoiceNo,
+                x.InvoiceDate,
+                x.NetAmount,
+                x.PaidAmount,
+                x.BalanceAmount,
+                x.PaymentStatus,
+                x.InvoiceStatus,
+                x.Remarks
+            })
+            .ToListAsync(ct);
+
+        if (invoices.Count == 0)
+            return [];
+
+        var invoiceIds = invoices.Select(x => x.Uid).ToList();
+        var details = await _db.SalesInvoiceDetails.AsNoTracking()
+            .Where(d => invoiceIds.Contains(d.SalesInvoiceUid))
+            .Select(d => new
+            {
+                d.SalesInvoiceUid,
+                d.ProductName,
+                d.ProductCode,
+                d.Quantity,
+                d.LineTotal,
+                d.Remarks
+            })
+            .ToListAsync(ct);
+
+        var detailsByInvoice = details.GroupBy(d => d.SalesInvoiceUid)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var rows = new List<CustomerBillHistoryRowViewModel>();
+
+        foreach (var inv in invoices)
+        {
+            var label = CustomerClassification.GetSalesTypeLabel("", "", inv.Remarks);
+            var isMonthly = CustomerClassification.IsMonthlySupplyInvoice(inv.Remarks);
+            detailsByInvoice.TryGetValue(inv.Uid, out var lines);
+            lines ??= [];
+
+            if (isMonthly && lines.Count > 0)
+            {
+                var dayGroups = lines
+                    .Select(l =>
+                    {
+                        DateTime? entryDate = null;
+                        if (!string.IsNullOrWhiteSpace(l.Remarks)
+                            && l.Remarks.StartsWith(MonthlyEntryDatePrefix, StringComparison.OrdinalIgnoreCase)
+                            && DateTime.TryParse(l.Remarks[MonthlyEntryDatePrefix.Length..], CultureInfo.InvariantCulture,
+                                DateTimeStyles.None, out var parsed))
+                        {
+                            entryDate = parsed.Date;
+                        }
+
+                        return new { Line = l, EntryDate = entryDate ?? inv.InvoiceDate.Date };
+                    })
+                    .Where(x => x.EntryDate >= rangeStart.Date && x.EntryDate < rangeEndExclusive)
+                    .GroupBy(x => x.EntryDate)
+                    .OrderByDescending(g => g.Key);
+
+                foreach (var day in dayGroups)
+                {
+                    var dayLines = day.ToList();
+                    var dayAmount = dayLines.Sum(x => x.Line.LineTotal);
+                    var items = string.Join(", ", dayLines.Select(x =>
+                    {
+                        var name = string.IsNullOrWhiteSpace(x.Line.ProductName) ? x.Line.ProductCode : x.Line.ProductName;
+                        return $"{name} × {x.Line.Quantity:0.###}";
+                    }));
+
+                    rows.Add(new CustomerBillHistoryRowViewModel
+                    {
+                        Uid = inv.Uid,
+                        InvoiceNo = inv.InvoiceNo,
+                        InvoiceDate = day.Key,
+                        NetAmount = dayAmount,
+                        PaidAmount = 0,
+                        BalanceAmount = dayAmount,
+                        PaymentStatus = inv.PaymentStatus,
+                        InvoiceStatus = inv.InvoiceStatus,
+                        Label = label,
+                        ItemsSummary = items,
+                        IsMonthlyDayBill = true
+                    });
+                }
+            }
+            else if (inv.InvoiceDate.Date >= rangeStart.Date && inv.InvoiceDate.Date < rangeEndExclusive)
+            {
+                rows.Add(new CustomerBillHistoryRowViewModel
+                {
+                    Uid = inv.Uid,
+                    InvoiceNo = inv.InvoiceNo,
+                    InvoiceDate = inv.InvoiceDate.Date,
+                    NetAmount = inv.NetAmount,
+                    PaidAmount = inv.PaidAmount,
+                    BalanceAmount = inv.BalanceAmount,
+                    PaymentStatus = inv.PaymentStatus,
+                    InvoiceStatus = inv.InvoiceStatus,
+                    Label = label,
+                    ItemsSummary = lines.Count == 0
+                        ? "—"
+                        : string.Join(", ", lines.Select(l =>
+                        {
+                            var name = string.IsNullOrWhiteSpace(l.ProductName) ? l.ProductCode : l.ProductName;
+                            return $"{name} × {l.Quantity:0.###}";
+                        })),
+                    IsMonthlyDayBill = false
+                });
+            }
+        }
+
+        return rows
+            .OrderByDescending(x => x.InvoiceDate)
+            .ThenByDescending(x => x.Uid)
+            .ToList();
     }
 
     [HttpPost]
@@ -177,7 +566,7 @@ public class CustomersController : Controller
         await _db.SaveChangesAsync(ct);
         await _audit.WriteAsync("Cancel", "Customers", entity.Uid.ToString(), $"Deactivated customer {entity.CustomerCode}", ct);
         TempData["Success"] = "Customer deactivated.";
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction(nameof(Details), new { id });
     }
 
     [HttpPost]

@@ -460,7 +460,36 @@ public class POSController : Controller
                 x.PaidAmount,
                 x.BalanceAmount,
                 x.InvoiceStatus,
-                x.PaymentStatus
+                x.PaymentStatus,
+                x.Remarks
+            })
+            .ToListAsync(ct);
+
+        // Unpaid previous arrears: Opening Balance invoices, plus any other unpaid dues dated before this month.
+        var previousArrears = await _db.SalesInvoices.AsNoTracking()
+            .Where(x => x.CustomerUid == customerUid
+                        && x.InvoiceStatus != "Cancelled"
+                        && x.InvoiceStatus != SalesReturnsController.ReturnStatus
+                        && x.InvoiceStatus != WastageController.WastageStatus
+                        && x.BalanceAmount > 0
+                        && (
+                            (x.Remarks != null
+                             && x.Remarks.StartsWith(CustomerClassification.OpeningBalanceRemarkPrefix))
+                            || x.InvoiceDate < monthStart
+                        ))
+            .OrderBy(x => x.InvoiceDate)
+            .ThenBy(x => x.Uid)
+            .Select(x => new
+            {
+                x.Uid,
+                x.InvoiceNo,
+                x.InvoiceDate,
+                x.NetAmount,
+                x.PaidAmount,
+                x.BalanceAmount,
+                x.InvoiceStatus,
+                x.PaymentStatus,
+                x.Remarks
             })
             .ToListAsync(ct);
 
@@ -533,9 +562,30 @@ public class POSController : Controller
                 balanceAmount = inv.BalanceAmount,
                 invoiceStatus = inv.InvoiceStatus,
                 paymentStatus = inv.PaymentStatus,
+                kind = "monthlySupply",
                 supplyDays = days.Count,
                 days
             };
+        }).ToList();
+
+        var arrearsPayload = previousArrears.Select(inv => new
+        {
+            uid = inv.Uid,
+            invoiceNo = inv.InvoiceNo,
+            invoiceDate = inv.InvoiceDate.ToString("yyyy-MM-dd"),
+            invoiceDateLabel = inv.InvoiceDate.ToString("dd-MMM-yyyy"),
+            netAmount = inv.NetAmount,
+            paidAmount = inv.PaidAmount,
+            balanceAmount = inv.BalanceAmount,
+            invoiceStatus = inv.InvoiceStatus,
+            paymentStatus = inv.PaymentStatus,
+            remarks = inv.Remarks,
+            kind = CustomerClassification.IsOpeningBalanceInvoice(inv.Remarks)
+                ? "openingBalance"
+                : "previousDue",
+            label = CustomerClassification.IsOpeningBalanceInvoice(inv.Remarks)
+                ? "Previous Balance"
+                : CustomerClassification.GetSalesTypeLabel(customer.CustomerCode, customer.CustomerName, inv.Remarks)
         }).ToList();
 
         return Json(new
@@ -545,6 +595,8 @@ public class POSController : Controller
             customerName = customer.CustomerName,
             month = monthStart.ToString("yyyy-MM"),
             monthLabel = monthStart.ToString("MMMM yyyy", CultureInfo.InvariantCulture),
+            previousBalanceTotal = arrearsPayload.Sum(x => x.balanceAmount),
+            previousArrears = arrearsPayload,
             invoices = payload
         });
     }
@@ -1000,8 +1052,8 @@ public class POSController : Controller
                 await _db.SaveChangesAsync(ct);
                 await RecalculateMonthlyDraftTotalsAsync(invoice, ct);
                 await ApplyMonthlySupplyDeliveryChargesAsync(invoice, customer.Uid, ct);
-                await SyncInvoicePaidFromCustomerPaymentsAsync(invoice, ct);
-                var advanceApplied = await _advance.AutoApplyAdvanceToInvoiceAsync(invoice, userUid, terminalUid: null, ct);
+                // Monthly Supply stays Unpaid until lump-sum settlement at month end (no mid-month advance apply).
+                await _advance.ReverseAutoAppliedAdvancesOnMonthlySupplyAsync(customer.Uid, ct);
                 await SyncInvoicePaidFromCustomerPaymentsAsync(invoice, ct);
                 if (stockResult.HasShortages)
                     invoice.Remarks = _inventory.MergeShortageRemarks(invoice.Remarks, stockResult);
@@ -1013,18 +1065,17 @@ public class POSController : Controller
                     invoice.Branch = msBranchName;
                 await _db.SaveChangesAsync(ct);
 
-                var advanceNote = advanceApplied > 0 ? $", advance applied {advanceApplied:N2}" : "";
                 if (createdNew)
                 {
                     await _audit.WriteAsync("Create", "SalesInvoices", invoice.Uid.ToString(),
-                        $"Monthly supply invoice {invoice.InvoiceNo} for {customer.CustomerCode} ({supplyDay:yyyy-MM}) with {added} detail line(s); OtherCharges={invoice.OtherCharges:N2}{advanceNote}.", ct);
-                    processed.Add($"{customer.CustomerCode}: created {invoice.InvoiceNo} (+{added} lines for {supplyDay:yyyy-MM-dd}, delivery {invoice.OtherCharges:N2}{advanceNote})");
+                        $"Monthly supply invoice {invoice.InvoiceNo} for {customer.CustomerCode} ({supplyDay:yyyy-MM}) with {added} detail line(s); OtherCharges={invoice.OtherCharges:N2}.", ct);
+                    processed.Add($"{customer.CustomerCode}: created {invoice.InvoiceNo} (+{added} lines for {supplyDay:yyyy-MM-dd}, delivery {invoice.OtherCharges:N2})");
                 }
                 else
                 {
                     await _audit.WriteAsync("Update", "SalesInvoices", invoice.Uid.ToString(),
-                        $"Monthly supply {invoice.InvoiceNo} for {customer.CustomerCode} on {supplyDay:yyyy-MM-dd}: +{added} / ~{updated} line(s); OtherCharges={invoice.OtherCharges:N2}{advanceNote}.", ct);
-                    processed.Add($"{customer.CustomerCode}: {invoice.InvoiceNo} (+{added}/~{updated} lines for {supplyDay:yyyy-MM-dd}, delivery {invoice.OtherCharges:N2}{advanceNote})");
+                        $"Monthly supply {invoice.InvoiceNo} for {customer.CustomerCode} on {supplyDay:yyyy-MM-dd}: +{added} / ~{updated} line(s); OtherCharges={invoice.OtherCharges:N2}.", ct);
+                    processed.Add($"{customer.CustomerCode}: {invoice.InvoiceNo} (+{added}/~{updated} lines for {supplyDay:yyyy-MM-dd}, delivery {invoice.OtherCharges:N2})");
                 }
 
                 if (invoice.ClientTransactionId is Guid supplyTx)
@@ -2296,13 +2347,20 @@ public class POSController : Controller
             return;
         }
 
+        // Monthly Supply: ignore auto-applied advances; only manual / lump-sum payments count.
+        var isMonthlySupply = CustomerClassification.IsMonthlySupplyInvoice(invoice.Remarks);
         var paidFromPayments = await _db.CustomerPayments.AsNoTracking()
-            .Where(x => x.SalesInvoiceUid == invoice.Uid)
+            .Where(x => x.SalesInvoiceUid == invoice.Uid
+                        && (!isMonthlySupply
+                            || x.Remarks == null
+                            || !x.Remarks.StartsWith("Auto-applied advance")))
             .SumAsync(x => (decimal?)x.AppliedToInvoiceAmount, ct) ?? 0m;
 
         // Prefer ledger total; never drop below what payments already recorded.
-        // Do not clamp PaidAmount down here ? NetAmount may still receive delivery charges after this call.
-        invoice.PaidAmount = Math.Max(invoice.PaidAmount, paidFromPayments);
+        // Do not clamp PaidAmount down here — NetAmount may still receive delivery charges after this call.
+        invoice.PaidAmount = isMonthlySupply
+            ? paidFromPayments
+            : Math.Max(invoice.PaidAmount, paidFromPayments);
         invoice.BalanceAmount = Math.Max(0, invoice.NetAmount - invoice.PaidAmount);
         invoice.PaymentStatus = invoice.PaidAmount <= 0
             ? "Unpaid"
@@ -2324,7 +2382,10 @@ public class POSController : Controller
         {
             invoice.OtherCharges = 0;
             invoice.NetAmount = invoice.SubTotal;
-            invoice.BalanceAmount = invoice.NetAmount - invoice.PaidAmount;
+            invoice.BalanceAmount = Math.Max(0, invoice.NetAmount - invoice.PaidAmount);
+            invoice.PaymentStatus = invoice.PaidAmount <= 0
+                ? "Unpaid"
+                : invoice.PaidAmount >= invoice.NetAmount ? "Paid" : "Partial";
             return;
         }
 
@@ -2357,7 +2418,10 @@ public class POSController : Controller
 
         invoice.OtherCharges = otherCharges;
         invoice.NetAmount = invoice.SubTotal + otherCharges;
-        invoice.BalanceAmount = invoice.NetAmount - invoice.PaidAmount;
+        invoice.BalanceAmount = Math.Max(0, invoice.NetAmount - invoice.PaidAmount);
+        invoice.PaymentStatus = invoice.PaidAmount <= 0
+            ? "Unpaid"
+            : invoice.PaidAmount >= invoice.NetAmount ? "Paid" : "Partial";
     }
 
     private static DateTime ParseEntryDate(string? remarks, DateTime fallback)

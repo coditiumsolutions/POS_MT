@@ -12,6 +12,7 @@ public sealed class VendorPaymentReportViewModel
 
 public sealed class VendorPaymentReportRowViewModel
 {
+    public int Uid { get; set; }
     public string PaymentNo { get; set; } = string.Empty;
     public DateTime PaymentDate { get; set; }
     public string VendorName { get; set; } = string.Empty;

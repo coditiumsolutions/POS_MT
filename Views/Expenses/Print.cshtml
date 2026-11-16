@@ -1,0 +1,177 @@
+@model ExpensePrintViewModel
+@{
+    Layout = null;
+    ViewData["Title"] = "Expenses Report";
+    string PeriodLabel()
+    {
+        if (Model.DateFrom.HasValue && Model.DateTo.HasValue)
+            return $"{Model.DateFrom:dd MMMM yyyy} – {Model.DateTo:dd MMMM yyyy}";
+        if (Model.DateFrom.HasValue)
+            return $"From {Model.DateFrom:dd MMMM yyyy}";
+        if (Model.DateTo.HasValue)
+            return $"To {Model.DateTo:dd MMMM yyyy}";
+        return "All dates";
+    }
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"]</title>
+    <style>
+        :root { --ink:#0f172a; --muted:#64748b; --line:#94a3b8; }
+        * { box-sizing: border-box; }
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            color: var(--ink);
+            margin: 0;
+            background: #e2e8f0;
+            font-size: 11px;
+        }
+        .toolbar {
+            width: 210mm;
+            margin: 8px auto 0;
+            display: flex;
+            gap: 0.35rem;
+            justify-content: flex-end;
+        }
+        .toolbar button {
+            border: 1px solid #94a3b8;
+            background: #0f172a;
+            color: #fff;
+            border-radius: 4px;
+            padding: 0.28rem 0.7rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+        .toolbar button.secondary { background: #fff; color: #0f172a; }
+        .sheet {
+            width: 210mm;
+            margin: 8px auto;
+            padding: 8mm 8mm 10mm;
+            background: #fff;
+            box-shadow: 0 1px 6px rgba(15, 23, 42, 0.1);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            border-bottom: 1.5px solid #000;
+            padding-bottom: 0.35rem;
+            margin-bottom: 0.45rem;
+        }
+        h1 { margin: 0; font-size: 1.05rem; line-height: 1.2; }
+        .sub { margin-top: 0.1rem; color: var(--muted); font-size: 0.72rem; }
+        .meta { text-align: right; font-size: 0.72rem; line-height: 1.3; color: var(--muted); }
+        .meta strong { display: block; color: var(--ink); font-size: 0.8rem; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        th, td {
+            border-bottom: 1px solid #2563eb;
+            padding: 0.18rem 0.25rem;
+            text-align: left;
+            vertical-align: top;
+            line-height: 1.25;
+        }
+        th {
+            background: #f8fafc;
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: #334155;
+            border-bottom: 1.5px solid #000;
+        }
+        td { font-size: 0.72rem; }
+        .text-end { text-align: right; }
+        .muted { color: var(--muted); font-size: 0.65rem; }
+        .empty { padding: 0.6rem 0; color: var(--muted); }
+        tfoot td {
+            font-weight: 700;
+            border-top: 1.5px solid #000;
+            border-bottom: none;
+            padding-top: 0.3rem;
+        }
+        .footer-note {
+            margin-top: 0.55rem;
+            color: var(--muted);
+            font-size: 0.65rem;
+            border-top: 1px dashed var(--line);
+            padding-top: 0.3rem;
+        }
+        @@page { size: A4 portrait; margin: 8mm; }
+        @@media print {
+            body { background: #fff; }
+            .toolbar { display: none !important; }
+            .sheet { width: auto; margin: 0; padding: 0; box-shadow: none; }
+            tr { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button type="button" class="secondary" onclick="window.close()">Close</button>
+        <button type="button" onclick="window.print()">Print / Save PDF</button>
+    </div>
+    <div class="sheet">
+        <div class="header">
+            <div>
+                <h1>Expenses Report</h1>
+                <div class="sub">@PeriodLabel() · @Model.ExpenseCount expense(s)</div>
+            </div>
+            <div class="meta">
+                <strong>Total @Model.TotalAmount.ToString("N2")</strong>
+                Printed @Model.PrintedAt.ToString("dd MMMM yyyy HH:mm")
+            </div>
+        </div>
+
+        @if (Model.Rows.Count == 0)
+        {
+            <p class="empty">No expenses for the selected period.</p>
+        }
+        else
+        {
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:12%">Date</th>
+                        <th style="width:14%">Expense No</th>
+                        <th style="width:14%">Category</th>
+                        <th style="width:12%">Branch</th>
+                        <th style="width:28%">Description</th>
+                        <th style="width:10%">Method</th>
+                        <th class="text-end" style="width:10%">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        <td>@row.ExpenseDate.ToString("dd MMMM yyyy")</td>
+                        <td>@row.ExpenseNo</td>
+                        <td>@(string.IsNullOrWhiteSpace(row.CategoryName) ? "—" : row.CategoryName)</td>
+                        <td>@(string.IsNullOrWhiteSpace(row.BranchName) ? "—" : row.BranchName)</td>
+                        <td>@(string.IsNullOrWhiteSpace(row.Description) ? "—" : row.Description)</td>
+                        <td>@(string.IsNullOrWhiteSpace(row.PaymentMethod) ? "—" : row.PaymentMethod)</td>
+                        <td class="text-end">@row.Amount.ToString("N2")</td>
+                    </tr>
+                }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="6" class="text-end">Total</td>
+                        <td class="text-end">@Model.TotalAmount.ToString("N2")</td>
+                    </tr>
+                </tfoot>
+            </table>
+        }
+
+        <div class="footer-note">
+            Use <strong>Print / Save PDF</strong> and choose <em>Save as PDF</em> as the printer destination.
+        </div>
+    </div>
+</body>
+</html>

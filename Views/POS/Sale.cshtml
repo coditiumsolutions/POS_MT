@@ -230,7 +230,7 @@
             <h2 class="pos-sale-panel-title" id="basketPanelTitle">Sale = @Model.TodaySaleAmount.ToString("0.##")</h2>
             <div class="pos-sale-toolbar">
                 <button type="button" id="btnPrintReceipt" class="btn btn-outline-secondary btn-sm d-none" hidden>
-                    <i class="bi bi-printer" aria-hidden="true"></i> Print Receipt
+                    <i class="bi bi-printer" aria-hidden="true"></i> Print Slip
                 </button>
                 <button type="button" id="btnPay" class="btn btn-success btn-sm pos-sale-action-btn">
                     <i class="bi bi-cash-coin" aria-hidden="true"></i> Pay
@@ -970,41 +970,74 @@
     function buildReceiptHtml(data) {
         const rows = data.items.map(function (item) {
             const lineAmt = amountFromQty(item.qty, item.price, item.pricedByDozen);
-            return '<tr><td>' + escapeHtml(item.name) + '</td><td style="text-align:center">' + item.qty +
-                '</td><td style="text-align:right">' + money(item.price) +
-                '</td><td style="text-align:right">' + money(lineAmt) + '</td></tr>';
+            return '<tr><td class="item-name">' + escapeHtml(item.name) + '</td>' +
+                '<td class="num">' + item.qty + '</td>' +
+                '<td class="num">' + money(item.price) + '</td>' +
+                '<td class="num">' + money(lineAmt) + '</td></tr>';
         }).join('');
 
         const printed = formatReceiptDateTime(new Date());
+        const discount = Number(data.discount) || 0;
+        const discountRow = discount > 0
+            ? '<div class="totals-row"><span>Discount</span><span>' + money(discount) + '</span></div>'
+            : '';
 
-        return '<!DOCTYPE html><html><head><title>Customer Bil ' + escapeHtml(data.invoiceNo || '') + '</title>' +
-            '<style>body{font-family:Segoe UI,Arial,sans-serif;padding:16px;color:#111;text-align:center}' +
-            '.shop-name{font-size:20px;font-weight:700;margin:0 0 4px;letter-spacing:0.02em}' +
-            '.shop-address{font-size:12px;margin:0 0 2px;color:#222;font-weight:600}' +
-            '.shop-phone{font-size:13px;margin:0 0 10px;color:#111}' +
-            '.bill-title{font-size:16px;font-weight:700;margin:0 0 8px;text-align:center}' +
-            '.meta{font-size:12px;color:#444;text-align:left;margin:2px 0}' +
-            '.meta-center{font-size:12px;color:#444;text-align:center;margin:2px 0 8px}' +
-            'table{width:100%;border-collapse:collapse;margin-top:12px;text-align:left}' +
-            'th,td{border-bottom:1px solid #ddd;padding:6px 4px;font-size:13px}' +
-            'th{text-align:left}.totals{margin-top:12px;font-size:14px;text-align:right}' +
-            '.totals div{margin:2px 0}.totals .net{font-size:16px;font-weight:700;margin-top:6px}' +
-            '.footer{margin-top:18px;padding-top:10px;border-top:1px dashed #999;font-size:11px;color:#333;text-align:center;line-height:1.45}' +
+        return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" />' +
+            '<meta name="viewport" content="width=device-width, initial-scale=1" />' +
+            '<title>Customer Bil ' + escapeHtml(data.invoiceNo || '') + '</title>' +
+            '<style>' +
+            ':root{--ink:#0f172a;--muted:#64748b;--line:#cbd5e1;--paper:72mm}' +
+            '*{box-sizing:border-box}' +
+            'body{font-family:"Segoe UI",Arial,sans-serif;color:var(--ink);margin:0;background:#e2e8f0}' +
+            '.toolbar{width:var(--paper);margin:8px auto 0;display:flex;gap:0.35rem;justify-content:flex-end}' +
+            '.toolbar button{border:1px solid #94a3b8;background:#0f172a;color:#fff;border-radius:4px;padding:0.3rem 0.65rem;font-size:0.75rem;cursor:pointer}' +
+            '.toolbar button.secondary{background:#fff;color:#0f172a}' +
+            '.sheet{width:var(--paper);margin:8px auto;padding:3mm 2.5mm 4mm;background:#fff;box-shadow:0 1px 8px rgba(15,23,42,0.12)}' +
+            '.header{border-bottom:1.5px solid var(--ink);padding-bottom:0.4rem;margin-bottom:0.45rem}' +
+            'h1{margin:0;font-size:0.95rem;line-height:1.2;text-align:center}' +
+            '.sub{margin-top:0.15rem;color:var(--muted);font-size:0.65rem;line-height:1.25;text-align:center}' +
+            '.phone{margin-top:0.1rem;font-size:0.7rem;font-weight:700;text-align:center}' +
+            '.meta{margin-top:0.35rem;font-size:0.68rem;line-height:1.3}' +
+            '.meta strong{display:block;font-size:0.8rem}' +
+            '.muted{color:var(--muted);font-size:0.6rem;line-height:1.15}' +
+            '.bill-title{margin:0.35rem 0 0.25rem;padding:0.2rem 0.3rem;background:#0f172a;color:#fff;font-size:0.7rem;font-weight:700;text-align:center}' +
+            'table{width:100%;border-collapse:collapse;font-size:0.68rem;table-layout:fixed}' +
+            'th,td{border:1px solid var(--line);padding:0.12rem 0.22rem;vertical-align:top;text-align:left;line-height:1.2;word-wrap:break-word;overflow-wrap:anywhere}' +
+            'th{background:#f8fafc;font-size:0.58rem;letter-spacing:0.02em;text-transform:uppercase;padding:0.15rem 0.22rem}' +
+            'td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}' +
+            '.item-name{font-weight:600;font-size:0.65rem}' +
+            '.totals{margin-top:0.45rem;font-size:0.68rem}' +
+            '.totals-row{display:flex;justify-content:space-between;gap:0.35rem;line-height:1.35}' +
+            '.totals-row.net{margin-top:0.2rem;padding-top:0.25rem;border-top:1px solid var(--ink);font-size:0.78rem;font-weight:700}' +
+            '.footer{margin-top:0.65rem;padding-top:0.35rem;border-top:1px dashed var(--line);font-size:0.58rem;color:var(--muted);text-align:center;line-height:1.35}' +
+            '@@page{size:80mm auto;margin:2mm}' +
+            '@@media print{body{background:#fff}.toolbar{display:none!important}.sheet{width:100%;max-width:76mm;margin:0;padding:0;box-shadow:none}tr{break-inside:avoid}}' +
             '</style></head><body>' +
-            '<div class="shop-name">THE FORM SHOP</div>' +
-            '<div class="shop-address">SHOP NO 02 SHOPPING GALLERY P-2 BA</div>' +
-            '<div class="shop-phone">0311-8858888</div>' +
+            '<div class="toolbar">' +
+            '<button type="button" class="secondary" onclick="window.close()">Close</button>' +
+            '<button type="button" onclick="window.print()">Print</button>' +
+            '</div>' +
+            '<div class="sheet">' +
+            '<div class="header">' +
+            '<h1>THE FORM SHOP</h1>' +
+            '<div class="sub">SHOP NO 02 SHOPPING GALLERY P-2 BA</div>' +
+            '<div class="phone">0311-8858888</div>' +
+            '<div class="meta">' +
+            '<strong>' + printed.dateText + '</strong>' +
+            '<div>Time: ' + printed.timeText + '</div>' +
+            (data.invoiceNo ? '<div>Invoice: ' + escapeHtml(data.invoiceNo) + '</div>' : '') +
+            '</div>' +
+            '</div>' +
             '<div class="bill-title">Customer Bil</div>' +
-            (data.invoiceNo ? '<div class="meta">Invoice: ' + escapeHtml(data.invoiceNo) + '</div>' : '') +
-            '<div class="meta-center">Date: ' + printed.dateText + ' &nbsp;&nbsp; Time: ' + printed.timeText + '</div>' +
-            '<table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Amount</th></tr></thead><tbody>' +
+            '<table><thead><tr><th style="width:42%">Item</th><th class="num" style="width:14%">Qty</th><th class="num" style="width:22%">Price</th><th class="num" style="width:22%">Amt</th></tr></thead><tbody>' +
             rows + '</tbody></table>' +
             '<div class="totals">' +
-            '<div>Total Amount: ' + money(data.subTotal != null ? data.subTotal : data.total) + '</div>' +
-            ((Number(data.discount) || 0) > 0 ? '<div>Discount: ' + money(data.discount) + '</div>' : '') +
-            '<div class="net">Net Amount: ' + money(data.total) + '</div>' +
+            '<div class="totals-row"><span>Total Amount</span><span>' + money(data.subTotal != null ? data.subTotal : data.total) + '</span></div>' +
+            discountRow +
+            '<div class="totals-row net"><span>Net Amount</span><span>' + money(data.total) + '</span></div>' +
             '</div>' +
-            '<div class="footer">Software By: Coditium Solutions<br>Web: www.coditium.com &nbsp; Mob: 0301-8882992</div>' +
+            '<div class="footer">Software By: Coditium Solutions<br>Web: www.coditium.com · Mob: 0301-8882992</div>' +
+            '</div>' +
             '<script>window.onload=function(){window.print();}<\\/script></body></html>';
     }
 
@@ -1013,9 +1046,9 @@
             showAlert('warning', 'Nothing to print.');
             return;
         }
-        const w = window.open('', '_blank', 'width=420,height=640');
+        const w = window.open('', '_blank', 'width=340,height=720');
         if (!w) {
-            showAlert('warning', 'Pop-up blocked. Allow pop-ups to print the receipt.');
+            showAlert('warning', 'Pop-up blocked. Allow pop-ups to print the slip.');
             return;
         }
         w.document.open();
@@ -1031,7 +1064,7 @@
 
     btnPrint.addEventListener('click', function () {
         if (!lastReceipt) {
-            showAlert('warning', 'Pay the invoice first, then print the receipt.');
+            showAlert('warning', 'Pay the invoice first, then print the slip.');
             return;
         }
         printReceipt(lastReceipt);
@@ -1124,7 +1157,7 @@
             updateBasketTitle(null);
             renderBasket();
             showPrintReceiptButton();
-            showAlert('success', result.message + ' You can print the receipt now.');
+            showAlert('success', result.message + ' You can print the slip now.');
         } catch (err) {
             showAlert('danger', 'Payment failed. Please try again.' + (err && err.message ? ' (' + err.message + ')' : ''));
         } finally {

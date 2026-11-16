@@ -148,6 +148,8 @@ public class CustomerPaymentsController : Controller
         {
             _db.CustomerPayments.Add(e);
             await _advance.ApplyNewPaymentAsync(e, ct);
+            // Excess / advance clears older unpaid dues (previous balance) first.
+            await _advance.AutoApplyAdvanceFifoAsync(e.CustomerUid, cancellationToken: ct);
             await _db.SaveChangesAsync(ct);
             await _audit.WriteAsync("Payment", "CustomerPayments", e.Uid.ToString(),
                 $"Customer payment {e.PaymentNo}: {e.Amount:N2} (invoice {e.AppliedToInvoiceAmount:N2}, advance {e.Amount - e.AppliedToInvoiceAmount:N2})", ct);
@@ -239,6 +241,9 @@ public class CustomerPaymentsController : Controller
         try
         {
             await _advance.ReplacePaymentAsync(e, prevCustomer, prevInvoice, prevAmount, prevApplied, ct);
+            await _advance.AutoApplyAdvanceFifoAsync(e.CustomerUid, cancellationToken: ct);
+            if (prevCustomer != e.CustomerUid)
+                await _advance.AutoApplyAdvanceFifoAsync(prevCustomer, cancellationToken: ct);
             await _db.SaveChangesAsync(ct);
             await _audit.WriteAsync("Update", "CustomerPayments", e.Uid.ToString(),
                 $"Updated payment {e.PaymentNo}", ct);

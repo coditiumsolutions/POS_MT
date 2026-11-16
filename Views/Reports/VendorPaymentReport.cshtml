@@ -1,14 +1,30 @@
 @model VendorPaymentReportViewModel
 @{
     ViewData["Title"] = "Vendor Payments";
+    var navArea = ViewBag.NavArea as string;
+}
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
 }
 
 <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-2">
-    <span class="sales-invoices-heading">Vendor Payments</span>
+    <span class="sales-invoices-heading">Vendor Payments Report</span>
     <a class="btn btn-outline-dark btn-sm"
        asp-action="PrintVendorPaymentReport"
        asp-route-dateFrom="@Model.DateFrom.ToString("yyyy-MM-dd")"
        asp-route-dateTo="@Model.DateTo.ToString("yyyy-MM-dd")"
+       asp-route-navArea="@navArea"
        target="_blank"
        rel="noopener">
         <i class="bi bi-printer" aria-hidden="true"></i> Print Report
@@ -16,9 +32,13 @@
 </div>
 
 <form method="get" asp-action="VendorPaymentReport" class="bg-white border rounded px-2 py-2 mb-2 report-filter-bar">
+    @if (!string.IsNullOrWhiteSpace(navArea))
+    {
+        <input type="hidden" name="navArea" value="@navArea" />
+    }
     <div class="row g-2 align-items-end">
         <div class="col-md-2 col-sm-6">
-            <label class="form-label small mb-1" for="DateFrom">Start Date</label>
+            <label class="form-label small mb-1" for="DateFrom">From</label>
             <input type="date"
                    class="form-control form-control-sm"
                    id="DateFrom"
@@ -26,7 +46,7 @@
                    value="@Model.DateFrom.ToString("yyyy-MM-dd")" />
         </div>
         <div class="col-md-2 col-sm-6">
-            <label class="form-label small mb-1" for="DateTo">End Date</label>
+            <label class="form-label small mb-1" for="DateTo">To</label>
             <input type="date"
                    class="form-control form-control-sm"
                    id="DateTo"
@@ -36,7 +56,9 @@
         <div class="col-md-auto col-sm-6">
             <div class="d-flex gap-2">
                 <button type="submit" class="btn btn-primary btn-sm px-3">Apply</button>
-                <a class="btn btn-outline-secondary btn-sm px-3" asp-action="VendorPaymentReport">Reset</a>
+                <a class="btn btn-outline-secondary btn-sm px-3"
+                   asp-action="VendorPaymentReport"
+                   asp-route-navArea="@navArea">Reset</a>
             </div>
         </div>
     </div>
@@ -65,8 +87,17 @@
     </div>
 </div>
 
+<style>
+    #vendorPaymentReportTable.report-grid-table tbody tr > td {
+        border-bottom: 2px solid #2563eb !important;
+    }
+    #vendorPaymentReportTable.report-grid-table tbody tr:hover > td {
+        border-bottom-color: #1d4ed8 !important;
+    }
+</style>
+
 <div class="table-responsive bg-white border rounded p-2">
-    <table id="vendorPaymentReportTable" class="table table-sm table-striped table-hover align-middle w-100 mb-0 report-grid-table">
+    <table id="vendorPaymentReportTable" class="table table-sm table-hover align-middle w-100 mb-0 report-grid-table">
         <thead>
             <tr>
                 <th>Date</th>
@@ -76,13 +107,14 @@
                 <th>Method</th>
                 <th>Reference</th>
                 <th class="text-end report-col-amount">Amount</th>
+                <th style="width:90px">Actions</th>
             </tr>
         </thead>
         <tbody>
         @if (Model.Rows.Count == 0)
         {
             <tr>
-                <td colspan="7" class="text-muted text-center py-3">
+                <td colspan="8" class="text-muted text-center py-3">
                     No vendor payments for @Model.DateFrom.ToString("dd-MMM-yyyy") – @Model.DateTo.ToString("dd-MMM-yyyy").
                 </td>
             </tr>
@@ -99,6 +131,21 @@
                     <td>@(string.IsNullOrWhiteSpace(row.PaymentMethod) ? "—" : row.PaymentMethod)</td>
                     <td>@(string.IsNullOrWhiteSpace(row.ReferenceNo) ? "—" : row.ReferenceNo)</td>
                     <td class="text-end report-col-amount">@row.Amount.ToString("N2")</td>
+                    <td class="text-nowrap">
+                        <form asp-controller="VendorPayments"
+                              asp-action="Delete"
+                              asp-route-id="@row.Uid"
+                              method="post"
+                              class="d-inline"
+                              onsubmit="return confirm('Delete payment @row.PaymentNo? This will reverse any amount applied to the purchase invoice.');">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="dateFrom" value="@Model.DateFrom.ToString("yyyy-MM-dd")" />
+                            <input type="hidden" name="dateTo" value="@Model.DateTo.ToString("yyyy-MM-dd")" />
+                            <input type="hidden" name="navArea" value="@navArea" />
+                            <input type="hidden" name="returnTo" value="Report" />
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                        </form>
+                    </td>
                 </tr>
             }
         }
@@ -109,6 +156,7 @@
                 <tr class="fw-semibold">
                     <td colspan="6" class="text-end">Total</td>
                     <td class="text-end report-col-amount">@Model.TotalAmount.ToString("N2")</td>
+                    <td></td>
                 </tr>
             </tfoot>
         }

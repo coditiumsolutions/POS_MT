@@ -332,23 +332,31 @@ public class ReportsController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> VendorPaymentReport(DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
+    public async Task<IActionResult> VendorPaymentReport(DateTime? dateFrom, DateTime? dateTo, string? navArea, CancellationToken ct)
     {
-        EnsureReportsNav();
+        ApplyVendorPaymentNav(navArea);
         ViewData["Title"] = "Vendor Payments";
+        ViewBag.NavArea = ResolveVendorPaymentNavArea(navArea);
         var model = await BuildVendorPaymentReportAsync(dateFrom, dateTo, ct);
         return View(model);
     }
 
     [HttpGet]
-    public async Task<IActionResult> PrintVendorPaymentReport(DateTime? dateFrom, DateTime? dateTo, CancellationToken ct)
+    public async Task<IActionResult> PrintVendorPaymentReport(DateTime? dateFrom, DateTime? dateTo, string? navArea, CancellationToken ct)
     {
-        EnsureReportsNav();
+        ApplyVendorPaymentNav(navArea);
         ViewData["Title"] = "Vendor Payments";
+        ViewBag.NavArea = ResolveVendorPaymentNavArea(navArea);
         var model = await BuildVendorPaymentReportAsync(dateFrom, dateTo, ct);
         model.PrintedAt = DateTime.Now;
         return View(model);
     }
+
+    private void ApplyVendorPaymentNav(string? navArea) =>
+        _navContext.SetArea(ResolveVendorPaymentNavArea(navArea));
+
+    private static string ResolveVendorPaymentNavArea(string? navArea) =>
+        string.Equals(navArea, "Vendors", StringComparison.OrdinalIgnoreCase) ? "Vendors" : "Reports";
 
     private async Task<PaymentReportViewModel> BuildPaymentReportAsync(
         DateTime? dateFrom,
@@ -425,6 +433,7 @@ public class ReportsController : Controller
             orderby p.PaymentDate, p.Uid
             select new VendorPaymentReportRowViewModel
             {
+                Uid = p.Uid,
                 PaymentNo = p.PaymentNo,
                 PaymentDate = p.PaymentDate,
                 VendorName = v != null ? v.VendorName : ("#" + p.VendorUid),

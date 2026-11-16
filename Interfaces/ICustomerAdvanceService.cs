@@ -29,4 +29,24 @@ public interface ICustomerAdvanceService
         int? userUid = null,
         int? terminalUid = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Applies available advance to the customer's unpaid invoices oldest-first (FIFO).
+    /// Clears previous-balance / older dues before newer bills.
+    /// Skips Monthly Supply invoices (settled as a lump sum at month end).
+    /// </summary>
+    Task<decimal> AutoApplyAdvanceFifoAsync(
+        int customerUid,
+        int? userUid = null,
+        int? terminalUid = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Monthly Supply is paid lump-sum at month end. Reverses any auto-applied advance
+    /// payments on those invoices, restores AdvanceBalance, and sets payment status from
+    /// remaining (manual) payments only. Returns advance amount restored.
+    /// </summary>
+    Task<decimal> ReverseAutoAppliedAdvancesOnMonthlySupplyAsync(
+        int customerUid,
+        CancellationToken cancellationToken = default);
 }

@@ -73,6 +73,19 @@ public interface IInventoryLedgerService
         CancellationToken cancellationToken = default,
         bool allowAdditional = false);
 
+    /// <summary>
+    /// Adjust stock for a quantity change on an existing purchase line
+    /// (positive = more received, negative = reduced receipt).
+    /// </summary>
+    Task ApplyPurchaseQuantityDeltaAsync(
+        int purchaseInvoiceUid,
+        string purchaseInvoiceNo,
+        int warehouseUid,
+        InventoryLineMovement lineDelta,
+        int? userUid,
+        int? terminalUid,
+        CancellationToken cancellationToken = default);
+
     Task ReversePurchaseAsync(
         int purchaseInvoiceUid,
         string purchaseInvoiceNo,

@@ -1,0 +1,378 @@
+@model PurchaseInvoicePrintViewModel
+@{
+    Layout = null;
+    ViewData["Title"] = $"Purchase {Model.PurchaseInvoiceNo}";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"]</title>
+    <style>
+        :root {
+            --ink: #0f172a;
+            --muted: #64748b;
+            --line: #cbd5e1;
+            --soft: #f8fafc;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            color: var(--ink);
+            margin: 0;
+            background: #e2e8f0;
+        }
+
+        .sheet {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 12px auto;
+            padding: 14mm 14mm 16mm;
+            background: #fff;
+            box-shadow: 0 1px 8px rgba(15, 23, 42, 0.12);
+        }
+
+        .toolbar {
+            width: 210mm;
+            margin: 12px auto 0;
+            display: flex;
+            gap: 0.5rem;
+            justify-content: flex-end;
+        }
+
+        .toolbar button {
+            border: 1px solid #94a3b8;
+            background: #0f172a;
+            color: #fff;
+            border-radius: 4px;
+            padding: 0.4rem 0.9rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+
+        .toolbar button.secondary {
+            background: #fff;
+            color: #0f172a;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            border-bottom: 2px solid var(--ink);
+            padding-bottom: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.45rem;
+            letter-spacing: 0.02em;
+        }
+
+        .header .sub {
+            margin-top: 0.2rem;
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+
+        .badge {
+            border: 1px solid var(--line);
+            background: var(--soft);
+            padding: 0.35rem 0.55rem;
+            font-size: 0.8rem;
+            white-space: nowrap;
+        }
+
+        .meta-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1rem;
+            table-layout: fixed;
+        }
+
+        .meta-table td {
+            border: none;
+            border-bottom: 1px solid #000;
+            padding: 0.45rem 0.4rem;
+            vertical-align: top;
+            font-size: 0.88rem;
+        }
+
+        .meta-table .meta-title {
+            width: 18%;
+            color: #334155;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            white-space: nowrap;
+        }
+
+        .meta-table .meta-field {
+            width: 32%;
+            font-weight: 600;
+            color: var(--ink);
+        }
+
+        .meta-table .meta-field .hint {
+            display: block;
+            color: var(--muted);
+            font-size: 0.78rem;
+            font-weight: 500;
+            margin-top: 0.12rem;
+        }
+
+        .label {
+            color: var(--muted);
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 0.1rem;
+        }
+
+        .value { font-weight: 600; }
+        .hint { color: var(--muted); font-size: 0.8rem; margin-top: 0.1rem; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0.35rem;
+        }
+
+        th, td {
+            border-bottom: 1px solid var(--line);
+            padding: 0.4rem 0.3rem;
+            font-size: 0.86rem;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            background: var(--soft);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: #334155;
+        }
+
+        .text-end { text-align: right; }
+
+        .section-title {
+            margin: 1.1rem 0 0.35rem;
+            font-size: 0.95rem;
+            font-weight: 700;
+        }
+
+        .totals {
+            margin-top: 0.9rem;
+            margin-left: auto;
+            width: 62mm;
+            font-size: 0.88rem;
+        }
+
+        .totals div {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.18rem 0;
+        }
+
+        .totals .net {
+            font-weight: 700;
+            font-size: 1rem;
+            border-top: 1px solid var(--line);
+            margin-top: 0.25rem;
+            padding-top: 0.4rem;
+        }
+
+        .footer-note {
+            margin-top: 1.25rem;
+            color: var(--muted);
+            font-size: 0.8rem;
+            border-top: 1px dashed var(--line);
+            padding-top: 0.5rem;
+        }
+
+        @@page {
+            size: A4 portrait;
+            margin: 10mm;
+        }
+
+        @@media print {
+            body { background: #fff; }
+            .toolbar { display: none !important; }
+            .sheet {
+                width: auto;
+                min-height: auto;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+            }
+            tr { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button type="button" class="secondary" onclick="window.close()">Close</button>
+        <button type="button" onclick="window.print()">Print / Save PDF</button>
+    </div>
+
+    <div class="sheet">
+        <div class="header">
+            <div>
+                <h1>Purchase Invoice</h1>
+                <div class="sub">A4 printable report · Printed @Model.PrintedAt.ToString("dd-MMM-yyyy HH:mm")</div>
+            </div>
+            <div class="badge">@Model.InvoiceStatus · @Model.PaymentStatus</div>
+        </div>
+
+        <table class="meta-table">
+            <tbody>
+                <tr>
+                    <td class="meta-title">Invoice No</td>
+                    <td class="meta-field">@Model.PurchaseInvoiceNo</td>
+                    <td class="meta-title">Purchase Date</td>
+                    <td class="meta-field">@Model.PurchaseDate.ToString("dd-MMM-yyyy HH:mm")</td>
+                </tr>
+                <tr>
+                    <td class="meta-title">Vendor</td>
+                    <td class="meta-field">
+                        @Model.VendorName
+                        <span class="hint">
+                            @Model.VendorCode
+                            @if (!string.IsNullOrWhiteSpace(Model.VendorMobile))
+                            {
+                                <text>· @Model.VendorMobile</text>
+                            }
+                        </span>
+                    </td>
+                    <td class="meta-title">Vendor Invoice</td>
+                    <td class="meta-field">@(string.IsNullOrWhiteSpace(Model.VendorInvoiceNo) ? "—" : Model.VendorInvoiceNo)</td>
+                </tr>
+                <tr>
+                    <td class="meta-title">Branch / Warehouse</td>
+                    <td class="meta-field">
+                        @(string.IsNullOrWhiteSpace(Model.BranchName) ? "—" : Model.BranchName)
+                        @if (!string.IsNullOrWhiteSpace(Model.WarehouseName))
+                        {
+                            <span class="hint">@Model.WarehouseName</span>
+                        }
+                    </td>
+                    <td class="meta-title">Paid / Balance</td>
+                    <td class="meta-field">@Model.PaidAmount.ToString("N2") / @Model.BalanceAmount.ToString("N2")</td>
+                </tr>
+            </tbody>
+        </table>
+
+        @if (!string.IsNullOrWhiteSpace(Model.Remarks))
+        {
+            <div style="margin-bottom:0.75rem">
+                <div class="label">Remarks</div>
+                <div class="value" style="font-weight:500">@Model.Remarks</div>
+            </div>
+        }
+
+        <div class="section-title">Items</div>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:28px">#</th>
+                    <th>Product</th>
+                    <th class="text-end">Qty</th>
+                    <th class="text-end">Unit Cost</th>
+                    <th class="text-end">Discount</th>
+                    <th class="text-end">Tax</th>
+                    <th class="text-end">Line Total</th>
+                </tr>
+            </thead>
+            <tbody>
+            @if (Model.Lines.Count == 0)
+            {
+                <tr><td colspan="7">No line items.</td></tr>
+            }
+            else
+            {
+                var i = 0;
+                foreach (var line in Model.Lines)
+                {
+                    i++;
+                    <tr>
+                        <td>@i</td>
+                        <td>
+                            <div>@(string.IsNullOrWhiteSpace(line.ProductName) ? "—" : line.ProductName)</div>
+                            <div class="hint">
+                                @(string.IsNullOrWhiteSpace(line.ProductCode) ? "" : line.ProductCode)
+                                @if (!string.IsNullOrWhiteSpace(line.BatchNo))
+                                {
+                                    <text> · Batch @line.BatchNo</text>
+                                }
+                            </div>
+                        </td>
+                        <td class="text-end">@line.Quantity.ToString("N3")</td>
+                        <td class="text-end">@line.UnitCost.ToString("N2")</td>
+                        <td class="text-end">@line.DiscountAmount.ToString("N2")</td>
+                        <td class="text-end">@line.TaxAmount.ToString("N2")</td>
+                        <td class="text-end">@line.LineTotal.ToString("N2")</td>
+                    </tr>
+                }
+            }
+            </tbody>
+        </table>
+
+        <div class="totals">
+            <div><span>Sub Total</span><span>@Model.SubTotal.ToString("N2")</span></div>
+            <div><span>Discount</span><span>@Model.DiscountAmount.ToString("N2")</span></div>
+            <div><span>Tax</span><span>@Model.TaxAmount.ToString("N2")</span></div>
+            <div><span>Other Charges</span><span>@Model.OtherCharges.ToString("N2")</span></div>
+            <div class="net"><span>Net Amount</span><span>@Model.NetAmount.ToString("N2")</span></div>
+            <div><span>Paid</span><span>@Model.PaidAmount.ToString("N2")</span></div>
+            <div><span>Balance</span><span>@Model.BalanceAmount.ToString("N2")</span></div>
+        </div>
+
+        @if (Model.Payments.Count > 0)
+        {
+            <div class="section-title">Vendor payments</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Payment No</th>
+                        <th>Date</th>
+                        <th class="text-end">Amount</th>
+                        <th>Reference</th>
+                        <th>Remarks</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var pay in Model.Payments)
+                {
+                    <tr>
+                        <td>@pay.PaymentNo</td>
+                        <td>@pay.PaymentDate.ToString("dd-MMM-yyyy HH:mm")</td>
+                        <td class="text-end">@pay.Amount.ToString("N2")</td>
+                        <td>@(string.IsNullOrWhiteSpace(pay.ReferenceNo) ? "—" : pay.ReferenceNo)</td>
+                        <td>@(string.IsNullOrWhiteSpace(pay.Remarks) ? "—" : pay.Remarks)</td>
+                    </tr>
+                }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="2" class="text-end" style="font-weight:700">Total paid</td>
+                        <td class="text-end" style="font-weight:700">@Model.Payments.Sum(x => x.Amount).ToString("N2")</td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        }
+
+        <div class="footer-note">
+            Use <strong>Print / Save PDF</strong> and choose <em>Save as PDF</em> (or Microsoft Print to PDF) as the printer destination to download this report.
+        </div>
+    </div>
+</body>
+</html>

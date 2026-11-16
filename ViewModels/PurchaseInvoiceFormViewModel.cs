@@ -61,6 +61,9 @@ public sealed class PurchaseInvoiceFormViewModel
 
 public sealed class PurchaseInvoiceLineFormViewModel
 {
+    /// <summary>When set, this row maps to an existing purchase detail line (editable; stock adjusts on save).</summary>
+    public int? ExistingDetailUid { get; set; }
+
     [Display(Name = "Product")]
     public int? ProductUid { get; set; }
 
@@ -75,4 +78,17 @@ public sealed class PurchaseProductOptionViewModel
 {
     public int Uid { get; set; }
     public string Label { get; set; } = string.Empty;
+}
+
+public sealed class PurchaseInvoiceListItemViewModel
+{
+    public int Uid { get; set; }
+    public string PurchaseInvoiceNo { get; set; } = string.Empty;
+    public string? VendorInvoiceNo { get; set; }
+    public string VendorName { get; set; } = string.Empty;
+    public DateTime PurchaseDate { get; set; }
+    public decimal NetAmount { get; set; }
+    public decimal PaidAmount { get; set; }
+    public string InvoiceStatus { get; set; } = string.Empty;
+    public string PaymentStatus { get; set; } = string.Empty;
 }

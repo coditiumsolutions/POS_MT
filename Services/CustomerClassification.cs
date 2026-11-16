@@ -9,6 +9,9 @@ public static class CustomerClassification
     private const string MonthlySupplyRemarkPrefix = "Monthly Supply";
     private const string CreditPosRemarkToken = "Monthly POS";
 
+    /// <summary>Unpaid opening / previous-month arrears invoice (not a product sale).</summary>
+    public const string OpeningBalanceRemarkPrefix = "Opening Balance";
+
     public static bool IsWalkIn(string? customerCode, string? customerName)
     {
         if (string.Equals(customerCode, "C001", StringComparison.OrdinalIgnoreCase))
@@ -29,6 +32,10 @@ public static class CustomerClassification
         => !string.IsNullOrWhiteSpace(invoiceRemarks)
            && invoiceRemarks.StartsWith(MonthlySupplyRemarkPrefix, StringComparison.OrdinalIgnoreCase);
 
+    public static bool IsOpeningBalanceInvoice(string? invoiceRemarks)
+        => !string.IsNullOrWhiteSpace(invoiceRemarks)
+           && invoiceRemarks.StartsWith(OpeningBalanceRemarkPrefix, StringComparison.OrdinalIgnoreCase);
+
     public static string GetSalesTypeLabel(string? customerCode, string? customerName, string? invoiceRemarks)
     {
         if (customerCode is null && customerName is null)
@@ -39,6 +46,11 @@ public static class CustomerClassification
         if (IsWalkIn(customerCode, customerName))
         {
             return "Walk-in";
+        }
+
+        if (IsOpeningBalanceInvoice(invoiceRemarks))
+        {
+            return "Previous Balance";
         }
 
         if (IsMonthlySupplyInvoice(invoiceRemarks))

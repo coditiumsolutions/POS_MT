@@ -23,6 +23,7 @@
             color: var(--ink);
             margin: 0;
             background: #e2e8f0;
+            font-weight: 700;
         }
 
         .toolbar {
@@ -48,6 +49,15 @@
             color: #0f172a;
         }
 
+        .toolbar-hint {
+            width: 210mm;
+            margin: 0.35rem auto 0;
+            color: var(--muted);
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-align: right;
+        }
+
         .sheet {
             width: 210mm;
             min-height: 297mm;
@@ -59,13 +69,15 @@
 
         h1 {
             margin: 0;
-            font-size: 1.25rem;
+            font-size: 1.4rem;
+            font-weight: 700;
         }
 
         .sub {
             margin-top: 0.15rem;
             color: var(--muted);
-            font-size: 0.8rem;
+            font-size: 0.9rem;
+            font-weight: 700;
         }
 
         .header {
@@ -79,37 +91,42 @@
 
         .meta {
             text-align: right;
-            font-size: 0.8rem;
+            font-size: 0.9rem;
+            font-weight: 700;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 0.78rem;
+            font-size: 0.95rem;
+            font-weight: 700;
         }
 
         th, td {
             border: 1px solid var(--line);
-            padding: 0.2rem 0.4rem;
+            padding: 0.28rem 0.45rem;
             vertical-align: middle;
             text-align: left;
-            line-height: 1.25;
+            line-height: 1.3;
+            font-weight: 700;
         }
 
         th {
             background: #f8fafc;
-            font-size: 0.68rem;
+            font-size: 0.8rem;
             letter-spacing: 0.03em;
             text-transform: uppercase;
+            font-weight: 700;
         }
 
         td.qty {
             text-align: right;
             font-variant-numeric: tabular-nums;
             white-space: nowrap;
+            font-weight: 700;
         }
 
-        td.qty.neg { color: #b91c1c; font-weight: 600; }
+        td.qty.neg { color: #b91c1c; font-weight: 700; }
 
         .empty {
             padding: 1rem 0;
@@ -119,7 +136,8 @@
         .footer {
             margin-top: 0.75rem;
             color: var(--muted);
-            font-size: 0.72rem;
+            font-size: 0.85rem;
+            font-weight: 700;
             display: flex;
             justify-content: space-between;
         }
@@ -128,7 +146,8 @@
 
         @@media print {
             body { background: #fff; }
-            .toolbar { display: none !important; }
+            .toolbar,
+            .toolbar-hint { display: none !important; }
             .sheet {
                 width: auto;
                 min-height: auto;
@@ -144,7 +163,9 @@
     <div class="toolbar">
         <button type="button" class="secondary" onclick="window.close()">Close</button>
         <button type="button" onclick="window.print()">Print</button>
+        <button type="button" onclick="window.print()" title="Open print dialog and choose Save as PDF">Save PDF</button>
     </div>
+    <p class="toolbar-hint">Tip: click <strong>Save PDF</strong>, then choose <em>Save as PDF</em> (or Microsoft Print to PDF) as the printer.</p>
     <div class="sheet">
         <div class="header">
             <div>

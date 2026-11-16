@@ -71,8 +71,14 @@
                     }
                     <span asp-validation-for="VendorInvoiceNo" class="text-danger"></span>
                 </div>
-                <div class="invoice-meta-title"></div>
-                <div class="invoice-meta-field"></div>
+                <label asp-for="WarehouseUid" class="invoice-meta-title"></label>
+                <div class="invoice-meta-field">
+                    <select asp-for="WarehouseUid" id="purchaseWarehouseUid" class="form-select form-select-sm invoice-meta-input" asp-items="ViewBag.Warehouses">
+                        <option value="">-- Select --</option>
+                    </select>
+                    <span asp-validation-for="WarehouseUid" class="text-danger"></span>
+                    <span class="text-muted small">Warehouse is filtered by the selected branch.</span>
+                </div>
             </div>
         </div>
     </div>
@@ -143,49 +149,12 @@
     </div>
 </div>
 
-@{
-    var existingLines = ViewBag.ExistingLines as IEnumerable<PurchaseInvoiceDetail>;
-}
-@if (existingLines is not null)
-{
-    <section class="mt-3">
-        <h2 class="invoice-meta-section-title">Items already received</h2>
-        <div class="table-responsive">
-            <table class="table table-sm table-bordered align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th>Product</th>
-                        <th style="width:140px">Quantity</th>
-                        <th style="width:140px">Unit Price</th>
-                        <th style="width:140px">Total</th>
-                    </tr>
-                </thead>
-                <tbody>
-                @foreach (var line in existingLines)
-                {
-                    <tr>
-                        <td>@(string.IsNullOrWhiteSpace(line.ProductName) ? line.ProductCode : line.ProductName)</td>
-                        <td>@line.Quantity.ToString("N3")</td>
-                        <td>@line.UnitCost.ToString("N2")</td>
-                        <td>@line.LineTotal.ToString("N2")</td>
-                    </tr>
-                }
-                @if (!existingLines.Any())
-                {
-                    <tr><td colspan="4" class="text-muted">No items yet. Add product lines below.</td></tr>
-                }
-                </tbody>
-            </table>
-        </div>
-    </section>
-}
-
 <section class="mt-3">
-    <h2 class="invoice-meta-section-title">@(Model.Uid == 0 ? "Receive into inventory" : "Add items into inventory")</h2>
+    <h2 class="invoice-meta-section-title">@(Model.Uid == 0 ? "Receive into inventory" : "Purchase items")</h2>
     <p class="text-muted small mb-2">
         @(Model.Uid == 0
             ? "Add at least one product line (product, quantity, unit price). Stock posts to the branch warehouse automatically."
-            : "Add more product lines below. Each saved line increases stock for the branch warehouse.")
+            : "Edit product, quantity, or unit price on existing rows. Use empty rows to add more stock for the branch warehouse.")
     </p>
     <span asp-validation-for="Lines" class="text-danger d-block mb-2"></span>
     <div class="table-responsive">
@@ -204,6 +173,7 @@
                 var selectedProductUid = Model.Lines[i].ProductUid;
                 <tr class="purchase-receive-line">
                     <td>
+                        <input type="hidden" asp-for="Lines[i].ExistingDetailUid" />
                         <select asp-for="Lines[i].ProductUid"
                                 class="form-select form-select-sm"
                                 asp-items="@(new SelectList(productOptions, "Uid", "Label", selectedProductUid))">
@@ -259,6 +229,42 @@
                 activate(btn.getAttribute('data-tab'));
             });
         });
+    }
+
+    var warehouseBranchMap = @Html.Raw(string.IsNullOrWhiteSpace(ViewBag.WarehouseBranchMapJson as string)
+        ? "[]"
+        : (string)ViewBag.WarehouseBranchMapJson);
+
+    var branchSelect = document.getElementById('BranchUid') || document.querySelector('select[name="BranchUid"]');
+    var warehouseSelect = document.getElementById('purchaseWarehouseUid') || document.querySelector('select[name="WarehouseUid"]');
+
+    function filterWarehousesByBranch() {
+        if (!branchSelect || !warehouseSelect) return;
+        var branchUid = parseInt(branchSelect.value || '0', 10) || 0;
+        var current = warehouseSelect.value;
+        var firstVisible = '';
+
+        Array.prototype.forEach.call(warehouseSelect.options, function (opt) {
+            if (!opt.value) {
+                opt.hidden = false;
+                return;
+            }
+            var uid = parseInt(opt.value, 10);
+            var map = warehouseBranchMap.find(function (x) { return x.uid === uid; });
+            var match = !branchUid || (map && map.branchUid === branchUid);
+            opt.hidden = !match;
+            if (match && !firstVisible) firstVisible = opt.value;
+        });
+
+        var selectedOpt = warehouseSelect.selectedOptions && warehouseSelect.selectedOptions[0];
+        if (branchUid && (!current || (selectedOpt && selectedOpt.hidden))) {
+            warehouseSelect.value = firstVisible || '';
+        }
+    }
+
+    if (branchSelect) {
+        branchSelect.addEventListener('change', filterWarehousesByBranch);
+        filterWarehousesByBranch();
     }
 
     function parseNum(el) {

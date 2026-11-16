@@ -28,6 +28,7 @@ public static class RoleModuleAccess
             ["Expenses"] = [AppRoles.Administrator, AppRoles.Manager],
             ["ExpenseCategories"] = [AppRoles.Administrator, AppRoles.Manager],
             ["Employees"] = [AppRoles.Administrator, AppRoles.Manager],
+            ["EmployeeAttendance"] = [AppRoles.Administrator, AppRoles.Manager],
             ["EmployeePayments"] = [AppRoles.Administrator, AppRoles.Manager],
             ["Reports"] = [AppRoles.Administrator, AppRoles.Manager],
             ["POS"] = [AppRoles.Administrator, AppRoles.Manager, AppRoles.Cashier],

@@ -38,6 +38,8 @@ public partial class POSDbContext : DbContext
 
     public virtual DbSet<EmployeePayment> EmployeePayments { get; set; }
 
+    public virtual DbSet<EmployeeAttendance> EmployeeAttendances { get; set; }
+
     public virtual DbSet<Inventory> Inventories { get; set; }
 
     public virtual DbSet<InventoryTransaction> InventoryTransactions { get; set; }
@@ -162,6 +164,14 @@ public partial class POSDbContext : DbContext
         {
             entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
             entity.Property(e => e.PaymentDate).HasDefaultValueSql(nowSql);
+            entity.Property(e => e.Uid).ValueGeneratedOnAdd();
+        });
+
+        modelBuilder.Entity<EmployeeAttendance>(entity =>
+        {
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql(nowSql);
+            entity.Property(e => e.AttendanceDate).HasDefaultValueSql(nowSql);
+            entity.Property(e => e.Status).HasDefaultValue("Present");
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 

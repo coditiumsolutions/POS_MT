@@ -111,6 +111,10 @@ public sealed class SalesInvoiceDetailsPageViewModel
     public decimal NetAmount { get; set; }
     public decimal PaidAmount { get; set; }
     public decimal BalanceAmount { get; set; }
+    /// <summary>Sum of other unpaid invoice balances for this customer (previous dues).</summary>
+    public decimal PreviousBalanceAmount { get; set; }
+    /// <summary>PreviousBalanceAmount + BalanceAmount (total still due including this bill).</summary>
+    public decimal GrandTotalDue { get; set; }
     public string InvoiceStatus { get; set; } = string.Empty;
     public string PaymentStatus { get; set; } = string.Empty;
     public string? Remarks { get; set; }
@@ -126,6 +130,32 @@ public sealed class SalesInvoicePaymentRowViewModel
     public decimal Amount { get; set; }
     public decimal AppliedToInvoiceAmount { get; set; }
     public string? Remarks { get; set; }
+}
+
+public sealed class CustomerUnpaidInvoiceRowViewModel
+{
+    public int Uid { get; set; }
+    public string InvoiceNo { get; set; } = string.Empty;
+    public DateTime InvoiceDate { get; set; }
+    public decimal BalanceAmount { get; set; }
+    public string Label { get; set; } = "—";
+}
+
+public sealed class CustomerBillHistoryRowViewModel
+{
+    public int Uid { get; set; }
+    public string InvoiceNo { get; set; } = string.Empty;
+    /// <summary>Bill/supply day shown to the user (entry date for monthly lines, else invoice date).</summary>
+    public DateTime InvoiceDate { get; set; }
+    public decimal NetAmount { get; set; }
+    public decimal PaidAmount { get; set; }
+    public decimal BalanceAmount { get; set; }
+    public string PaymentStatus { get; set; } = string.Empty;
+    public string InvoiceStatus { get; set; } = string.Empty;
+    public string Label { get; set; } = "—";
+    public string ItemsSummary { get; set; } = string.Empty;
+    /// <summary>True when this row is a day slice of a Monthly Supply invoice.</summary>
+    public bool IsMonthlyDayBill { get; set; }
 }
 
 public sealed class SalesInvoiceDetailLineViewModel

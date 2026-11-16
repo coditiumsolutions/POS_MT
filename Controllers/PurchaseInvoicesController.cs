@@ -35,15 +35,46 @@ public class PurchaseInvoicesController : Controller
 
     private void EnsurePurchasesNav() => _navContext.SetArea("Purchases");
 
-    private async Task LoadLookups(CancellationToken ct)
+    private async Task LoadLookups(
+        CancellationToken ct,
+        int? selectedVendorUid = null,
+        int? selectedBranchUid = null,
+        int? selectedWarehouseUid = null,
+        IEnumerable<int>? selectedProductUids = null)
     {
-        ViewBag.Branches = new SelectList(await _db.Branches.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.BranchName).ToListAsync(ct), "Uid", "BranchName");
-        ViewBag.Warehouses = new SelectList(await _db.Warehouses.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.WarehouseName).ToListAsync(ct), "Uid", "WarehouseName");
-        ViewBag.Vendors = new SelectList(await _db.Vendors.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.VendorName).ToListAsync(ct), "Uid", "VendorName");
+        var branches = await _db.Branches.AsNoTracking()
+            .Where(x => x.IsActive || (selectedBranchUid != null && x.Uid == selectedBranchUid))
+            .OrderBy(x => x.BranchName)
+            .ToListAsync(ct);
+        var warehouses = await _db.Warehouses.AsNoTracking()
+            .Where(x => x.IsActive || (selectedWarehouseUid != null && x.Uid == selectedWarehouseUid))
+            .OrderBy(x => x.WarehouseName)
+            .Select(x => new
+            {
+                x.Uid,
+                x.WarehouseName,
+                BranchUid = x.BranchUid ?? 0
+            })
+            .ToListAsync(ct);
+        var vendors = await _db.Vendors.AsNoTracking()
+            .Where(x => x.IsActive || (selectedVendorUid != null && x.Uid == selectedVendorUid))
+            .OrderBy(x => x.VendorName)
+            .ToListAsync(ct);
+
+        ViewBag.Branches = new SelectList(branches, "Uid", "BranchName", selectedBranchUid);
+        ViewBag.Warehouses = new SelectList(warehouses, "Uid", "WarehouseName", selectedWarehouseUid);
+        ViewBag.WarehouseBranchMapJson = System.Text.Json.JsonSerializer.Serialize(
+            warehouses.Select(x => new { uid = x.Uid, branchUid = x.BranchUid }));
+        ViewBag.Vendors = new SelectList(vendors, "Uid", "VendorName", selectedVendorUid);
+
+        var keepProductIds = (selectedProductUids ?? [])
+            .Where(x => x > 0)
+            .Distinct()
+            .ToList();
 
         // Plain list (not a shared SelectList) — reused SelectList in line loops mutates Selected and shows wrong options.
         ViewBag.ProductOptions = await _db.Products.AsNoTracking()
-            .Where(x => x.IsActive)
+            .Where(x => x.IsActive || keepProductIds.Contains(x.Uid))
             .OrderBy(x => x.ProductName)
             .Select(x => new PurchaseProductOptionViewModel
             {
@@ -60,16 +91,38 @@ public class PurchaseInvoicesController : Controller
         var fromDay = dateFrom?.Date;
         var toExclusive = dateTo?.Date.AddDays(1);
 
-        var query = _db.PurchaseInvoices.AsNoTracking().AsQueryable();
+        var query =
+            from inv in _db.PurchaseInvoices.AsNoTracking()
+            join v in _db.Vendors.AsNoTracking() on inv.VendorUid equals v.Uid into vj
+            from v in vj.DefaultIfEmpty()
+            select new { inv, VendorName = v != null ? v.VendorName : null };
+
         if (fromDay.HasValue)
-            query = query.Where(x => x.PurchaseDate >= fromDay.Value);
+            query = query.Where(x => x.inv.PurchaseDate >= fromDay.Value);
         if (toExclusive.HasValue)
-            query = query.Where(x => x.PurchaseDate < toExclusive.Value);
+            query = query.Where(x => x.inv.PurchaseDate < toExclusive.Value);
 
         ViewBag.DateFrom = fromDay;
         ViewBag.DateTo = dateTo?.Date;
 
-        return View(await query.OrderByDescending(x => x.PurchaseDate).ThenByDescending(x => x.Uid).ToListAsync(ct));
+        var rows = await query
+            .OrderByDescending(x => x.inv.PurchaseDate)
+            .ThenByDescending(x => x.inv.Uid)
+            .Select(x => new PurchaseInvoiceListItemViewModel
+            {
+                Uid = x.inv.Uid,
+                PurchaseInvoiceNo = x.inv.PurchaseInvoiceNo,
+                VendorInvoiceNo = x.inv.VendorInvoiceNo,
+                VendorName = x.VendorName ?? ("#" + x.inv.VendorUid.ToString()),
+                PurchaseDate = x.inv.PurchaseDate,
+                NetAmount = x.inv.NetAmount,
+                PaidAmount = x.inv.PaidAmount,
+                InvoiceStatus = x.inv.InvoiceStatus,
+                PaymentStatus = x.inv.PaymentStatus
+            })
+            .ToListAsync(ct);
+
+        return View(rows);
     }
 
     public async Task<IActionResult> Create(CancellationToken ct)
@@ -189,9 +242,9 @@ public class PurchaseInvoicesController : Controller
         if (movements.Count > 0)
         {
             await _db.SaveChangesAsync(ct);
-            var warehouseUid = e.WarehouseUid
-                ?? await _inventory.ResolveWarehouseUidAsync(null, e.BranchUid, ct);
-            e.WarehouseUid ??= warehouseUid;
+            // Always resolve against the purchase branch so stock cannot post to another branch's warehouse.
+            var warehouseUid = await _inventory.ResolveWarehouseUidAsync(e.WarehouseUid, e.BranchUid, ct);
+            e.WarehouseUid = warehouseUid;
             await _inventory.ApplyPurchaseAsync(e.Uid, e.PurchaseInvoiceNo, warehouseUid, movements, e.UserUid, e.TerminalUid, ct);
             await _db.SaveChangesAsync(ct);
 
@@ -220,8 +273,10 @@ public class PurchaseInvoicesController : Controller
             TempData["Error"] = "Cancelled invoices cannot be edited.";
             return RedirectToAction(nameof(Index));
         }
-        await LoadLookups(ct);
         var form = ToForm(e);
+        await PopulateExistingPurchaseLinesAsync(form, id, ct);
+        await LoadLookups(ct, form.VendorUid, form.BranchUid, form.WarehouseUid,
+            form.Lines.Where(x => x.ProductUid is > 0).Select(x => x.ProductUid!.Value));
         EnsureLineRows(form);
         await LoadVendorPaymentContextAsync(id, ct);
         return View(form);
@@ -233,8 +288,12 @@ public class PurchaseInvoicesController : Controller
         EnsurePurchasesNav();
         if (id != model.Uid) return BadRequest();
 
-        var receiveLines = (model.Lines ?? [])
-            .Where(x => x.ProductUid is > 0 && x.Quantity > 0)
+        var postedLines = model.Lines ?? [];
+        var newReceiveLines = postedLines
+            .Where(x => x.ExistingDetailUid is null && x.ProductUid is > 0 && x.Quantity > 0)
+            .ToList();
+        var editedExistingLines = postedLines
+            .Where(x => x.ExistingDetailUid is > 0 && x.ProductUid is > 0 && x.Quantity > 0)
             .ToList();
 
         ValidatePurchaseRequiredFields(model, requireReceiveLines: false);
@@ -242,7 +301,8 @@ public class PurchaseInvoicesController : Controller
         if (!ModelState.IsValid)
         {
             EnsureLineRows(model);
-            await LoadLookups(ct);
+            await LoadLookups(ct, model.VendorUid, model.BranchUid, model.WarehouseUid,
+                model.Lines.Where(x => x.ProductUid is > 0).Select(x => x.ProductUid!.Value));
             await LoadVendorPaymentContextAsync(id, ct);
             return View(model);
         }
@@ -255,11 +315,27 @@ public class PurchaseInvoicesController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        var productIds = receiveLines.Select(x => x.ProductUid!.Value).Distinct().ToList();
+        var productIds = editedExistingLines.Select(x => x.ProductUid!.Value)
+            .Concat(newReceiveLines.Select(x => x.ProductUid!.Value))
+            .Distinct()
+            .ToList();
         var products = productIds.Count == 0
             ? new Dictionary<int, Product>()
             : await _db.Products.AsNoTracking()
                 .Where(x => productIds.Contains(x.Uid))
+                .ToDictionaryAsync(x => x.Uid, ct);
+
+        var existingDetails = await _db.PurchaseInvoiceDetails
+            .Where(x => x.PurchaseInvoiceUid == id)
+            .ToListAsync(ct);
+        var existingByUid = existingDetails.ToDictionary(x => x.Uid);
+
+        // Load product names for inventory deltas on old products when the line product changes.
+        var oldProductIds = existingDetails.Select(x => x.ProductUid).Distinct().ToList();
+        var oldProducts = oldProductIds.Count == 0
+            ? new Dictionary<int, Product>()
+            : await _db.Products.AsNoTracking()
+                .Where(x => oldProductIds.Contains(x.Uid))
                 .ToDictionaryAsync(x => x.Uid, ct);
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
@@ -267,8 +343,113 @@ public class PurchaseInvoicesController : Controller
         Apply(e, model);
         e.UpdatedDate = DateTime.Now;
 
-        var movements = new List<InventoryLineMovement>();
-        foreach (var line in receiveLines)
+        var warehouseUid = await _inventory.ResolveWarehouseUidAsync(e.WarehouseUid, e.BranchUid, ct);
+        e.WarehouseUid = warehouseUid;
+
+        var editedCount = 0;
+        var yogurtMovements = new List<InventoryLineMovement>();
+
+        foreach (var line in editedExistingLines)
+        {
+            if (!existingByUid.TryGetValue(line.ExistingDetailUid!.Value, out var detail))
+                continue;
+
+            products.TryGetValue(line.ProductUid!.Value, out var product);
+            var unitCost = line.UnitCost > 0 ? line.UnitCost : product?.PurchasePrice ?? detail.UnitCost;
+            var newQty = line.Quantity;
+            var newProductUid = line.ProductUid.Value;
+            var oldProductUid = detail.ProductUid;
+            var oldQty = detail.Quantity;
+            var oldUnitCost = detail.UnitCost;
+
+            var productChanged = newProductUid != oldProductUid;
+            var qtyChanged = newQty != oldQty;
+            var costChanged = unitCost != oldUnitCost;
+            if (!productChanged && !qtyChanged && !costChanged)
+                continue;
+
+            if (productChanged)
+            {
+                oldProducts.TryGetValue(oldProductUid, out var oldProduct);
+                await _inventory.ApplyPurchaseQuantityDeltaAsync(
+                    e.Uid,
+                    e.PurchaseInvoiceNo,
+                    warehouseUid,
+                    new InventoryLineMovement
+                    {
+                        ProductUid = oldProductUid,
+                        ProductName = oldProduct?.ProductName ?? detail.ProductName ?? oldProductUid.ToString(),
+                        Quantity = -oldQty,
+                        UnitCost = oldUnitCost
+                    },
+                    e.UserUid,
+                    e.TerminalUid,
+                    ct);
+
+                await _inventory.ApplyPurchaseQuantityDeltaAsync(
+                    e.Uid,
+                    e.PurchaseInvoiceNo,
+                    warehouseUid,
+                    new InventoryLineMovement
+                    {
+                        ProductUid = newProductUid,
+                        ProductName = product?.ProductName ?? newProductUid.ToString(),
+                        Quantity = newQty,
+                        UnitCost = unitCost
+                    },
+                    e.UserUid,
+                    e.TerminalUid,
+                    ct);
+
+                yogurtMovements.Add(new InventoryLineMovement
+                {
+                    ProductUid = newProductUid,
+                    ProductName = product?.ProductName ?? newProductUid.ToString(),
+                    Quantity = newQty,
+                    UnitCost = unitCost
+                });
+            }
+            else if (qtyChanged)
+            {
+                var delta = newQty - oldQty;
+                await _inventory.ApplyPurchaseQuantityDeltaAsync(
+                    e.Uid,
+                    e.PurchaseInvoiceNo,
+                    warehouseUid,
+                    new InventoryLineMovement
+                    {
+                        ProductUid = newProductUid,
+                        ProductName = product?.ProductName ?? detail.ProductName ?? newProductUid.ToString(),
+                        Quantity = delta,
+                        UnitCost = unitCost
+                    },
+                    e.UserUid,
+                    e.TerminalUid,
+                    ct);
+
+                if (delta > 0)
+                {
+                    yogurtMovements.Add(new InventoryLineMovement
+                    {
+                        ProductUid = newProductUid,
+                        ProductName = product?.ProductName ?? newProductUid.ToString(),
+                        Quantity = delta,
+                        UnitCost = unitCost
+                    });
+                }
+            }
+
+            detail.ProductUid = newProductUid;
+            detail.ProductCode = product?.ProductCode ?? detail.ProductCode;
+            detail.ProductName = product?.ProductName ?? detail.ProductName;
+            detail.Quantity = newQty;
+            detail.UnitCost = unitCost;
+            detail.LineTotal = Math.Round(newQty * unitCost, 2);
+            editedCount++;
+        }
+
+        var newMovements = new List<InventoryLineMovement>();
+        foreach (var line in newReceiveLines)
         {
             products.TryGetValue(line.ProductUid!.Value, out var product);
             var unitCost = line.UnitCost > 0 ? line.UnitCost : product?.PurchasePrice ?? 0;
@@ -283,7 +464,7 @@ public class PurchaseInvoicesController : Controller
                 UnitCost = unitCost,
                 LineTotal = lineTotal
             });
-            movements.Add(new InventoryLineMovement
+            newMovements.Add(new InventoryLineMovement
             {
                 ProductUid = line.ProductUid.Value,
                 ProductName = product?.ProductName ?? line.ProductUid.Value.ToString(),
@@ -293,30 +474,34 @@ public class PurchaseInvoicesController : Controller
         }
 
         string? yogurtMsg = null;
-        if (movements.Count > 0)
+        if (newMovements.Count > 0)
         {
             await _db.SaveChangesAsync(ct);
-            var warehouseUid = e.WarehouseUid
-                ?? await _inventory.ResolveWarehouseUidAsync(null, e.BranchUid, ct);
-            e.WarehouseUid ??= warehouseUid;
             await _inventory.ApplyPurchaseAsync(
-                e.Uid, e.PurchaseInvoiceNo, warehouseUid, movements, e.UserUid, e.TerminalUid, ct,
+                e.Uid, e.PurchaseInvoiceNo, warehouseUid, newMovements, e.UserUid, e.TerminalUid, ct,
                 allowAdditional: true);
+            yogurtMovements.AddRange(newMovements);
+        }
 
+        if (yogurtMovements.Count > 0)
+        {
             yogurtMsg = await ApplyYogurtMilkConsumptionAsync(
-                movements, warehouseUid, e.BranchUid, e.UserUid, e.TerminalUid, e.PurchaseInvoiceNo, ct);
+                yogurtMovements, warehouseUid, e.BranchUid, e.UserUid, e.TerminalUid, e.PurchaseInvoiceNo, ct);
         }
 
         await RecalculatePurchaseTotalsAsync(e, ct);
         await _db.SaveChangesAsync(ct);
         await _audit.WriteAsync("Update", "PurchaseInvoices", e.Uid.ToString(),
-            $"Updated purchase {e.PurchaseInvoiceNo}" + (movements.Count > 0 ? $" and added {movements.Count} stock line(s)" : ""), ct);
+            $"Updated purchase {e.PurchaseInvoiceNo}"
+            + (editedCount > 0 ? $", edited {editedCount} line(s)" : "")
+            + (newMovements.Count > 0 ? $", added {newMovements.Count} stock line(s)" : ""), ct);
         await tx.CommitAsync(ct);
 
-        TempData["Success"] = movements.Count > 0
-            ? $"Purchase invoice updated and {movements.Count} product(s) added to inventory."
-              + (string.IsNullOrEmpty(yogurtMsg) ? "" : " " + yogurtMsg)
-            : "Purchase invoice updated.";
+        var parts = new List<string> { "Purchase invoice updated." };
+        if (editedCount > 0) parts.Add($"{editedCount} existing line(s) changed.");
+        if (newMovements.Count > 0) parts.Add($"{newMovements.Count} product(s) added to inventory.");
+        if (!string.IsNullOrEmpty(yogurtMsg)) parts.Add(yogurtMsg);
+        TempData["Success"] = string.Join(" ", parts);
         return RedirectToAction(nameof(Edit), new { id });
     }
 
@@ -408,6 +593,88 @@ public class PurchaseInvoicesController : Controller
             .OrderBy(x => x.Uid)
             .ToListAsync(ct);
         return View(e);
+    }
+
+    /// <summary>Printable purchase invoice report (browser Print / Save as PDF).</summary>
+    public async Task<IActionResult> Print(int id, CancellationToken ct)
+    {
+        EnsurePurchasesNav();
+        var model = await LoadPrintModelAsync(id, ct);
+        if (model is null) return NotFound();
+        return View(model);
+    }
+
+    private async Task<PurchaseInvoicePrintViewModel?> LoadPrintModelAsync(int id, CancellationToken ct)
+    {
+        var row = await (
+            from inv in _db.PurchaseInvoices.AsNoTracking()
+            join v in _db.Vendors.AsNoTracking() on inv.VendorUid equals v.Uid into vj
+            from v in vj.DefaultIfEmpty()
+            join b in _db.Branches.AsNoTracking() on inv.BranchUid equals b.Uid into bj
+            from b in bj.DefaultIfEmpty()
+            join w in _db.Warehouses.AsNoTracking() on inv.WarehouseUid equals w.Uid into wj
+            from w in wj.DefaultIfEmpty()
+            where inv.Uid == id
+            select new { inv, v, b, w }
+        ).FirstOrDefaultAsync(ct);
+
+        if (row is null) return null;
+
+        var lines = await _db.PurchaseInvoiceDetails.AsNoTracking()
+            .Where(x => x.PurchaseInvoiceUid == id)
+            .OrderBy(x => x.Uid)
+            .Select(x => new PurchaseInvoicePrintLineViewModel
+            {
+                ProductCode = x.ProductCode,
+                ProductName = x.ProductName,
+                Quantity = x.Quantity,
+                UnitCost = x.UnitCost,
+                DiscountAmount = x.DiscountAmount,
+                TaxAmount = x.TaxAmount,
+                LineTotal = x.LineTotal,
+                BatchNo = x.BatchNo
+            })
+            .ToListAsync(ct);
+
+        var payments = await _db.VendorPayments.AsNoTracking()
+            .Where(x => x.PurchaseInvoiceUid == id)
+            .OrderBy(x => x.PaymentDate)
+            .ThenBy(x => x.Uid)
+            .Select(x => new PurchaseInvoicePrintPaymentViewModel
+            {
+                PaymentNo = x.PaymentNo,
+                PaymentDate = x.PaymentDate,
+                Amount = x.Amount,
+                ReferenceNo = x.ReferenceNo,
+                Remarks = x.Remarks
+            })
+            .ToListAsync(ct);
+
+        return new PurchaseInvoicePrintViewModel
+        {
+            Uid = row.inv.Uid,
+            PurchaseInvoiceNo = row.inv.PurchaseInvoiceNo,
+            VendorInvoiceNo = row.inv.VendorInvoiceNo,
+            PurchaseDate = row.inv.PurchaseDate,
+            VendorCode = row.v?.VendorCode ?? string.Empty,
+            VendorName = row.v?.VendorName ?? $"Vendor #{row.inv.VendorUid}",
+            VendorMobile = row.v?.MobileNo ?? row.v?.PhoneNo,
+            BranchName = row.b?.BranchName,
+            WarehouseName = row.w?.WarehouseName,
+            InvoiceStatus = row.inv.InvoiceStatus,
+            PaymentStatus = row.inv.PaymentStatus,
+            Remarks = row.inv.Remarks,
+            SubTotal = row.inv.SubTotal,
+            DiscountAmount = row.inv.DiscountAmount,
+            TaxAmount = row.inv.TaxAmount,
+            OtherCharges = row.inv.OtherCharges,
+            NetAmount = row.inv.NetAmount,
+            PaidAmount = row.inv.PaidAmount,
+            BalanceAmount = row.inv.BalanceAmount,
+            PrintedAt = DateTime.Now,
+            Lines = lines,
+            Payments = payments
+        };
     }
 
     [HttpPost, ValidateAntiForgeryToken]
@@ -535,8 +802,35 @@ public class PurchaseInvoicesController : Controller
     private static void EnsureLineRows(PurchaseInvoiceFormViewModel model)
     {
         model.Lines ??= [];
-        while (model.Lines.Count < 5)
+        var minRows = Math.Max(5, model.Lines.Count + 3);
+        while (model.Lines.Count < minRows)
             model.Lines.Add(new PurchaseInvoiceLineFormViewModel());
+    }
+
+    private async Task PopulateExistingPurchaseLinesAsync(
+        PurchaseInvoiceFormViewModel form,
+        int purchaseInvoiceUid,
+        CancellationToken ct)
+    {
+        var existing = await _db.PurchaseInvoiceDetails.AsNoTracking()
+            .Where(x => x.PurchaseInvoiceUid == purchaseInvoiceUid)
+            .OrderBy(x => x.Uid)
+            .Select(x => new PurchaseInvoiceLineFormViewModel
+            {
+                ExistingDetailUid = x.Uid,
+                ProductUid = x.ProductUid,
+                Quantity = x.Quantity,
+                UnitCost = x.UnitCost
+            })
+            .ToListAsync(ct);
+
+        // Keep any newly typed blank/add rows from a failed POST after the existing ones.
+        var newRows = (form.Lines ?? [])
+            .Where(x => x.ExistingDetailUid is null)
+            .ToList();
+
+        form.Lines = existing;
+        form.Lines.AddRange(newRows);
     }
 
     private async Task LoadVendorPaymentContextAsync(int purchaseInvoiceUid, CancellationToken ct)

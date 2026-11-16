@@ -400,13 +400,24 @@ public class SalesInvoicesController : Controller {
       })
       .ToListAsync(ct);
 
+    var previousBalance = 0m;
+    if (row.inv.CustomerUid is int customerUid and > 0)
+    {
+      previousBalance = await _db.SalesInvoices.AsNoTracking()
+        .Where(x => x.CustomerUid == customerUid
+                    && x.Uid != id
+                    && x.InvoiceStatus != "Cancelled"
+                    && x.BalanceAmount > 0)
+        .SumAsync(x => (decimal?)x.BalanceAmount, ct) ?? 0m;
+    }
+
     return new SalesInvoiceDetailsPageViewModel
     {
       Uid = row.inv.Uid,
       InvoiceNo = row.inv.InvoiceNo,
       InvoiceDate = row.inv.InvoiceDate,
-      CustomerCode = customer?.CustomerCode ?? "�",
-      CustomerName = customer?.CustomerName ?? "�",
+      CustomerCode = customer?.CustomerCode ?? "—",
+      CustomerName = customer?.CustomerName ?? "—",
       CustomerType = customerTypeLabel,
       SubTotal = row.inv.SubTotal,
       DiscountAmount = row.inv.DiscountAmount,
@@ -415,6 +426,8 @@ public class SalesInvoicesController : Controller {
       NetAmount = row.inv.NetAmount,
       PaidAmount = row.inv.PaidAmount,
       BalanceAmount = row.inv.BalanceAmount,
+      PreviousBalanceAmount = previousBalance,
+      GrandTotalDue = previousBalance + Math.Max(0, row.inv.BalanceAmount),
       InvoiceStatus = row.inv.InvoiceStatus,
       PaymentStatus = row.inv.PaymentStatus,
       Remarks = row.inv.Remarks,
