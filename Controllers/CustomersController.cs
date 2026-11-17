@@ -15,17 +15,27 @@ namespace POS_MT.Controllers;
 [Authorize(Policy = "Staff")]
 public class CustomersController : Controller
 {
+    private const string MonthlySupplyRemarkPrefix = "Monthly Supply";
+    private const string MonthlyEntryDatePrefix = "EntryDate:";
+
     private readonly POSDbContext _db;
     private readonly IAuditService _audit;
     private readonly INavContextService _navContext;
     private readonly ICustomerAdvanceService _advance;
+    private readonly IInventoryLedgerService _inventory;
 
-    public CustomersController(POSDbContext db, IAuditService audit, INavContextService navContext, ICustomerAdvanceService advance)
+    public CustomersController(
+        POSDbContext db,
+        IAuditService audit,
+        INavContextService navContext,
+        ICustomerAdvanceService advance,
+        IInventoryLedgerService inventory)
     {
         _db = db;
         _audit = audit;
         _navContext = navContext;
         _advance = advance;
+        _inventory = inventory;
     }
 
     private void EnsureCustomersNav() => _navContext.SetArea("Customers");
@@ -170,6 +180,150 @@ public class CustomersController : Controller
 
         await PopulateCustomerDetailsExtrasAsync(id, ct);
         return View(entity);
+    }
+
+    /// <summary>
+    /// Deletes one Current Month Bills row: a Monthly Supply day (EntryDate lines) or a whole non-monthly invoice.
+    /// Restores stock and recalculates remaining monthly totals.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteCurrentMonthBill(
+        int id,
+        int invoiceUid,
+        DateTime billDate,
+        bool isMonthlyDayBill,
+        CancellationToken ct)
+    {
+        EnsureCustomersNav();
+        TempData["OpenTab"] = "current-bills";
+
+        var customer = await _db.Customers.AsNoTracking().FirstOrDefaultAsync(x => x.Uid == id, ct);
+        if (customer is null)
+            return NotFound();
+
+        var invoice = await _db.SalesInvoices.FirstOrDefaultAsync(
+            x => x.Uid == invoiceUid && x.CustomerUid == id, ct);
+        if (invoice is null)
+        {
+            TempData["Error"] = "Bill was not found for this customer.";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        if (string.Equals(invoice.InvoiceStatus, "Cancelled", StringComparison.OrdinalIgnoreCase))
+        {
+            TempData["Error"] = "This bill is already cancelled.";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+
+        int? userUid = null;
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (int.TryParse(userIdClaim, out var parsedUserId))
+            userUid = parsedUserId;
+
+        var day = billDate.Date;
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        try
+        {
+            if (isMonthlyDayBill
+                || CustomerClassification.IsMonthlySupplyInvoice(invoice.Remarks))
+            {
+                var entryRemark = $"{MonthlyEntryDatePrefix}{day:yyyy-MM-dd}";
+                var dayLines = await _db.SalesInvoiceDetails
+                    .Where(x => x.SalesInvoiceUid == invoice.Uid
+                                && x.Remarks != null
+                                && x.Remarks == entryRemark)
+                    .ToListAsync(ct);
+
+                if (dayLines.Count == 0)
+                {
+                    TempData["Error"] = $"No supply lines found for {day:dd MMM yyyy}.";
+                    await tx.RollbackAsync(ct);
+                    return RedirectToAction(nameof(Details), new { id });
+                }
+
+                foreach (var detail in dayLines)
+                {
+                    if (detail.Quantity > 0 && detail.ProductUid > 0)
+                    {
+                        await _inventory.ApplySaleQuantityDeltaAsync(
+                            invoice.Uid,
+                            invoice.InvoiceNo,
+                            new InventoryLineMovement
+                            {
+                                ProductUid = detail.ProductUid,
+                                ProductName = detail.ProductName ?? detail.ProductUid.ToString(),
+                                Quantity = -detail.Quantity,
+                                UnitCost = detail.UnitPrice
+                            },
+                            warehouseUid: null,
+                            invoice.BranchUid,
+                            userUid ?? invoice.UserUid,
+                            terminalUid: null,
+                            ct);
+                    }
+                }
+
+                _db.SalesInvoiceDetails.RemoveRange(dayLines);
+                await _db.SaveChangesAsync(ct);
+
+                var remainingTotal = await _db.SalesInvoiceDetails
+                    .Where(x => x.SalesInvoiceUid == invoice.Uid)
+                    .SumAsync(x => (decimal?)x.LineTotal, ct) ?? 0m;
+                var remainingCount = await _db.SalesInvoiceDetails
+                    .CountAsync(x => x.SalesInvoiceUid == invoice.Uid, ct);
+
+                if (remainingCount == 0)
+                {
+                    invoice.InvoiceStatus = "Cancelled";
+                    invoice.PaymentStatus = "Cancelled";
+                    invoice.SubTotal = 0;
+                    invoice.NetAmount = 0;
+                    invoice.BalanceAmount = 0;
+                    invoice.OtherCharges = 0;
+                    invoice.PaidAmount = 0;
+                }
+                else
+                {
+                    invoice.SubTotal = remainingTotal;
+                    invoice.NetAmount = remainingTotal + Math.Max(0, invoice.OtherCharges);
+                    invoice.BalanceAmount = Math.Max(0, invoice.NetAmount - invoice.PaidAmount);
+                    invoice.PaymentStatus = invoice.PaidAmount <= 0
+                        ? "Unpaid"
+                        : invoice.PaidAmount >= invoice.NetAmount ? "Paid" : "Partial";
+                }
+
+                invoice.UpdatedDate = DateTime.Now;
+                await _db.SaveChangesAsync(ct);
+                await _advance.ReverseAutoAppliedAdvancesOnMonthlySupplyAsync(id, ct);
+                await _db.SaveChangesAsync(ct);
+
+                await _audit.WriteAsync("Delete", "SalesInvoiceDetails", invoice.Uid.ToString(),
+                    $"Deleted current-month supply for {customer.CustomerCode} on {day:yyyy-MM-dd} ({dayLines.Count} line(s), stock restored).", ct);
+                await tx.CommitAsync(ct);
+
+                TempData["Success"] = $"Deleted supply for {day:dd MMM yyyy}. Stock restored.";
+                return RedirectToAction(nameof(Details), new { id });
+            }
+
+            // Non-monthly invoice row: cancel whole invoice and restore stock.
+            invoice.InvoiceStatus = "Cancelled";
+            invoice.UpdatedDate = DateTime.Now;
+            await _inventory.ReverseSaleAsync(invoice.Uid, invoice.InvoiceNo, userUid ?? invoice.UserUid, invoice.TerminalUid, ct);
+            await _db.SaveChangesAsync(ct);
+            await _audit.WriteAsync("Cancel", "SalesInvoices", invoice.Uid.ToString(),
+                $"Cancelled invoice {invoice.InvoiceNo} from customer current-month bills.", ct);
+            await tx.CommitAsync(ct);
+
+            TempData["Success"] = $"Deleted bill {invoice.InvoiceNo}. Stock restored.";
+            return RedirectToAction(nameof(Details), new { id });
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync(ct);
+            TempData["Error"] = "Delete failed: " + (ex.InnerException?.Message ?? ex.Message);
+            return RedirectToAction(nameof(Details), new { id });
+        }
     }
 
     /// <summary>
@@ -408,8 +562,6 @@ public class CustomersController : Controller
         ViewBag.CurrentMonthLabel = currentMonthStart.ToString("MMMM yyyy");
         ViewBag.PreviousMonthLabel = previousMonthStart.ToString("MMMM yyyy");
     }
-
-    private const string MonthlyEntryDatePrefix = "EntryDate:";
 
     private async Task<List<CustomerBillHistoryRowViewModel>> BuildCustomerBillRowsAsync(
         int customerUid,
