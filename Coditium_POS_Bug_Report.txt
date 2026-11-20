@@ -1,0 +1,894 @@
+﻿==============================================================================
+CODITIUM POS - BUG REPORT
+Application: https://pos.coditium.com
+Test date:   22 Oct 2026 (PKT), pre-production build, dummy data
+Prepared by: POS QA
+==============================================================================
+
+SUMMARY
+------------------------------------------------------------------------------
+51 unique defects found: 3 Critical, 12 High, 19 Medium, 17 Low. Role
+enforcement, payments and stock integrity need fixing before go-live.
+
+Severity scale
+  Critical = security bypass or silent loss of financial/stock data
+  High     = wrong records or a blocked core workflow
+  Medium   = validation gaps, misleading output or notable risk
+  Low      = cosmetic or minor friction
+
+FIX THESE FIRST
+------------------------------------------------------------------------------
+1. BUG-001 Enforce role permissions (a Cashier can open Users, Setup and
+   delete products).
+2. BUG-002 Make payments update invoice Paid/Balance and reject invalid
+   amounts.
+3. BUG-003 Stop Monthly Supply from resetting Paid on existing invoices.
+4. BUG-004 Block overselling and make stock movements reversible and exact.
+5. BUG-005 Clear Credit POS entries once invoiced to prevent double billing.
+
+DEFECT INDEX
+------------------------------------------------------------------------------
+BUG-001  Critical  Users/Roles         Role permissions are not enforced; a Cashier can reach every admin page
+BUG-002  Critical  Payments            Customer/vendor payments do not update invoice Paid or Balance and accept invalid amounts
+BUG-003  Critical  Monthly Supply      "Add Supplied" resets an existing invoice's Paid amount to 0
+BUG-004  High      Inventory/Stock     Overselling allowed; stock silently clamps to 0 and delete restores the wrong quantity
+BUG-005  High      POS Credit          Credit POS entries remain after "Add to Sales Invoice", risking double billing
+BUG-006  High      Purchases           Purchase cancel fails with HTTP 500; status can be typed as free text without stock reversal
+BUG-007  High      Purchases           Purchase totals are neither calculated nor validated
+BUG-008  High      Purchases           Purchase lines accept zero/negative quantity and negative unit cost
+BUG-009  High      Inventory/Stock     Stock Adjustment form has no product, quantity or direction fields
+BUG-010  High      Monthly Supply      Monthly Supply skips stock deduction for some items; delivery charge mismatch
+BUG-011  High      Inventory/Stock     Computed and stock fields are directly editable with no audit trail
+BUG-012  High      Sales Invoices      Server time about 12 hours behind; invoices dated the previous day
+BUG-013  High      Auth/Security       No login lockout or rate limiting
+BUG-014  High      Users/Roles         User password accepts a single character
+BUG-015  High      POS Credit          Credit limit not enforced; Credit POS accepts price 0 and any date
+BUG-016  Medium    Sales Invoices      Overpayment accepted on invoice edit (negative balance)
+BUG-017  Medium    Sales Invoices      Payment status inconsistent with amounts paid
+BUG-018  Medium    Sales Invoices      Invoice edit cannot change lines; branch fields disagree
+BUG-019  Medium    Products & Masters  Product server-side validation missing
+BUG-020  Medium    Products & Masters  Customer and vendor fields accept invalid values
+BUG-021  Medium    Products & Masters  Product image upload: silent rejects, no content check, large files hang
+BUG-022  Medium    Products & Masters  Duplicate master data: units, expense categories, payment methods
+BUG-023  Medium    Expenses            Expenses accept zero/negative amounts, duplicate numbers and far-future dates
+BUG-024  Medium    Payments            Lists show raw numeric IDs instead of names
+BUG-025  Medium    Auth/Security       Audit log incomplete and mislabelled
+BUG-026  Medium    Auth/Security       No Content-Security-Policy header
+BUG-027  Medium    Auth/Security       HSTS max-age only 30 days; no includeSubDomains
+BUG-028  Medium    Auth/Security       Login ReturnUrl echoes external URLs (potential open redirect)
+BUG-029  Medium    Auth/Security       Anonymous Error and AccessDenied pages expose the full module menu
+BUG-030  Medium    Auth/Security       Valid login hung about 25 seconds, then bare "HTTP ERROR 400" (intermittent)
+BUG-031  Medium    Performance         Dashboard graphs and Stock Movement load very slowly
+BUG-032  Medium    Reports             Sales report filters and heading are misleading
+BUG-033  Medium    Dashboard           "Sales by Item Name" chart opens on June, so it is empty
+BUG-034  Medium    UI/UX               Long names break table and POS layouts
+BUG-035  Low       Auth/Security       Missing X-Content-Type-Options, Referrer-Policy and Permissions-Policy
+BUG-036  Low       Auth/Security       Server and framework versions disclosed
+BUG-037  Low       UI/UX               No branded 404; default IIS / HTTP.sys error pages shown
+BUG-038  Low       Auth/Security       /robots.txt redirects to the login page
+BUG-039  Low       POS Cash            Receipt layout and wording issues
+BUG-040  Low       POS Cash            POS item layout setting ignored
+BUG-041  Low       POS Credit          Past-date Credit POS entry not shown until reload
+BUG-042  Low       Monthly Supply      Monthly Supply items show a different product code and omit delivery from line total
+BUG-043  Low       Sales Invoices      Sales invoice list has no invoice number column
+BUG-044  Low       Sales Invoices      Garbled characters in invoice remarks
+BUG-045  Low       Reports             Slow/Dead Stock report shows -1 days since sale
+BUG-046  Low       Dashboard           Dashboard charts blank on first paint
+BUG-047  Low       Expenses            Expense date input fails browser validation by default
+BUG-048  Low       Products & Masters  Deactivated rows lose the Activate action
+BUG-049  Low       UI/UX               Inconsistent date, quantity and currency formats
+BUG-050  Low       UI/UX               Header crowds and clips at 150–175% zoom
+BUG-051  Low       POS Cash            Cash POS needs double-click to add and quantity cannot be typed
+
+DEFECT DETAILS
+==============================================================================
+BUG-001 [Critical] Users/Roles
+Role permissions are not enforced; a Cashier can reach every admin page
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Create user QA-cashier with role Cashier and sign in as that user.
+  2. Open /Setup, /Users/Create, /AuditLogs, /Configurations, /Branches,
+     /PurchaseInvoices, /Inventories, /Expenses, /Reports.
+  3. Delete a product (QA-V2) from /Products.
+Expected:
+  Cashier is limited to POS screens; admin pages return 403 / Access Denied
+  and destructive actions are blocked.
+Actual:
+  Every page returns HTTP 200 and the Cashier deleted product QA-V2. Roles
+  Admin, Manager, Cashier and Viewer exist but have no effect.
+Page / evidence:
+  https://pos.coditium.com/Users/Index, https://pos.coditium.com/Setup (as
+  QA-cashier). Round 3 #1.
+
+BUG-002 [Critical] Payments
+Customer/vendor payments do not update invoice Paid or Balance and accept
+invalid amounts
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Record a customer payment against credit invoice POS-M-20261021212609600.
+  2. Open the invoice and check Paid and Balance.
+  3. Try amounts 0, -100, 9,999 (customer) and 99,999 (vendor).
+Expected:
+  Payment is allocated to the invoice, Paid rises and Balance falls; zero,
+  negative and overpayments are rejected.
+Actual:
+  Invoice still shows Paid 0. All four invalid amounts were saved. There is no
+  customer or vendor balance or ledger view to reconcile.
+Page / evidence:
+  https://pos.coditium.com/CustomerPayments,
+  https://pos.coditium.com/VendorPayments. Round 3 #6.
+
+BUG-003 [Critical] Monthly Supply
+"Add Supplied" resets an existing invoice's Paid amount to 0
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Customer M Shahid has monthly invoice dated 2026-10-01 with Net 6,810 and
+     Paid 3,500.
+  2. In Monthly Supply, click "Add Supplied" for the customer.
+  3. Open the monthly invoice POS-MS-202610-1000.
+Expected:
+  New lines are appended; Net increases and Paid stays 3,500.
+Actual:
+  Net became 7,060 and Paid became 0, so a recorded payment of 3,500 was lost.
+Page / evidence:
+  Monthly Supply page; invoice POS-MS-202610-1000. Round 2 #3.
+
+BUG-004 [High] Inventory/Stock
+Overselling allowed; stock silently clamps to 0 and delete restores the wrong
+quantity
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. In Cash POS add product "Large 270" (stock 0) and pay; also sell QA-P1 at
+     zero stock.
+  2. Sell 100 x Yougart while stock is 73.
+  3. Check inventory, then delete that sale and check again.
+Expected:
+  Sale is blocked (or allowed only under an explicit negative-stock policy)
+  and stock moves by the exact quantity both ways.
+Actual:
+  All sales saved with no out-of-stock indicator. Yougart dropped to 0 (not
+  -27); deleting the sale restored 73, not 100, so the stock ledger no longer
+  reconciles.
+Page / evidence:
+  https://pos.coditium.com/POS/Cash, https://pos.coditium.com/Inventories.
+  Recon #13, Round 2 #1, Round 3 #9.
+
+BUG-005 [High] POS Credit
+Credit POS entries remain after "Add to Sales Invoice", risking double billing
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Add entries for a customer in Credit POS.
+  2. Click "Add to Sales Invoice" (created POS-M-20261021212609600).
+  3. Reload the page.
+Expected:
+  Invoiced entries are cleared or marked invoiced and cannot be invoiced
+  again.
+Actual:
+  Entries are still listed after reload; clicking the button again would bill
+  the same items twice.
+Page / evidence:
+  Credit POS page; invoice POS-M-20261021212609600. Round 2 #2.
+
+BUG-006 [High] Purchases
+Purchase cancel fails with HTTP 500; status can be typed as free text without
+stock reversal
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open /PurchaseInvoices and click Cancel on invoice 8.
+  2. Edit a purchase invoice and type "Cancelled" in InvoiceStatus.
+Expected:
+  Cancel reverses stock and cost, sets status Cancelled and hides the Cancel
+  action.
+Actual:
+  POST /PurchaseInvoices/Cancel/8 returns HTTP 500 "Error." every time;
+  invoice stays Completed. Typed status marks it Cancelled with no stock
+  reversal, and Cancel is still shown on cancelled rows.
+Page / evidence:
+  https://pos.coditium.com/PurchaseInvoices/Cancel/8. Round 3 #2.
+
+BUG-007 [High] Purchases
+Purchase totals are neither calculated nor validated
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Create a purchase invoice with lines and leave SubTotal, Net and Balance
+     blank.
+  2. Create another with SubTotal 2,900, Net 1, Balance 5.
+Expected:
+  Totals are computed from lines on the server; inconsistent values are
+  rejected.
+Actual:
+  Blank totals save as 0; inconsistent totals are accepted. Existing
+  PI-20261017094243 is Completed with Net 0 / Paid 0. Stock and average cost
+  do update correctly.
+Page / evidence:
+  https://pos.coditium.com/PurchaseInvoices. Round 3 #3, Recon #10.
+
+BUG-008 [High] Purchases
+Purchase lines accept zero/negative quantity and negative unit cost
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Add a purchase line with qty 0, then qty -5.
+  2. Add a line with a negative unit cost and save.
+Expected:
+  Quantity and cost must be greater than 0, with a visible validation message.
+Actual:
+  Zero/negative qty saved silently with no effect. Negative cost saved, stock
+  +1, and cost silently replaced by the product default.
+Page / evidence:
+  https://pos.coditium.com/PurchaseInvoices/Create. Round 3 #4.
+
+BUG-009 [High] Inventory/Stock
+Stock Adjustment form has no product, quantity or direction fields
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open Stock Adjustment > Create.
+  2. Save the form.
+Expected:
+  Adjustment captures product, quantity, in/out direction and reason, and
+  updates stock.
+Actual:
+  Only header fields exist; SA-20261021213758 saved with no effect. The module
+  cannot be used.
+Page / evidence:
+  Stock Adjustment create page; SA-20261021213758. Round 3 #5.
+
+BUG-010 [High] Monthly Supply
+Monthly Supply skips stock deduction for some items; delivery charge mismatch
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Standing list for M Shahid: Butter x2, Milk x1.
+  2. Click "Add Supplied" and check inventory and the message shown.
+Expected:
+  Milk -1 and Butter -2; message clearly states what was added and the
+  delivery charge.
+Actual:
+  Milk reduced by 1, Butter by 0. Message reads "(+0/~1 lines..., delivery
+  560.00)" with a delivery value that does not match.
+Page / evidence:
+  Monthly Supply page. Round 2 #3.
+
+BUG-011 [High] Inventory/Stock
+Computed and stock fields are directly editable with no audit trail
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open Sales Invoice create: SubTotal, Net, Balance and PaymentStatus are
+     inputs.
+  2. Open Inventory create/edit: QtyIn, QtyOut, CurrentQty and cost are
+     inputs.
+  3. Overwrite Milk to 444 and Butter to 152 via Inventory/Edit.
+Expected:
+  Totals and stock are derived values; changes go through movements with a
+  reason and user.
+Actual:
+  Values are freely editable and saved with no movement record or trail.
+Page / evidence:
+  https://pos.coditium.com/Inventories/Edit. Recon #19, Round 3 (Low list).
+
+BUG-012 [High] Sales Invoices
+Server time about 12 hours behind; invoices dated the previous day
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Make a cash sale at 09:25 PKT on 22 Oct 2026.
+  2. Check invoice number, invoice date and the receipt.
+Expected:
+  Invoice date 22 Oct 2026 09:25 PKT.
+Actual:
+  Invoice POS-C-20261021212516027 is dated 21 Oct 21:25 while the receipt
+  shows 22 Oct 09:25. Monthly Supply defaults to the 21st, Credit POS to the
+  22nd. Daily reports will be wrong.
+Page / evidence:
+  https://pos.coditium.com/SalesInvoices. Round 2 #4, Round 3 (Low list).
+
+BUG-013 [High] Auth/Security
+No login lockout or rate limiting
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Submit 6 wrong passwords for an account.
+  2. Submit the correct password.
+Expected:
+  Account or IP is throttled/locked after a few failures (e.g. 5), with a
+  Retry-After.
+Actual:
+  Login succeeds immediately; no lockout, Retry-After or RateLimit headers.
+Page / evidence:
+  https://pos.coditium.com/Account/Login. Tech findings (login_attempts.txt),
+  Round 3 #8.
+
+BUG-014 [High] Users/Roles
+User password accepts a single character
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open /Users/Create.
+  2. Create user QA-pw1 with a 1-character password.
+Expected:
+  Minimum length and complexity enforced.
+Actual:
+  User created with a 1-character password.
+Page / evidence:
+  https://pos.coditium.com/Users/Create. Round 3 #7.
+
+BUG-015 [High] POS Credit
+Credit limit not enforced; Credit POS accepts price 0 and any date
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Customer has credit limit 0.
+  2. Add Credit POS entries with price 0, a future date (2027-03-01) and past
+     dates.
+  3. Add to Sales Invoice.
+Expected:
+  Credit beyond the limit is blocked or needs approval; price > 0; dates
+  within an allowed window.
+Actual:
+  2,090 of credit granted against a 0 limit; all entries saved and rolled into
+  one invoice dated today.
+Page / evidence:
+  Credit POS page. Round 2 #7.
+
+BUG-016 [Medium] Sales Invoices
+Overpayment accepted on invoice edit (negative balance)
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open /SalesInvoices/Edit/94 (Net 750).
+  2. Set Paid to 900 and save.
+Expected:
+  Paid cannot exceed Net, or the excess is recorded as change/credit.
+Actual:
+  Saved with Balance -150.
+Page / evidence:
+  https://pos.coditium.com/SalesInvoices/Edit/94. Round 2 #5.
+
+BUG-017 [Medium] Sales Invoices
+Payment status inconsistent with amounts paid
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Review the walk-in sale of 1,770 on 2026-10-18.
+  2. Cancel a paid invoice and reopen it.
+Expected:
+  Status reflects payment (Unpaid/Partial/Paid); cancelled invoices show a
+  refund or zero Paid.
+Actual:
+  Walk-in sale is Completed with 0 paid. Cancelled invoice keeps its Paid
+  amount.
+Page / evidence:
+  https://pos.coditium.com/SalesInvoices. Recon #11, Round 2 #10.
+
+BUG-018 [Medium] Sales Invoices
+Invoice edit cannot change lines; branch fields disagree
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open any sales invoice in Edit.
+  2. Inspect line items, Branch and Branch UID.
+Expected:
+  Lines editable (with stock re-sync) or edit restricted with a clear message;
+  one consistent branch.
+Actual:
+  Lines are read-only. Branch UID is preselected Karachi while Branch shows
+  Bahria Town.
+Page / evidence:
+  https://pos.coditium.com/SalesInvoices/Edit/94. Round 2 #6.
+
+BUG-019 [Medium] Products & Masters
+Product server-side validation missing
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Create products with a duplicate barcode, negative purchase
+     price/tax/discount, sale price below purchase price, discount 150, min >
+     max, and a 300-character name.
+Expected:
+  Server rejects each case with a field message (name maxlength 200 is already
+  declared).
+Actual:
+  All saved. Text in numeric fields is blocked client-side only. Duplicate
+  product code is correctly blocked.
+Page / evidence:
+  https://pos.coditium.com/Products/Create. Round 3 #10.
+
+BUG-020 [Medium] Products & Masters
+Customer and vendor fields accept invalid values
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Create a customer and vendor with credit limit -1, phone "abc!!",
+     negative opening balance, discount 150.
+Expected:
+  Numeric ranges and phone format validated on the server.
+Actual:
+  All saved. Existing vendor Wajih has mobile "234234234234`". Invalid email
+  is blocked, likely browser-only.
+Page / evidence:
+  https://pos.coditium.com/Customers, https://pos.coditium.com/Vendors. Round
+  3 #12, Recon #12.
+
+BUG-021 [Medium] Products & Masters
+Product image upload: silent rejects, no content check, large files hang
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Upload a .txt file.
+  2. Upload a text file renamed to .png.
+  3. Upload a 27 MB .bmp and an 8 MB .png.
+Expected:
+  Clear error for wrong type/size; content sniffed; size limit enforced
+  quickly.
+Actual:
+  .txt rejected with no visible message; renamed text accepted; large files
+  never finish saving (25s+) with no error.
+Page / evidence:
+  https://pos.coditium.com/Products/Create. Round 3 #11.
+
+BUG-022 [Medium] Products & Masters
+Duplicate master data: units, expense categories, payment methods
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open ProductUnits, ExpenseCategories and the Unit / Payment Method
+     dropdowns.
+  2. Create a category with an existing name.
+Expected:
+  Each master value once; names unique.
+Actual:
+  ProductUnits 16 rows and ExpenseCategories 16 rows, each entry twice; Unit
+  dropdown and invoice Payment Method options duplicated; duplicate category
+  name allowed.
+Page / evidence:
+  https://pos.coditium.com/ProductUnits,
+  https://pos.coditium.com/ExpenseCategories. Recon #5, Round 2 #6, Round 3
+  #15.
+
+BUG-023 [Medium] Expenses
+Expenses accept zero/negative amounts, duplicate numbers and far-future dates
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Create expenses with amount 0 and -50.
+  2. Reuse an existing Expense No.
+  3. Date one in 2030.
+Expected:
+  Amount > 0, unique Expense No, date within a sensible window.
+Actual:
+  All saved (QA-EX1 exists twice).
+Page / evidence:
+  https://pos.coditium.com/Expenses. Round 3 #13.
+
+BUG-024 [Medium] Payments
+Lists show raw numeric IDs instead of names
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open CustomerPayments, VendorPayments and AuditLogs.
+Expected:
+  Customer, vendor and user names.
+Actual:
+  Columns CustomerUID, VendorUID and UserUID show numbers.
+Page / evidence:
+  https://pos.coditium.com/CustomerPayments,
+  https://pos.coditium.com/VendorPayments, https://pos.coditium.com/AuditLogs.
+  Recon #6, Round 3.
+
+BUG-025 [Medium] Auth/Security
+Audit log incomplete and mislabelled
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Perform a failed login, a deactivate, a blocked delete, a logout and a
+     failed purchase cancel.
+  2. Open /AuditLogs.
+Expected:
+  Every security and data event logged with username, correct action type and
+  outcome.
+Actual:
+  Failed logins lack the username (one wrong-password attempt not found at
+  all); deactivate logged as "Cancel"; blocked deletes, logout and failed PI
+  cancel not logged; user shown as number.
+Page / evidence:
+  https://pos.coditium.com/AuditLogs. Recon #15, Round 3.
+
+BUG-026 [Medium] Auth/Security
+No Content-Security-Policy header
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Request / and inspect response headers.
+Expected:
+  A CSP restricting script and style sources.
+Actual:
+  No CSP. Lighthouse csp-xss: "No CSP found in enforcement mode" (rated High
+  by Lighthouse).
+Page / evidence:
+  https://pos.coditium.com/ headers. Tech findings.
+
+BUG-027 [Medium] Auth/Security
+HSTS max-age only 30 days; no includeSubDomains
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Inspect the strict-transport-security header.
+Expected:
+  max-age=31536000; includeSubDomains.
+Actual:
+  max-age=2592000 with no includeSubDomains or preload.
+Page / evidence:
+  Response headers. Tech findings.
+
+BUG-028 [Medium] Auth/Security
+Login ReturnUrl echoes external URLs (potential open redirect)
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open /Account/Login?ReturnUrl=https://evil.example/ and
+     ?ReturnUrl=//evil.example/.
+  2. Inspect the hidden returnUrl field.
+Expected:
+  Non-local URLs discarded.
+Actual:
+  External value placed in the hidden returnUrl input. Post-login redirect not
+  confirmed (no login used in that probe).
+Page / evidence:
+  https://pos.coditium.com/Account/Login. Tech findings
+  (open_redirect_and_versions.txt).
+
+BUG-029 [Medium] Auth/Security
+Anonymous Error and AccessDenied pages expose the full module menu
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Signed out, open /Home/Error and /Account/AccessDenied.
+Expected:
+  Minimal anonymous layout.
+Actual:
+  HTTP 200 with links to POS, Customers, Invoices, Reports, Vendors, Products,
+  Inventories, Modules and Setup.
+Page / evidence:
+  https://pos.coditium.com/Home/Error,
+  https://pos.coditium.com/Account/AccessDenied. Tech findings.
+
+BUG-030 [Medium] Auth/Security
+Valid login hung about 25 seconds, then bare "HTTP ERROR 400" (intermittent)
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Sign in with valid credentials (Remember me state may matter).
+Expected:
+  Dashboard within about 1 second, or a friendly error.
+Actual:
+  Hung about 25s then a bare HTTP 400; browser needed a restart. Later logins
+  took about 1s and it did not recur. Possibly antiforgery/Remember-me cookie
+  related.
+Page / evidence:
+  https://pos.coditium.com/Account/Login. Recon #1 (screenshot login-400).
+
+BUG-031 [Medium] Performance
+Dashboard graphs and Stock Movement load very slowly
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Load the dashboard after sign-in.
+  2. Open /StockMovement/Index.
+Expected:
+  Pages interactive within 2–3 seconds.
+Actual:
+  /Dashboard/PieGraphs timed out at 12s; /StockMovement/Index took about 10s.
+  Monthly Supply about 1.8s.
+Page / evidence:
+  https://pos.coditium.com/Dashboard/PieGraphs,
+  https://pos.coditium.com/StockMovement/Index. Recon #2, Round 2.
+
+BUG-032 [Medium] Reports
+Sales report filters and heading are misleading
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open /Reports/TotalSale with defaults.
+  2. Switch between Cash and Walk-in filters.
+Expected:
+  Heading names the selected filter/period; each filter returns its own set;
+  Credit option available; default period clear.
+Actual:
+  Heading always "Total Sale for Monthly"; Cash and Walk-in return identical
+  results; no Credit option; default shows 2 invoices (20,290) vs 10 in the
+  sales list. No print/export.
+Page / evidence:
+  https://pos.coditium.com/Reports/TotalSale. Recon #9, Round 3.
+
+BUG-033 [Medium] Dashboard
+"Sales by Item Name" chart opens on June, so it is empty
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open the dashboard.
+Expected:
+  Chart defaults to the current month (October 2026).
+Actual:
+  Defaults to June and shows nothing.
+Page / evidence:
+  https://pos.coditium.com/Dashboard. Recon #3 (screenshot june chart).
+
+BUG-034 [Medium] UI/UX
+Long names break table and POS layouts
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Create a product with a 300-character name.
+  2. Open the products list and Cash POS.
+Expected:
+  Text truncates with a tooltip; Actions column stays visible.
+Actual:
+  Actions column pushed off-screen; POS grid scrolls horizontally.
+Page / evidence:
+  https://pos.coditium.com/Products, https://pos.coditium.com/POS/Cash. Round
+  3 #14.
+
+BUG-035 [Low] Auth/Security
+Missing X-Content-Type-Options, Referrer-Policy and Permissions-Policy
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Inspect login page response headers.
+Expected:
+  nosniff, strict-origin-when-cross-origin, and a restrictive
+  Permissions-Policy.
+Actual:
+  Only HSTS and X-Frame-Options: SAMEORIGIN present.
+Page / evidence:
+  security_headers_analysis.txt. Tech findings.
+
+BUG-036 [Low] Auth/Security
+Server and framework versions disclosed
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Inspect any HTML response.
+Expected:
+  No version headers.
+Actual:
+  Server: Microsoft-IIS/10.0 and X-Powered-By: ASP.NET.
+Page / evidence:
+  headers_raw.txt. Tech findings.
+
+BUG-037 [Low] UI/UX
+No branded 404; default IIS / HTTP.sys error pages shown
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open a missing route, /web.config and /%00.
+Expected:
+  Branded error pages with a way back.
+Actual:
+  Unbranded 404; /web.config shows classic IIS "Server Error"; /%00 shows
+  Microsoft-HTTPAPI/2.0 "Bad Request".
+Page / evidence:
+  https://pos.coditium.com/web.config. Recon #18, Tech findings.
+
+BUG-038 [Low] Auth/Security
+/robots.txt redirects to the login page
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Request /robots.txt signed out.
+Expected:
+  Plain-text robots.txt (e.g. Disallow: /).
+Actual:
+  302 to Login; Lighthouse reports robots.txt invalid.
+Page / evidence:
+  https://pos.coditium.com/robots.txt. Tech findings.
+
+BUG-039 [Low] POS Cash
+Receipt layout and wording issues
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Print a receipt before and after paying a cash sale.
+Expected:
+  Full address, correct title, consistent shop name and an invoice number on
+  every print.
+Actual:
+  Header truncated "SHOP NO 02 SHOPPING GALLERY P-2 BA"; title "Customer Bil";
+  shop "THE FORM SHOP" differs from terminal; print before pay has no invoice
+  no; "You can print the receipt now" appears after the basket is cleared.
+Page / evidence:
+  https://pos.coditium.com/POS/Cash. Round 2 #8.
+
+BUG-040 [Low] POS Cash
+POS item layout setting ignored
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Set Configuration PosItemLayout = Card.
+  2. Open /POS/Cash.
+Expected:
+  Products shown as cards.
+Actual:
+  Table layout shown. The audit log shows this setting toggled by the shahid
+  account at 09:06 PKT from another session (not QA).
+Page / evidence:
+  https://pos.coditium.com/Configurations, https://pos.coditium.com/POS/Cash.
+  Recon #14.
+
+BUG-041 [Low] POS Credit
+Past-date Credit POS entry not shown until reload
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Add a Credit POS entry with a past date.
+Expected:
+  Entry appears in the list immediately.
+Actual:
+  "Entry added" message, but the line appears only after reload.
+Page / evidence:
+  Credit POS page. Round 2 #11.
+
+BUG-042 [Low] Monthly Supply
+Monthly Supply items show a different product code and omit delivery from line
+total
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open Monthly Supply items for a customer.
+Expected:
+  Product code matches master (D101); totals include delivery.
+Actual:
+  Milk shown as "Dairy001"; line total ignores the 50 delivery charge.
+Page / evidence:
+  Monthly Supply items. Round 2 #9.
+
+BUG-043 [Low] Sales Invoices
+Sales invoice list has no invoice number column
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open /SalesInvoices.
+Expected:
+  Invoice number visible and searchable.
+Actual:
+  No invoice number column.
+Page / evidence:
+  https://pos.coditium.com/SalesInvoices. Recon #8, Round 2.
+
+BUG-044 [Low] Sales Invoices
+Garbled characters in invoice remarks
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open sales invoice details with remarks.
+Expected:
+  Em dash renders correctly.
+Actual:
+  Shows "â€”" (UTF-8 encoding issue).
+Page / evidence:
+  Sales invoice details. Round 3.
+
+BUG-045 [Low] Reports
+Slow/Dead Stock report shows -1 days since sale
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open the Slow/Dead Stock report.
+Expected:
+  0 or more days, or "Never sold".
+Actual:
+  "-1" days since sale (likely the timezone offset).
+Page / evidence:
+  Slow/Dead Stock report. Round 3.
+
+BUG-046 [Low] Dashboard
+Dashboard charts blank on first paint
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open the dashboard while the connectivity pill shows "Checking…".
+Expected:
+  Charts or loading placeholders render immediately.
+Actual:
+  Charts stay blank until the check completes.
+Page / evidence:
+  https://pos.coditium.com/Dashboard. Recon #4.
+
+BUG-047 [Low] Expenses
+Expense date input fails browser validation by default
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Open Expenses > Create and save with the default date.
+Expected:
+  Default date saves.
+Actual:
+  "Nearest valid values" error because the default value includes
+  milliseconds.
+Page / evidence:
+  https://pos.coditium.com/Expenses/Create. Round 3.
+
+BUG-048 [Low] Products & Masters
+Deactivated rows lose the Activate action
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Deactivate a category or product.
+  2. Look for a way to reactivate it in the list.
+Expected:
+  Activate action available.
+Actual:
+  No Activate action shown.
+Page / evidence:
+  Master lists. Round 3.
+
+BUG-049 [Low] UI/UX
+Inconsistent date, quantity and currency formats
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Compare dates and quantities across lists and details.
+Expected:
+  One date format, one quantity precision, currency shown.
+Actual:
+  Dates as 2026-10-17, 01-Oct-2026 and 2026-10-22 09:06; quantities as 73.000
+  and 73.0; no currency symbol.
+Page / evidence:
+  Various lists. Recon #7, #16.
+
+BUG-050 [Low] UI/UX
+Header crowds and clips at 150–175% zoom
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Zoom the browser to 150% and 175%.
+Expected:
+  Header wraps or collapses into a menu.
+Actual:
+  Items crowd and clip; dashboard chart dropdown stacks.
+Page / evidence:
+  Recon #17 (screenshots zoom, zoom150).
+
+BUG-051 [Low] POS Cash
+Cash POS needs double-click to add and quantity cannot be typed
+------------------------------------------------------------------------------
+Steps to reproduce:
+  1. Add a product in Cash POS.
+  2. Set quantity to 100.
+  3. Remove a line.
+Expected:
+  Single click/scan adds; quantity is typeable; remove confirms or offers
+  undo.
+Actual:
+  Double-click required; quantity only via + (99 clicks for 100); remove
+  happens with no confirmation.
+Page / evidence:
+  https://pos.coditium.com/POS/Cash. Round 2 (UX), Round 3.
+
+==============================================================================
+WHAT PASSED
+------------------------------------------------------------------------------
+  + Empty-basket payment blocked; basket maths correct
+  + Cash sale creates correct invoice, details and stock movement
+  + Double-click on Pay does not create duplicates
+  + Cancel restores stock with confirmation; delete asks to confirm
+  + Credit POS edit and cancel-edit work; invoice printing works
+  + October sales report matches the invoice list (15 invoices, 40,130 net,
+    15,880 paid)
+  + Master CRUD with required and duplicate-code checks
+  + XSS input escaped everywhere tested
+  + Deactivated items disappear from pickers; delete with history blocked with
+    a clear message
+  + GET delete returns 405; duplicate inventory row blocked
+  + Protected routes and sensitive files redirect to login; logout and back
+    button redirect correctly
+  + CSRF tokens with Secure/HttpOnly/SameSite cookie; generic login error (no
+    username enumeration)
+  + Purchase receipts update stock and average cost correctly
+  + Login page: 100 accessibility score, HTTPS with valid certificate, HTTP/2
+
+TEST DATA CREATED (for cleanup)
+------------------------------------------------------------------------------
+  Products: QA-V5, QA-V7, QA-V9, QA-V10, QA-V11, QA-L, QA-X1, QA-X2, QA-I2
+  (active); QA-P1 (deactivated); QA-V2 deleted by Cashier test
+  Categories / units: QA-CAT1 (deactivated), QA-CAT2; unit QA-U1
+  Customers: QA-C1; QA-C3 to QA-C6 (deactivated)
+  Vendors: QA-V1; QA-V3 to QA-V5 (deactivated)
+  Expense categories / expenses: QA-EC1, QA-EC2; QA-EX1 (x2), QA-EX2 to QA-EX4
+  Cash sales: POS-C-20261021212516027 (paid edited to 900),
+  POS-C-20261021212534503, POS-C-20261021212557233 (cancelled),
+  POS-C-20261021212543357 (deleted), POS-C-20261021213401593,
+  POS-C-20261021213412700 (QA-P1)
+  Credit / monthly: POS-M-20261021212609600; POS-MS-202610-1000 (modified by
+  Monthly Supply test)
+  Purchases / stock: PI-20261021213701, PI-20261021213739, PI-20261021213741,
+  PI-20261021213742; SA-20261021213758; Milk and Butter quantities
+  hand-restored to 444 / 152
+  Payments: 4 customer payments and 4 vendor payments (incl. 0, negative and
+  overpayment amounts)
+  Users: QA-cashier (role Cashier) and QA-pw1 - delete or disable both
+  Configuration: Cities ", QA City" and areas ", QA Area"
+
+SCOPE & METHOD
+------------------------------------------------------------------------------
+Testing ran on 22 Oct 2026 between about 09:15 and 09:45 PKT against the
+pre-production site with dummy data, using a desktop browser for hands-on
+tests and command-line probes plus Lighthouse for headers, TLS and
+performance.
+Covered:
+  - Login, session, CSRF, security headers, TLS, error pages
+  - Cash POS, Credit POS, Monthly Supply, invoice edit/cancel/delete
+  - Purchases, inventory, stock adjustment, stock movement
+  - Customer and vendor payments, expenses
+  - Products, categories, units, customers, vendors, configuration
+  - Reports, dashboard, audit log, users and roles (Cashier role test)
+  - Input validation, XSS, file upload, long text, zoom 150-175%
+Not covered:
+  - Mobile widths below about 700 px
+  - Verification of every dashboard total
+  - Printing on real receipt hardware
+  - Multi-branch and warehouse transfers
+  - Concurrency and load testing
+  - Offline/sync behaviour of "Mode: Auto"
+  - Manager and Viewer roles individually
+
+==============================================================================
+End of report
