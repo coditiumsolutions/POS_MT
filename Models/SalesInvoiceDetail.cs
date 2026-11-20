@@ -50,6 +50,13 @@ public partial class SalesInvoiceDetail
     [Column(TypeName = "decimal(18, 2)")]
     public decimal CostPrice { get; set; }
 
+    /// <summary>
+    /// Delivery charge snapshotted for this line/day (monthly supply).
+    /// Not recalculated from the standing product template for other days.
+    /// </summary>
+    [Column(TypeName = "decimal(18, 2)")]
+    public decimal DeliveryCharges { get; set; }
+
     [StringLength(300)]
     public string? Remarks { get; set; }
 }

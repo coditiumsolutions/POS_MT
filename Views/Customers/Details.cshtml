@@ -524,45 +524,61 @@
                             <tr>
                                 <th>Invoice No</th>
                                 <th>Date</th>
-                                <th>Type</th>
                                 <th>Items</th>
-                                <th class="text-end">Amount</th>
+                                <th class="text-end">Unit Price</th>
+                                <th class="text-end">Quantity</th>
+                                <th class="text-end">Items Amount</th>
+                                <th class="text-end">Delivery Charges</th>
+                                <th class="text-end">Item Total</th>
                                 <th>Payment</th>
-                                <th>Status</th>
                                 <th style="width:5.5rem"></th>
                             </tr>
                         </thead>
                         <tbody>
                         @foreach (var bill in currentMonthBills)
                         {
-                            var canDelete = !string.Equals(bill.InvoiceStatus, "Cancelled", StringComparison.OrdinalIgnoreCase);
-                            <tr class="@(bill.InvoiceStatus == "Cancelled" ? "table-secondary" : null)">
+                            var isCancelled = string.Equals(bill.InvoiceStatus, "Cancelled", StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(bill.PaymentStatus, "Cancelled", StringComparison.OrdinalIgnoreCase);
+                            <tr class="@(isCancelled ? "table-secondary" : null)">
                                 <td>@bill.InvoiceNo</td>
                                 <td>@bill.InvoiceDate.ToString("dd MMM yyyy")</td>
-                                <td>@bill.Label</td>
                                 <td class="small">@(string.IsNullOrWhiteSpace(bill.ItemsSummary) ? "—" : bill.ItemsSummary)</td>
+                                <td class="text-end">@bill.UnitPrice.ToString("N2")</td>
+                                <td class="text-end">@bill.Quantity.ToString("0.##")</td>
+                                <td class="text-end">@bill.ItemsTotal.ToString("N2")</td>
+                                <td class="text-end">@bill.DeliveryCharges.ToString("N2")</td>
                                 <td class="text-end fw-semibold">@bill.NetAmount.ToString("N2")</td>
                                 <td>@bill.PaymentStatus</td>
-                                <td>@bill.InvoiceStatus</td>
                                 <td class="text-nowrap">
-                                    @if (canDelete)
-                                    {
-                                        <form asp-action="DeleteCurrentMonthBill" asp-route-id="@Model.Uid" method="post" class="d-inline">
-                                            @Html.AntiForgeryToken()
-                                            <input type="hidden" name="invoiceUid" value="@bill.Uid" />
-                                            <input type="hidden" name="billDate" value="@bill.InvoiceDate.ToString("yyyy-MM-dd")" />
-                                            <input type="hidden" name="isMonthlyDayBill" value="@(bill.IsMonthlyDayBill ? "true" : "false")" />
-                                            <button type="submit"
-                                                    class="btn btn-sm btn-outline-danger"
-                                                    onclick="return confirm('Delete this bill for @bill.InvoiceDate.ToString("dd MMM yyyy")? Stock will be restored.');">
-                                                Delete
-                                            </button>
-                                        </form>
-                                    }
+                                    <form asp-action="DeleteCurrentMonthBill" asp-route-id="@Model.Uid" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="invoiceUid" value="@bill.Uid" />
+                                        <input type="hidden" name="billDate" value="@bill.InvoiceDate.ToString("yyyy-MM-dd")" />
+                                        <input type="hidden" name="isMonthlyDayBill" value="@(bill.IsMonthlyDayBill ? "true" : "false")" />
+                                        <button type="submit"
+                                                class="btn btn-sm btn-outline-danger"
+                                                onclick="return confirm('@(isCancelled
+                                                    ? $"Permanently delete cancelled bill {bill.InvoiceNo}?"
+                                                    : $"Delete this bill for {bill.InvoiceDate:dd MMM yyyy}? Stock will be restored.")');">
+                                            Delete
+                                        </button>
+                                    </form>
                                 </td>
                             </tr>
                         }
                         </tbody>
+                        <tfoot>
+                            @{
+                                var currentAmountTotal = currentMonthBills
+                                    .Where(b => !string.Equals(b.InvoiceStatus, "Cancelled", StringComparison.OrdinalIgnoreCase))
+                                    .Sum(b => b.NetAmount);
+                            }
+                            <tr class="table-light">
+                                <td colspan="7" class="text-end fw-semibold">Item Total</td>
+                                <td class="text-end fw-semibold">@currentAmountTotal.ToString("N2")</td>
+                                <td colspan="2"></td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
             }
@@ -602,11 +618,13 @@
                             <tr>
                                 <th>Invoice No</th>
                                 <th>Date</th>
-                                <th>Type</th>
                                 <th>Items</th>
-                                <th class="text-end">Amount</th>
+                                <th class="text-end">Unit Price</th>
+                                <th class="text-end">Quantity</th>
+                                <th class="text-end">Items Amount</th>
+                                <th class="text-end">Delivery Charges</th>
+                                <th class="text-end">Item Total</th>
                                 <th>Payment</th>
-                                <th>Status</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -615,14 +633,28 @@
                             <tr class="@(bill.InvoiceStatus == "Cancelled" ? "table-secondary" : null)">
                                 <td>@bill.InvoiceNo</td>
                                 <td>@bill.InvoiceDate.ToString("dd MMM yyyy")</td>
-                                <td>@bill.Label</td>
                                 <td class="small">@(string.IsNullOrWhiteSpace(bill.ItemsSummary) ? "—" : bill.ItemsSummary)</td>
+                                <td class="text-end">@bill.UnitPrice.ToString("N2")</td>
+                                <td class="text-end">@bill.Quantity.ToString("0.##")</td>
+                                <td class="text-end">@bill.ItemsTotal.ToString("N2")</td>
+                                <td class="text-end">@bill.DeliveryCharges.ToString("N2")</td>
                                 <td class="text-end fw-semibold">@bill.NetAmount.ToString("N2")</td>
                                 <td>@bill.PaymentStatus</td>
-                                <td>@bill.InvoiceStatus</td>
                             </tr>
                         }
                         </tbody>
+                        <tfoot>
+                            @{
+                                var previousAmountTotal = previousMonthBills
+                                    .Where(b => !string.Equals(b.InvoiceStatus, "Cancelled", StringComparison.OrdinalIgnoreCase))
+                                    .Sum(b => b.NetAmount);
+                            }
+                            <tr class="table-light">
+                                <td colspan="7" class="text-end fw-semibold">Item Total</td>
+                                <td class="text-end fw-semibold">@previousAmountTotal.ToString("N2")</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
             }

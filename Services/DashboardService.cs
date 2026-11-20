@@ -62,41 +62,47 @@ public sealed class DashboardService : IDashboardService
             var today = DateTime.Today;
             var tomorrow = today.AddDays(1);
 
-            model.TodaysSales = await _db.SalesInvoices.AsNoTracking()
+            // SQLite cannot Sum(decimal) in SQL — load values then aggregate in memory.
+            model.TodaysSales = (await _db.SalesInvoices.AsNoTracking()
                 .Where(x => x.InvoiceDate >= today && x.InvoiceDate < tomorrow && x.InvoiceStatus != "Cancelled")
-                .SumAsync(x => (decimal?)x.NetAmount, cancellationToken) ?? 0m;
+                .Select(x => x.NetAmount)
+                .ToListAsync(cancellationToken)).Sum();
 
-            model.TodaysPurchases = await _db.PurchaseInvoices.AsNoTracking()
+            model.TodaysPurchases = (await _db.PurchaseInvoices.AsNoTracking()
                 .Where(x => x.PurchaseDate >= today && x.PurchaseDate < tomorrow && x.InvoiceStatus != "Cancelled")
-                .SumAsync(x => (decimal?)x.NetAmount, cancellationToken) ?? 0m;
+                .Select(x => x.NetAmount)
+                .ToListAsync(cancellationToken)).Sum();
 
-            model.TodaysExpenses = await _db.Expenses.AsNoTracking()
+            model.TodaysExpenses = (await _db.Expenses.AsNoTracking()
                 .Where(x => x.ExpenseDate >= today && x.ExpenseDate < tomorrow)
-                .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+                .Select(x => x.Amount)
+                .ToListAsync(cancellationToken)).Sum();
 
-            model.CustomerReceivables = await _db.SalesInvoices.AsNoTracking()
+            model.CustomerReceivables = (await _db.SalesInvoices.AsNoTracking()
                 .Where(x => x.InvoiceStatus != "Cancelled")
-                .SumAsync(x => (decimal?)x.BalanceAmount, cancellationToken) ?? 0m;
+                .Select(x => x.BalanceAmount)
+                .ToListAsync(cancellationToken)).Sum();
 
-            model.VendorPayables = await _db.PurchaseInvoices.AsNoTracking()
+            model.VendorPayables = (await _db.PurchaseInvoices.AsNoTracking()
                 .Where(x => x.InvoiceStatus != "Cancelled")
-                .SumAsync(x => (decimal?)x.BalanceAmount, cancellationToken) ?? 0m;
+                .Select(x => x.BalanceAmount)
+                .ToListAsync(cancellationToken)).Sum();
 
-            model.CurrentStock = await _db.Inventories.AsNoTracking()
-                .SumAsync(x => (decimal?)x.CurrentQuantity, cancellationToken) ?? 0m;
+            model.CurrentStock = (await _db.Inventories.AsNoTracking()
+                .Select(x => x.CurrentQuantity)
+                .ToListAsync(cancellationToken)).Sum();
 
             model.LowStockProducts = await _db.Inventories.AsNoTracking()
                 .CountAsync(x => x.CurrentQuantity <= x.MinimumStock, cancellationToken);
 
-            var amountByMonth = await _db.SalesInvoices.AsNoTracking()
+            var yearSales = await _db.SalesInvoices.AsNoTracking()
                 .Where(x => x.InvoiceDate >= yearStart
                             && x.InvoiceDate < yearEnd
                             && x.InvoiceStatus != "Cancelled")
-                .GroupBy(x => x.InvoiceDate.Month)
-                .Select(g => new { Month = g.Key, Total = g.Sum(x => x.NetAmount) })
+                .Select(x => new { x.InvoiceDate.Month, x.NetAmount })
                 .ToListAsync(cancellationToken);
 
-            foreach (var row in amountByMonth)
+            foreach (var row in yearSales.GroupBy(x => x.Month).Select(g => new { Month = g.Key, Total = g.Sum(x => x.NetAmount) }))
             {
                 if (row.Month is >= 1 and <= 12)
                 {
@@ -107,23 +113,26 @@ public sealed class DashboardService : IDashboardService
             var itemMonthStart = new DateTime(model.ChartYear, selectedItemMonth, 1);
             var itemMonthEnd = itemMonthStart.AddMonths(1);
 
-            var itemRows = await (
+            var itemDetailRows = await (
                 from d in _db.SalesInvoiceDetails.AsNoTracking()
                 join inv in _db.SalesInvoices.AsNoTracking() on d.SalesInvoiceUid equals inv.Uid
                 where inv.InvoiceDate >= itemMonthStart
                       && inv.InvoiceDate < itemMonthEnd
                       && inv.InvoiceStatus != "Cancelled"
-                group d by (d.ProductName ?? d.ProductCode ?? "Unknown Item") into g
-                select new { ItemName = g.Key!, Quantity = g.Sum(x => x.Quantity) }
-            )
-            .OrderByDescending(x => x.Quantity)
-            .Take(TopItemCount)
-            .ToListAsync(cancellationToken);
+                select new { ItemName = d.ProductName ?? d.ProductCode ?? "Unknown Item", d.Quantity }
+            ).ToListAsync(cancellationToken);
+
+            var itemRows = itemDetailRows
+                .GroupBy(x => x.ItemName)
+                .Select(g => new { ItemName = g.Key, Quantity = g.Sum(x => x.Quantity) })
+                .OrderByDescending(x => x.Quantity)
+                .Take(TopItemCount)
+                .ToList();
 
             model.ItemNameLabels = itemRows.Select(x => x.ItemName).ToList();
             model.ItemQuantities = itemRows.Select(x => x.Quantity).ToList();
 
-            var cashWalkInByMonth = await (
+            var cashWalkInRows = await (
                 from inv in _db.SalesInvoices.AsNoTracking()
                 join c in _db.Customers.AsNoTracking() on inv.CustomerUid equals c.Uid
                 where inv.InvoiceDate >= yearStart
@@ -133,11 +142,10 @@ public sealed class DashboardService : IDashboardService
                           || c.CustomerName.Contains("Walk-in")
                           || c.CustomerName.Contains("Walk-In")
                           || c.CustomerName.Contains("Walk In"))
-                group inv by inv.InvoiceDate.Month into g
-                select new { Month = g.Key, Total = g.Sum(x => x.NetAmount) }
+                select new { inv.InvoiceDate.Month, inv.NetAmount }
             ).ToListAsync(cancellationToken);
 
-            foreach (var row in cashWalkInByMonth)
+            foreach (var row in cashWalkInRows.GroupBy(x => x.Month).Select(g => new { Month = g.Key, Total = g.Sum(x => x.NetAmount) }))
             {
                 if (row.Month is >= 1 and <= 12)
                 {
@@ -145,7 +153,7 @@ public sealed class DashboardService : IDashboardService
                 }
             }
 
-            var monthlyByMonth = await (
+            var monthlyRows = await (
                 from inv in _db.SalesInvoices.AsNoTracking()
                 join c in _db.Customers.AsNoTracking() on inv.CustomerUid equals c.Uid
                 where inv.InvoiceDate >= yearStart
@@ -155,11 +163,10 @@ public sealed class DashboardService : IDashboardService
                       && !c.CustomerName.Contains("Walk-in")
                       && !c.CustomerName.Contains("Walk-In")
                       && !c.CustomerName.Contains("Walk In")
-                group inv by inv.InvoiceDate.Month into g
-                select new { Month = g.Key, Total = g.Sum(x => x.NetAmount) }
+                select new { inv.InvoiceDate.Month, inv.NetAmount }
             ).ToListAsync(cancellationToken);
 
-            foreach (var row in monthlyByMonth)
+            foreach (var row in monthlyRows.GroupBy(x => x.Month).Select(g => new { Month = g.Key, Total = g.Sum(x => x.NetAmount) }))
             {
                 if (row.Month is >= 1 and <= 12)
                 {

@@ -368,6 +368,7 @@ public class SalesInvoicesController : Controller {
       .Select(x => new SalesInvoiceDetailLineViewModel
       {
         DetailUid = x.Uid,
+        ProductUid = x.ProductUid,
         ProductCode = x.ProductCode ?? string.Empty,
         ProductName = x.ProductName ?? string.Empty,
         Quantity = x.Quantity,
@@ -375,6 +376,7 @@ public class SalesInvoicesController : Controller {
         DiscountAmount = x.DiscountAmount,
         TaxAmount = x.TaxAmount,
         LineTotal = x.LineTotal,
+        DeliveryCharges = x.DeliveryCharges < 0 ? 0m : x.DeliveryCharges,
         Remarks = x.Remarks
       })
       .ToListAsync(ct);

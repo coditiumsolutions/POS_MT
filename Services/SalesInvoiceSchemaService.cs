@@ -35,6 +35,8 @@ public sealed class SalesInvoiceSchemaService : ISalesInvoiceSchemaService
                     "ALTER TABLE SalesInvoices ADD COLUMN CustomerGivenAmount REAL NULL", cancellationToken);
                 await EnsureSqliteColumnAsync("SalesInvoices", "ChangeGivenAmount",
                     "ALTER TABLE SalesInvoices ADD COLUMN ChangeGivenAmount REAL NULL", cancellationToken);
+                await EnsureSqliteColumnAsync("SalesInvoiceDetails", "DeliveryCharges",
+                    "ALTER TABLE SalesInvoiceDetails ADD COLUMN DeliveryCharges REAL NOT NULL DEFAULT 0", cancellationToken);
             }
             else
             {
@@ -57,6 +59,11 @@ public sealed class SalesInvoiceSchemaService : ISalesInvoiceSchemaService
                 await _db.Database.ExecuteSqlRawAsync("""
                     IF COL_LENGTH(N'dbo.SalesInvoices', N'ChangeGivenAmount') IS NULL
                         ALTER TABLE dbo.SalesInvoices ADD [ChangeGivenAmount] DECIMAL(18, 2) NULL;
+                    """, cancellationToken);
+                await _db.Database.ExecuteSqlRawAsync("""
+                    IF COL_LENGTH(N'dbo.SalesInvoiceDetails', N'DeliveryCharges') IS NULL
+                        ALTER TABLE dbo.SalesInvoiceDetails ADD [DeliveryCharges] DECIMAL(18, 2) NOT NULL
+                            CONSTRAINT DF_SalesInvoiceDetails_DeliveryCharges DEFAULT (0);
                     """, cancellationToken);
             }
 

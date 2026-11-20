@@ -78,6 +78,8 @@ public sealed class PurchaseProductOptionViewModel
 {
     public int Uid { get; set; }
     public string Label { get; set; } = string.Empty;
+    /// <summary>Products.SalePrice — used as default unit price on purchase lines.</summary>
+    public decimal SalePrice { get; set; }
 }
 
 public sealed class PurchaseInvoiceListItemViewModel

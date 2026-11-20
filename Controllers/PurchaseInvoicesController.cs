@@ -79,7 +79,8 @@ public class PurchaseInvoicesController : Controller
             .Select(x => new PurchaseProductOptionViewModel
             {
                 Uid = x.Uid,
-                Label = x.ProductCode + " — " + x.ProductName
+                Label = x.ProductCode + " — " + x.ProductName,
+                SalePrice = x.SalePrice
             })
             .ToListAsync(ct);
     }
@@ -136,7 +137,7 @@ public class PurchaseInvoicesController : Controller
             PurchaseDate = now,
             PurchaseInvoiceNo = $"PI-{now:yyyyMMddHHmmss}",
             VendorInvoiceNo = await GenerateNextVendorInvoiceNoAsync(now, ct),
-            Lines = Enumerable.Range(0, 5).Select(_ => new PurchaseInvoiceLineFormViewModel()).ToList()
+            Lines = Enumerable.Range(0, 15).Select(_ => new PurchaseInvoiceLineFormViewModel()).ToList()
         });
     }
 
@@ -217,7 +218,7 @@ public class PurchaseInvoicesController : Controller
         foreach (var line in receiveLines)
         {
             products.TryGetValue(line.ProductUid!.Value, out var product);
-            var unitCost = line.UnitCost > 0 ? line.UnitCost : product?.PurchasePrice ?? 0;
+            var unitCost = line.UnitCost > 0 ? line.UnitCost : product?.SalePrice ?? 0;
             var lineTotal = Math.Round(line.Quantity * unitCost, 2);
             _db.PurchaseInvoiceDetails.Add(new PurchaseInvoiceDetail
             {
@@ -355,7 +356,7 @@ public class PurchaseInvoicesController : Controller
                 continue;
 
             products.TryGetValue(line.ProductUid!.Value, out var product);
-            var unitCost = line.UnitCost > 0 ? line.UnitCost : product?.PurchasePrice ?? detail.UnitCost;
+            var unitCost = line.UnitCost > 0 ? line.UnitCost : product?.SalePrice ?? detail.UnitCost;
             var newQty = line.Quantity;
             var newProductUid = line.ProductUid.Value;
             var oldProductUid = detail.ProductUid;
@@ -452,7 +453,7 @@ public class PurchaseInvoicesController : Controller
         foreach (var line in newReceiveLines)
         {
             products.TryGetValue(line.ProductUid!.Value, out var product);
-            var unitCost = line.UnitCost > 0 ? line.UnitCost : product?.PurchasePrice ?? 0;
+            var unitCost = line.UnitCost > 0 ? line.UnitCost : product?.SalePrice ?? 0;
             var lineTotal = Math.Round(line.Quantity * unitCost, 2);
             _db.PurchaseInvoiceDetails.Add(new PurchaseInvoiceDetail
             {
@@ -802,7 +803,7 @@ public class PurchaseInvoicesController : Controller
     private static void EnsureLineRows(PurchaseInvoiceFormViewModel model)
     {
         model.Lines ??= [];
-        var minRows = Math.Max(5, model.Lines.Count + 3);
+        var minRows = Math.Max(15, model.Lines.Count);
         while (model.Lines.Count < minRows)
             model.Lines.Add(new PurchaseInvoiceLineFormViewModel());
     }

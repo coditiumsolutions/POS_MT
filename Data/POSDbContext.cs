@@ -252,6 +252,7 @@ public partial class POSDbContext : DbContext
 
         modelBuilder.Entity<SalesInvoiceDetail>(entity =>
         {
+            entity.Property(e => e.DeliveryCharges).HasDefaultValue(0m);
             entity.Property(e => e.Uid).ValueGeneratedOnAdd();
         });
 

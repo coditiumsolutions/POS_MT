@@ -92,6 +92,9 @@ public sealed class MonthlySupplyItemRowViewModel
     /// <summary>True when sale price is per dozen and quantity is in pieces (e.g. Eggs).</summary>
     public bool PricedByDozen { get; set; }
 
+    /// <summary>Qty × Unit Price (dozen-aware). Does not include delivery.</summary>
+    public decimal ItemsAmount => Helpers.DozenPricing.LineAmount(Quantity, UnitPrice, PricedByDozen);
+
     /// <summary>
     /// Piece products: (Qty × Price) + Delivery.
     /// Dozen products: (Price × Qty/12) + Delivery. Rounded to whole number.
@@ -116,6 +119,9 @@ public sealed class MonthlySupplyUpdateItemRequest
 
     [Range(0, 99999999)]
     public decimal DeliveryCharges { get; set; }
+
+    /// <summary>When set, delivery is applied only to that supply day's invoice lines.</summary>
+    public string? SupplyDate { get; set; }
 }
 
 public sealed class MonthlySupplyAddItemRequest

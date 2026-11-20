@@ -175,9 +175,19 @@
                     <td>
                         <input type="hidden" asp-for="Lines[i].ExistingDetailUid" />
                         <select asp-for="Lines[i].ProductUid"
-                                class="form-select form-select-sm"
-                                asp-items="@(new SelectList(productOptions, "Uid", "Label", selectedProductUid))">
+                                class="form-select form-select-sm purchase-line-product">
                             <option value="">-- Select product --</option>
+                            @foreach (var p in productOptions)
+                            {
+                                if (selectedProductUid == p.Uid)
+                                {
+                                    <option value="@p.Uid" data-sale-price="@p.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)" selected>@p.Label</option>
+                                }
+                                else
+                                {
+                                    <option value="@p.Uid" data-sale-price="@p.SalePrice.ToString(System.Globalization.CultureInfo.InvariantCulture)">@p.Label</option>
+                                }
+                            }
                         </select>
                     </td>
                     <td>
@@ -197,6 +207,11 @@
             }
             </tbody>
         </table>
+    </div>
+    <div class="mt-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="purchaseAddMoreLinesBtn">
+            Add 10 more items
+        </button>
     </div>
 </section>
 
@@ -287,6 +302,19 @@
         });
     }
 
+    function applySalePriceFromProduct(row) {
+        if (!row) return;
+        var productSelect = row.querySelector('.purchase-line-product');
+        var priceInput = row.querySelector('.purchase-line-price');
+        if (!productSelect || !priceInput) return;
+        var opt = productSelect.options[productSelect.selectedIndex];
+        if (!opt || !opt.value) return;
+        var salePrice = parseFloat(opt.getAttribute('data-sale-price') || '0');
+        if (!isFinite(salePrice)) salePrice = 0;
+        priceInput.value = salePrice.toFixed(2);
+        refreshLineTotals();
+    }
+
     var linesTable = document.getElementById('purchaseReceiveLinesTable');
     if (linesTable) {
         linesTable.addEventListener('input', function (e) {
@@ -295,7 +323,60 @@
                 refreshLineTotals();
             }
         });
+        linesTable.addEventListener('change', function (e) {
+            if (e.target && e.target.classList.contains('purchase-line-product')) {
+                var row = e.target.closest('.purchase-receive-line');
+                applySalePriceFromProduct(row);
+            }
+        });
         refreshLineTotals();
+
+        function reindexLineField(el, index) {
+            if (!el) return;
+            if (el.name) {
+                el.name = el.name.replace(/Lines\[\d+\]/, 'Lines[' + index + ']');
+            }
+            if (el.id) {
+                el.id = el.id.replace(/Lines_\d+__/, 'Lines_' + index + '__');
+            }
+        }
+
+        function addBlankLineRows(count) {
+            var tbody = linesTable.querySelector('tbody');
+            var template = tbody && tbody.querySelector('.purchase-receive-line');
+            if (!tbody || !template) return;
+
+            for (var n = 0; n < count; n++) {
+                var index = tbody.querySelectorAll('.purchase-receive-line').length;
+                var clone = template.cloneNode(true);
+
+                clone.querySelectorAll('input, select').forEach(function (el) {
+                    reindexLineField(el, index);
+                    if (el.type === 'hidden' && el.name && el.name.indexOf('ExistingDetailUid') >= 0) {
+                        el.value = '';
+                    } else if (el.tagName === 'SELECT') {
+                        el.value = '';
+                        Array.prototype.forEach.call(el.options, function (opt) {
+                            opt.selected = !opt.value;
+                        });
+                    } else if (el.classList.contains('purchase-line-total')) {
+                        el.value = '0.00';
+                    } else {
+                        el.value = '';
+                    }
+                });
+
+                tbody.appendChild(clone);
+            }
+            refreshLineTotals();
+        }
+
+        var addMoreBtn = document.getElementById('purchaseAddMoreLinesBtn');
+        if (addMoreBtn) {
+            addMoreBtn.addEventListener('click', function () {
+                addBlankLineRows(10);
+            });
+        }
     }
 })();
 </script>

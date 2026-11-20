@@ -210,9 +210,24 @@ public class CustomersController : Controller
             return RedirectToAction(nameof(Details), new { id });
         }
 
+        // Cancelled shells (empty / leftover monthly invoices) can be removed permanently from the list.
         if (string.Equals(invoice.InvoiceStatus, "Cancelled", StringComparison.OrdinalIgnoreCase))
         {
-            TempData["Error"] = "This bill is already cancelled.";
+            await using var cancelTx = await _db.Database.BeginTransactionAsync(ct);
+            try
+            {
+                await PurgeSalesInvoiceAsync(invoice.Uid, ct);
+                await _audit.WriteAsync("Delete", "SalesInvoices", invoice.Uid.ToString(),
+                    $"Permanently deleted cancelled invoice {invoice.InvoiceNo} from customer bills.", ct);
+                await cancelTx.CommitAsync(ct);
+                TempData["Success"] = $"Deleted cancelled bill {invoice.InvoiceNo}.";
+            }
+            catch (Exception ex)
+            {
+                await cancelTx.RollbackAsync(ct);
+                TempData["Error"] = "Could not delete cancelled bill: " + (ex.InnerException?.Message ?? ex.Message);
+            }
+
             return RedirectToAction(nameof(Details), new { id });
         }
 
@@ -267,9 +282,11 @@ public class CustomersController : Controller
                 _db.SalesInvoiceDetails.RemoveRange(dayLines);
                 await _db.SaveChangesAsync(ct);
 
-                var remainingTotal = await _db.SalesInvoiceDetails
+                // SQLite cannot Sum(decimal) in SQL — aggregate on the client.
+                var remainingTotal = (await _db.SalesInvoiceDetails
                     .Where(x => x.SalesInvoiceUid == invoice.Uid)
-                    .SumAsync(x => (decimal?)x.LineTotal, ct) ?? 0m;
+                    .Select(x => x.LineTotal)
+                    .ToListAsync(ct)).Sum();
                 var remainingCount = await _db.SalesInvoiceDetails
                     .CountAsync(x => x.SalesInvoiceUid == invoice.Uid, ct);
 
@@ -324,6 +341,34 @@ public class CustomersController : Controller
             TempData["Error"] = "Delete failed: " + (ex.InnerException?.Message ?? ex.Message);
             return RedirectToAction(nameof(Details), new { id });
         }
+    }
+
+    /// <summary>Permanently removes a sales invoice and its details / linked payments / inventory tx.</summary>
+    private async Task PurgeSalesInvoiceAsync(int invoiceUid, CancellationToken ct)
+    {
+        var details = await _db.SalesInvoiceDetails
+            .Where(x => x.SalesInvoiceUid == invoiceUid)
+            .ToListAsync(ct);
+        if (details.Count > 0)
+            _db.SalesInvoiceDetails.RemoveRange(details);
+
+        var payments = await _db.CustomerPayments
+            .Where(x => x.SalesInvoiceUid == invoiceUid)
+            .ToListAsync(ct);
+        if (payments.Count > 0)
+            _db.CustomerPayments.RemoveRange(payments);
+
+        var inventoryTx = await _db.InventoryTransactions
+            .Where(x => x.ReferenceUid == invoiceUid)
+            .ToListAsync(ct);
+        if (inventoryTx.Count > 0)
+            _db.InventoryTransactions.RemoveRange(inventoryTx);
+
+        var invoice = await _db.SalesInvoices.FirstOrDefaultAsync(x => x.Uid == invoiceUid, ct);
+        if (invoice is not null)
+            _db.SalesInvoices.Remove(invoice);
+
+        await _db.SaveChangesAsync(ct);
     }
 
     /// <summary>
@@ -587,6 +632,8 @@ public class CustomersController : Controller
                 x.Uid,
                 x.InvoiceNo,
                 x.InvoiceDate,
+                x.SubTotal,
+                x.OtherCharges,
                 x.NetAmount,
                 x.PaidAmount,
                 x.BalanceAmount,
@@ -605,10 +652,13 @@ public class CustomersController : Controller
             .Select(d => new
             {
                 d.SalesInvoiceUid,
+                d.ProductUid,
                 d.ProductName,
                 d.ProductCode,
                 d.Quantity,
+                d.UnitPrice,
                 d.LineTotal,
+                d.DeliveryCharges,
                 d.Remarks
             })
             .ToListAsync(ct);
@@ -627,7 +677,8 @@ public class CustomersController : Controller
 
             if (isMonthly && lines.Count > 0)
             {
-                var dayGroups = lines
+                // One row per product line per supply day (same columns as Monthly Supply Items).
+                var dayLines = lines
                     .Select(l =>
                     {
                         DateTime? entryDate = null;
@@ -642,57 +693,92 @@ public class CustomersController : Controller
                         return new { Line = l, EntryDate = entryDate ?? inv.InvoiceDate.Date };
                     })
                     .Where(x => x.EntryDate >= rangeStart.Date && x.EntryDate < rangeEndExclusive)
-                    .GroupBy(x => x.EntryDate)
-                    .OrderByDescending(g => g.Key);
+                    .OrderByDescending(x => x.EntryDate)
+                    .ThenBy(x => x.Line.ProductName);
 
-                foreach (var day in dayGroups)
+                foreach (var dayLine in dayLines)
                 {
-                    var dayLines = day.ToList();
-                    var dayAmount = dayLines.Sum(x => x.Line.LineTotal);
-                    var items = string.Join(", ", dayLines.Select(x =>
-                    {
-                        var name = string.IsNullOrWhiteSpace(x.Line.ProductName) ? x.Line.ProductCode : x.Line.ProductName;
-                        return $"{name} × {x.Line.Quantity:0.###}";
-                    }));
+                    var l = dayLine.Line;
+                    var itemsAmount = l.LineTotal;
+                    var deliveryCharges = Math.Max(0, l.DeliveryCharges);
+                    var itemTotal = itemsAmount + deliveryCharges;
+                    var name = string.IsNullOrWhiteSpace(l.ProductName) ? l.ProductCode : l.ProductName;
 
                     rows.Add(new CustomerBillHistoryRowViewModel
                     {
                         Uid = inv.Uid,
                         InvoiceNo = inv.InvoiceNo,
-                        InvoiceDate = day.Key,
-                        NetAmount = dayAmount,
+                        InvoiceDate = dayLine.EntryDate,
+                        UnitPrice = l.UnitPrice,
+                        Quantity = l.Quantity,
+                        ItemsTotal = itemsAmount,
+                        DeliveryCharges = deliveryCharges,
+                        NetAmount = itemTotal,
                         PaidAmount = 0,
-                        BalanceAmount = dayAmount,
+                        BalanceAmount = itemTotal,
                         PaymentStatus = inv.PaymentStatus,
                         InvoiceStatus = inv.InvoiceStatus,
                         Label = label,
-                        ItemsSummary = items,
+                        ItemsSummary = name ?? "—",
                         IsMonthlyDayBill = true
                     });
                 }
             }
             else if (inv.InvoiceDate.Date >= rangeStart.Date && inv.InvoiceDate.Date < rangeEndExclusive)
             {
-                rows.Add(new CustomerBillHistoryRowViewModel
+                if (lines.Count == 0)
                 {
-                    Uid = inv.Uid,
-                    InvoiceNo = inv.InvoiceNo,
-                    InvoiceDate = inv.InvoiceDate.Date,
-                    NetAmount = inv.NetAmount,
-                    PaidAmount = inv.PaidAmount,
-                    BalanceAmount = inv.BalanceAmount,
-                    PaymentStatus = inv.PaymentStatus,
-                    InvoiceStatus = inv.InvoiceStatus,
-                    Label = label,
-                    ItemsSummary = lines.Count == 0
-                        ? "—"
-                        : string.Join(", ", lines.Select(l =>
+                    var deliveryCharges = Math.Max(0, inv.OtherCharges);
+                    var itemsAmount = inv.SubTotal;
+                    var itemTotal = itemsAmount + deliveryCharges;
+                    rows.Add(new CustomerBillHistoryRowViewModel
+                    {
+                        Uid = inv.Uid,
+                        InvoiceNo = inv.InvoiceNo,
+                        InvoiceDate = inv.InvoiceDate.Date,
+                        UnitPrice = 0,
+                        Quantity = 0,
+                        ItemsTotal = itemsAmount,
+                        DeliveryCharges = deliveryCharges,
+                        NetAmount = itemTotal > 0 ? itemTotal : inv.NetAmount,
+                        PaidAmount = inv.PaidAmount,
+                        BalanceAmount = inv.BalanceAmount,
+                        PaymentStatus = inv.PaymentStatus,
+                        InvoiceStatus = inv.InvoiceStatus,
+                        Label = label,
+                        ItemsSummary = "—",
+                        IsMonthlyDayBill = false
+                    });
+                }
+                else
+                {
+                    foreach (var l in lines)
+                    {
+                        var itemsAmount = l.LineTotal;
+                        var deliveryCharges = lines.Count == 1 ? Math.Max(0, inv.OtherCharges) : 0m;
+                        var itemTotal = itemsAmount + deliveryCharges;
+                        var name = string.IsNullOrWhiteSpace(l.ProductName) ? l.ProductCode : l.ProductName;
+
+                        rows.Add(new CustomerBillHistoryRowViewModel
                         {
-                            var name = string.IsNullOrWhiteSpace(l.ProductName) ? l.ProductCode : l.ProductName;
-                            return $"{name} × {l.Quantity:0.###}";
-                        })),
-                    IsMonthlyDayBill = false
-                });
+                            Uid = inv.Uid,
+                            InvoiceNo = inv.InvoiceNo,
+                            InvoiceDate = inv.InvoiceDate.Date,
+                            UnitPrice = l.UnitPrice,
+                            Quantity = l.Quantity,
+                            ItemsTotal = itemsAmount,
+                            DeliveryCharges = deliveryCharges,
+                            NetAmount = itemTotal,
+                            PaidAmount = inv.PaidAmount,
+                            BalanceAmount = inv.BalanceAmount,
+                            PaymentStatus = inv.PaymentStatus,
+                            InvoiceStatus = inv.InvoiceStatus,
+                            Label = label,
+                            ItemsSummary = name ?? "—",
+                            IsMonthlyDayBill = false
+                        });
+                    }
+                }
             }
         }
 

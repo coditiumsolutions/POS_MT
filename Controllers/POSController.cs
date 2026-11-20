@@ -993,6 +993,9 @@ public class POSController : Controller
                     var lineTotal = DozenPricing.LineAmount(quantity, unitPrice, pricedByDozen);
                     var previousQty = 0m;
 
+                    // Snapshot delivery for THIS supply day only (template changes must not rewrite other days).
+                    var dayDelivery = NormalizeDeliveryCharge(line.DeliveryCharges);
+
                     if (existingByProduct.TryGetValue(line.ProductUid, out var detail))
                     {
                         previousQty = detail.Quantity;
@@ -1001,6 +1004,7 @@ public class POSController : Controller
                         detail.Quantity = quantity;
                         detail.UnitPrice = unitPrice;
                         detail.LineTotal = lineTotal;
+                        detail.DeliveryCharges = dayDelivery;
                         detail.TaxPercent = product?.TaxPercent ?? detail.TaxPercent;
                         detail.CostPrice = product?.PurchasePrice ?? detail.CostPrice;
                         detail.Remarks = entryRemark;
@@ -1022,6 +1026,7 @@ public class POSController : Controller
                             TaxAmount = 0,
                             LineTotal = lineTotal,
                             CostPrice = product?.PurchasePrice ?? 0,
+                            DeliveryCharges = dayDelivery,
                             Remarks = entryRemark
                         });
                         added++;
@@ -1465,6 +1470,13 @@ public class POSController : Controller
         await _audit.WriteAsync("Create", "CustomerMonthlySupply", customer.Uid.ToString(),
             $"Added monthly supply item {product.ProductCode} for {customer.CustomerCode}", ct);
 
+        // If a supply date is in context, apply delivery only to that day's invoice lines.
+        if (!string.IsNullOrWhiteSpace(request.SupplyDate)
+            && DateTime.TryParse(request.SupplyDate, CultureInfo.InvariantCulture, DateTimeStyles.None, out var supplyDay))
+        {
+            await ApplyDeliveryToSupplyDayAsync(customer.Uid, product.Uid, supplyDay.Date, deliveryCharges, ct);
+        }
+
         TempData["Success"] = $"Added {product.ProductName} for {customer.CustomerName}.";
         return RedirectToAction(nameof(MonthlySupplyItems), ItemsRoute(customer.Uid));
     }
@@ -1488,13 +1500,22 @@ public class POSController : Controller
         }
 
         var quantity = request.Quantity < 0.01m ? 0.01m : request.Quantity;
+        var deliveryCharges = request.DeliveryCharges < 0 ? 0 : request.DeliveryCharges;
         row.Quantity = quantity;
         row.UnitPrice = request.UnitPrice < 0 ? 0 : request.UnitPrice;
-        row.DeliveryCharges = request.DeliveryCharges < 0 ? 0 : request.DeliveryCharges;
+        row.DeliveryCharges = deliveryCharges;
         row.UpdatedDate = DateTime.Now;
         await _db.SaveChangesAsync(ct);
         await _audit.WriteAsync("Update", "CustomerMonthlySupply", row.Uid.ToString(),
             $"Updated monthly supply item {row.ProductCode} for {row.CustomerCode}", ct);
+
+        // Apply delivery only to the supply date in context (not other existing days).
+        if (!string.IsNullOrWhiteSpace(request.SupplyDate)
+            && DateTime.TryParse(request.SupplyDate, CultureInfo.InvariantCulture, DateTimeStyles.None, out var supplyDay)
+            && row.ProductUid is int productUid and > 0)
+        {
+            await ApplyDeliveryToSupplyDayAsync(request.CustomerUid, productUid, supplyDay.Date, deliveryCharges, ct);
+        }
 
         TempData["Success"] = "Item updated.";
         return RedirectToAction(nameof(MonthlySupply), new { openCustomer = request.CustomerUid });
@@ -1983,6 +2004,7 @@ public class POSController : Controller
             detail.LineTotal = lineTotal;
             detail.CostPrice = product.PurchasePrice;
             detail.TaxPercent = product.TaxPercent;
+            detail.DeliveryCharges = await GetTemplateDeliveryChargeAsync(customer.Uid, product.Uid, ct);
             detail.Remarks = $"{MonthlyEntryDatePrefix}{entryDate:yyyy-MM-dd}";
 
             if (oldProductUid != product.Uid)
@@ -2034,6 +2056,7 @@ public class POSController : Controller
             }
 
             await RecalculateMonthlyDraftTotalsAsync(invoice, ct);
+            await ApplyMonthlySupplyDeliveryChargesAsync(invoice, customer.Uid, ct);
             if (stockResult.HasShortages)
                 invoice.Remarks = _inventory.MergeShortageRemarks(invoice.Remarks, stockResult);
             invoice.UpdatedDate = DateTime.Now;
@@ -2103,6 +2126,7 @@ public class POSController : Controller
                 TaxAmount = 0,
                 LineTotal = lineTotal,
                 CostPrice = product.PurchasePrice,
+                DeliveryCharges = await GetTemplateDeliveryChargeAsync(customer.Uid, product.Uid, ct),
                 Remarks = $"{MonthlyEntryDatePrefix}{entryDate:yyyy-MM-dd}"
             };
             _db.SalesInvoiceDetails.Add(detail);
@@ -2121,6 +2145,7 @@ public class POSController : Controller
             stockResult.ShortageNotes.AddRange(deductNew.ShortageNotes);
 
             await RecalculateMonthlyDraftTotalsAsync(invoice, ct);
+            await ApplyMonthlySupplyDeliveryChargesAsync(invoice, customer.Uid, ct);
             if (stockResult.HasShortages)
                 invoice.Remarks = _inventory.MergeShortageRemarks(invoice.Remarks, stockResult);
             invoice.UpdatedDate = DateTime.Now;
@@ -2205,6 +2230,8 @@ public class POSController : Controller
         else
         {
             await RecalculateMonthlyDraftTotalsAsync(invoice, ct);
+            if (invoice.CustomerUid is int custUid and > 0)
+                await ApplyMonthlySupplyDeliveryChargesAsync(invoice, custUid, ct);
             invoice.UpdatedDate = DateTime.Now;
             await _db.SaveChangesAsync(ct);
         }
@@ -2319,9 +2346,11 @@ public class POSController : Controller
 
     private async Task RecalculateMonthlyDraftTotalsAsync(SalesInvoice invoice, CancellationToken ct)
     {
-        var total = await _db.SalesInvoiceDetails
+        // SQLite cannot Sum(decimal) in SQL — aggregate on the client.
+        var total = (await _db.SalesInvoiceDetails
             .Where(x => x.SalesInvoiceUid == invoice.Uid)
-            .SumAsync(x => (decimal?)x.LineTotal, ct) ?? 0m;
+            .Select(x => x.LineTotal)
+            .ToListAsync(ct)).Sum();
 
         invoice.SubTotal = total;
         invoice.NetAmount = total;
@@ -2348,13 +2377,15 @@ public class POSController : Controller
         }
 
         // Monthly Supply: ignore auto-applied advances; only manual / lump-sum payments count.
+        // SQLite cannot Sum(decimal) in SQL — aggregate on the client.
         var isMonthlySupply = CustomerClassification.IsMonthlySupplyInvoice(invoice.Remarks);
-        var paidFromPayments = await _db.CustomerPayments.AsNoTracking()
+        var paidFromPayments = (await _db.CustomerPayments.AsNoTracking()
             .Where(x => x.SalesInvoiceUid == invoice.Uid
                         && (!isMonthlySupply
                             || x.Remarks == null
                             || !x.Remarks.StartsWith("Auto-applied advance")))
-            .SumAsync(x => (decimal?)x.AppliedToInvoiceAmount, ct) ?? 0m;
+            .Select(x => x.AppliedToInvoiceAmount)
+            .ToListAsync(ct)).Sum();
 
         // Prefer ledger total; never drop below what payments already recorded.
         // Do not clamp PaidAmount down here — NetAmount may still receive delivery charges after this call.
@@ -2368,53 +2399,23 @@ public class POSController : Controller
     }
 
     /// <summary>
-    /// Sets SalesInvoice.OtherCharges from CustomerMonthlySupply.DeliveryCharges (null ? 0)
-    /// once per detail line (each supply-day product line).
+    /// Sets SalesInvoice.OtherCharges from snapshotted SalesInvoiceDetail.DeliveryCharges
+    /// (one charge per supply-day line). Does not re-read the standing product template,
+    /// so changing template delivery later cannot rewrite other days.
     /// </summary>
     private async Task ApplyMonthlySupplyDeliveryChargesAsync(SalesInvoice invoice, int customerUid, CancellationToken ct)
     {
-        var detailProductUids = await _db.SalesInvoiceDetails.AsNoTracking()
+        _ = customerUid; // kept for call-site compatibility
+        var detailCharges = await _db.SalesInvoiceDetails.AsNoTracking()
             .Where(x => x.SalesInvoiceUid == invoice.Uid)
-            .Select(x => x.ProductUid)
+            .Select(x => x.DeliveryCharges)
             .ToListAsync(ct);
 
-        if (detailProductUids.Count == 0)
-        {
-            invoice.OtherCharges = 0;
-            invoice.NetAmount = invoice.SubTotal;
-            invoice.BalanceAmount = Math.Max(0, invoice.NetAmount - invoice.PaidAmount);
-            invoice.PaymentStatus = invoice.PaidAmount <= 0
-                ? "Unpaid"
-                : invoice.PaidAmount >= invoice.NetAmount ? "Paid" : "Partial";
-            return;
-        }
+        var snapSum = detailCharges.Sum(x => x < 0 ? 0m : x);
+        var hasSnapshot = detailCharges.Any(x => x != 0);
 
-        var distinctProductUids = detailProductUids.Distinct().ToList();
-        var chargeRows = await _db.CustomerMonthlySupplies.AsNoTracking()
-            .Where(x => x.CustomerUid == customerUid
-                        && x.ProductUid != null
-                        && distinctProductUids.Contains(x.ProductUid.Value))
-            .Select(x => new { ProductUid = x.ProductUid!.Value, x.DeliveryCharges })
-            .ToListAsync(ct);
-
-        var chargeByProduct = chargeRows
-            .GroupBy(x => x.ProductUid)
-            .ToDictionary(
-                g => g.Key,
-                g =>
-                {
-                    var raw = g.First().DeliveryCharges;
-                    return raw is null || raw < 0 ? 0m : raw.Value;
-                });
-
-        var otherCharges = 0m;
-        foreach (var productUid in detailProductUids)
-        {
-            if (chargeByProduct.TryGetValue(productUid, out var charge))
-            {
-                otherCharges += charge;
-            }
-        }
+        // Legacy invoices (pre-snapshot): keep stored OtherCharges until at least one day is snapshotted.
+        var otherCharges = hasSnapshot ? snapSum : Math.Max(0, invoice.OtherCharges);
 
         invoice.OtherCharges = otherCharges;
         invoice.NetAmount = invoice.SubTotal + otherCharges;
@@ -2422,6 +2423,68 @@ public class POSController : Controller
         invoice.PaymentStatus = invoice.PaidAmount <= 0
             ? "Unpaid"
             : invoice.PaidAmount >= invoice.NetAmount ? "Paid" : "Partial";
+    }
+
+    private static decimal NormalizeDeliveryCharge(decimal? raw)
+        => raw is null || raw < 0 ? 0m : raw.Value;
+
+    private async Task<decimal> GetTemplateDeliveryChargeAsync(int customerUid, int productUid, CancellationToken ct)
+    {
+        var raw = await _db.CustomerMonthlySupplies.AsNoTracking()
+            .Where(x => x.CustomerUid == customerUid && x.ProductUid == productUid)
+            .Select(x => x.DeliveryCharges)
+            .FirstOrDefaultAsync(ct);
+        return NormalizeDeliveryCharge(raw);
+    }
+
+    /// <summary>
+    /// Applies delivery to invoice detail lines for one supply day/product only, then rebuilds OtherCharges.
+    /// Used when Monthly Supply Items is edited with a specific supply date.
+    /// </summary>
+    private async Task ApplyDeliveryToSupplyDayAsync(
+        int customerUid,
+        int productUid,
+        DateTime supplyDay,
+        decimal deliveryCharges,
+        CancellationToken ct)
+    {
+        var day = supplyDay.Date;
+        var entryRemark = $"{MonthlyEntryDatePrefix}{day:yyyy-MM-dd}";
+        var monthStart = new DateTime(day.Year, day.Month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+
+        var invoice = await _db.SalesInvoices
+            .Where(x => x.CustomerUid == customerUid
+                        && x.InvoiceStatus != "Cancelled"
+                        && x.InvoiceDate >= monthStart
+                        && x.InvoiceDate < monthEnd
+                        && x.Remarks != null
+                        && x.Remarks.StartsWith(MonthlySupplyRemarkPrefix))
+            .OrderByDescending(x => x.Uid)
+            .FirstOrDefaultAsync(ct);
+
+        if (invoice is null)
+            return;
+
+        var dayLines = await _db.SalesInvoiceDetails
+            .Where(x => x.SalesInvoiceUid == invoice.Uid
+                        && x.ProductUid == productUid
+                        && x.Remarks != null
+                        && x.Remarks == entryRemark)
+            .ToListAsync(ct);
+
+        if (dayLines.Count == 0)
+            return;
+
+        var charge = NormalizeDeliveryCharge(deliveryCharges);
+        foreach (var line in dayLines)
+            line.DeliveryCharges = charge;
+
+        await _db.SaveChangesAsync(ct);
+        await RecalculateMonthlyDraftTotalsAsync(invoice, ct);
+        await ApplyMonthlySupplyDeliveryChargesAsync(invoice, customerUid, ct);
+        invoice.UpdatedDate = DateTime.Now;
+        await _db.SaveChangesAsync(ct);
     }
 
     private static DateTime ParseEntryDate(string? remarks, DateTime fallback)
@@ -2831,7 +2894,8 @@ public class POSController : Controller
         var todayStart = DateTime.Today;
         var tomorrow = todayStart.AddDays(1);
         // Walk-in / Cash POS sales only (same customer rule as Sales Item Walk-in filter).
-        var todaySaleAmount = await (
+        // SQLite cannot Sum(decimal) in SQL — load then aggregate on the client.
+        var todaySaleAmounts = await (
             from inv in _db.SalesInvoices.AsNoTracking()
             join c in _db.Customers.AsNoTracking() on inv.CustomerUid equals c.Uid
             where inv.InvoiceDate >= todayStart
@@ -2843,8 +2907,9 @@ public class POSController : Controller
                       || c.CustomerName.Contains("Walk-in")
                       || c.CustomerName.Contains("Walk-In")
                       || c.CustomerName.Contains("Walk In"))
-            select (decimal?)inv.NetAmount
-        ).SumAsync(ct) ?? 0m;
+            select inv.NetAmount
+        ).ToListAsync(ct);
+        var todaySaleAmount = todaySaleAmounts.Sum();
 
         return View("Sale", new PosSaleViewModel
         {
@@ -3030,6 +3095,8 @@ public class POSController : Controller
                     "ALTER TABLE SalesInvoices ADD COLUMN Branch TEXT NULL", ct);
                 await EnsureSqliteColumnAsync("SalesInvoices", "Terminal",
                     "ALTER TABLE SalesInvoices ADD COLUMN Terminal TEXT NULL", ct);
+                await EnsureSqliteColumnAsync("SalesInvoiceDetails", "DeliveryCharges",
+                    "ALTER TABLE SalesInvoiceDetails ADD COLUMN DeliveryCharges REAL NOT NULL DEFAULT 0", ct);
             }
             else
             {
@@ -3044,6 +3111,11 @@ public class POSController : Controller
                 await _db.Database.ExecuteSqlRawAsync("""
                     IF COL_LENGTH(N'dbo.SalesInvoices', N'Terminal') IS NULL
                         ALTER TABLE dbo.SalesInvoices ADD [Terminal] NVARCHAR(100) NULL;
+                    """, ct);
+                await _db.Database.ExecuteSqlRawAsync("""
+                    IF COL_LENGTH(N'dbo.SalesInvoiceDetails', N'DeliveryCharges') IS NULL
+                        ALTER TABLE dbo.SalesInvoiceDetails ADD [DeliveryCharges] DECIMAL(18, 2) NOT NULL
+                            CONSTRAINT DF_SalesInvoiceDetails_DeliveryCharges DEFAULT (0);
                     """, ct);
             }
 

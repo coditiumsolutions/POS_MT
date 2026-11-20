@@ -2,6 +2,11 @@
 @{
     Layout = null;
     ViewData["Title"] = $"Invoice {Model.InvoiceNo}";
+    var itemTotal = Model.Lines.Count > 0 ? Model.Lines.Sum(x => x.LineTotal) : Model.SubTotal;
+    var lineDeliveryTotal = Model.Lines.Sum(x => x.DeliveryCharges);
+    var deliveryCharges = lineDeliveryTotal > 0 ? lineDeliveryTotal : Math.Max(0, Model.OtherCharges);
+    // Item Total = Item Amount + Delivery Charges (same as Monthly Supply Items / Customer Details).
+    var billTotal = itemTotal + deliveryCharges;
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -169,7 +174,7 @@
 
         @@page {
             size: A4 portrait;
-            margin: 10mm;
+            margin: 12mm 18mm;
         }
 
         @@media print {
@@ -179,7 +184,7 @@
                 width: auto;
                 min-height: auto;
                 margin: 0;
-                padding: 0;
+                padding: 0 6mm;
                 box-shadow: none;
             }
         }
@@ -188,6 +193,7 @@
 <body>
     <div class="toolbar">
         <button type="button" class="secondary" onclick="window.close()">Close</button>
+        <button type="button" class="secondary" onclick="window.print()" title="Open print dialog and choose Save as PDF">Save PDF</button>
         <button type="button" onclick="window.print()">Print</button>
     </div>
 
@@ -225,12 +231,12 @@
             <thead>
                 <tr>
                     <th style="width:28px">#</th>
-                    <th>Product</th>
+                    <th>Product Name</th>
                     <th class="text-end">Qty</th>
-                    <th class="text-end">Price</th>
-                    <th class="text-end">Discount</th>
-                    <th class="text-end">Tax</th>
-                    <th class="text-end">Line Total</th>
+                    <th class="text-end">Unit Price</th>
+                    <th class="text-end">Item Amount</th>
+                    <th class="text-end">Delivery Charges</th>
+                    <th class="text-end">Item Total</th>
                 </tr>
             </thead>
             <tbody>
@@ -250,11 +256,11 @@
                             <div>@line.ProductName</div>
                             <div class="hint">@line.ProductCode</div>
                         </td>
-                        <td class="text-end">@line.Quantity.ToString("N3")</td>
+                        <td class="text-end">@line.Quantity.ToString("0.###")</td>
                         <td class="text-end">@line.UnitPrice.ToString("N2")</td>
-                        <td class="text-end">@line.DiscountAmount.ToString("N2")</td>
-                        <td class="text-end">@line.TaxAmount.ToString("N2")</td>
                         <td class="text-end">@line.LineTotal.ToString("N2")</td>
+                        <td class="text-end">@line.DeliveryCharges.ToString("N2")</td>
+                        <td class="text-end">@line.Amount.ToString("N2")</td>
                     </tr>
                 }
             }
@@ -262,17 +268,16 @@
         </table>
 
         <div class="totals">
-            <div><span>Sub Total</span><span>@Model.SubTotal.ToString("N2")</span></div>
-            <div><span>Discount</span><span>@Model.DiscountAmount.ToString("N2")</span></div>
-            <div><span>Tax</span><span>@Model.TaxAmount.ToString("N2")</span></div>
-            <div><span>Other / Delivery</span><span>@Model.OtherCharges.ToString("N2")</span></div>
-            <div class="net"><span>This Bill (Net)</span><span>@Model.NetAmount.ToString("N2")</span></div>
+            <div><span>Item Amount</span><span>@itemTotal.ToString("N2")</span></div>
+            <div><span>Delivery Charges</span><span>@deliveryCharges.ToString("N2")</span></div>
+            <div class="net"><span>Item Total</span><span>@billTotal.ToString("N2")</span></div>
             <div><span>Paid (this bill)</span><span>@Model.PaidAmount.ToString("N2")</span></div>
-            <div><span>Balance (this bill)</span><span>@Model.BalanceAmount.ToString("N2")</span></div>
+            <div><span>Balance (this bill)</span><span>@((billTotal - Model.PaidAmount) < 0 ? 0 : billTotal - Model.PaidAmount).ToString("N2")</span></div>
             @if (Model.PreviousBalanceAmount > 0 || CustomerClassification.IsMonthlySupplyInvoice(Model.Remarks) || CustomerClassification.IsOpeningBalanceInvoice(Model.Remarks))
             {
+                var totalDue = Model.PreviousBalanceAmount + Math.Max(0, billTotal - Model.PaidAmount);
                 <div><span>Previous Balance</span><span>@Model.PreviousBalanceAmount.ToString("N2")</span></div>
-                <div class="net"><span>Total Due</span><span>@Model.GrandTotalDue.ToString("N2")</span></div>
+                <div class="net"><span>Total Due</span><span>@totalDue.ToString("N2")</span></div>
             }
         </div>
 

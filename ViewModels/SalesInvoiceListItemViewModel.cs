@@ -147,6 +147,15 @@ public sealed class CustomerBillHistoryRowViewModel
     public string InvoiceNo { get; set; } = string.Empty;
     /// <summary>Bill/supply day shown to the user (entry date for monthly lines, else invoice date).</summary>
     public DateTime InvoiceDate { get; set; }
+    /// <summary>Per-unit price (same as Monthly Supply Items).</summary>
+    public decimal UnitPrice { get; set; }
+    /// <summary>Quantity supplied / sold on this row.</summary>
+    public decimal Quantity { get; set; }
+    /// <summary>Items Amount = Quantity × Unit Price (line total before delivery).</summary>
+    public decimal ItemsTotal { get; set; }
+    /// <summary>Delivery charges for this bill/day line.</summary>
+    public decimal DeliveryCharges { get; set; }
+    /// <summary>Item Total = Items Amount + Delivery Charges.</summary>
     public decimal NetAmount { get; set; }
     public decimal PaidAmount { get; set; }
     public decimal BalanceAmount { get; set; }
@@ -161,6 +170,7 @@ public sealed class CustomerBillHistoryRowViewModel
 public sealed class SalesInvoiceDetailLineViewModel
 {
     public int DetailUid { get; set; }
+    public int ProductUid { get; set; }
     public string ProductCode { get; set; } = string.Empty;
     public string ProductName { get; set; } = string.Empty;
     public decimal Quantity { get; set; }
@@ -168,5 +178,9 @@ public sealed class SalesInvoiceDetailLineViewModel
     public decimal DiscountAmount { get; set; }
     public decimal TaxAmount { get; set; }
     public decimal LineTotal { get; set; }
+    /// <summary>Delivery charge for this line (monthly supply: from customer product template).</summary>
+    public decimal DeliveryCharges { get; set; }
+    /// <summary>LineTotal + DeliveryCharges.</summary>
+    public decimal Amount => LineTotal + DeliveryCharges;
     public string? Remarks { get; set; }
 }
